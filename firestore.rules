@@ -1,0 +1,62 @@
+rules_version = '2';
+
+// Kontrack — Firestore Security Rules (Fase 0, single-tenant PT PEB)
+//
+// Tujuan v1: MENUTUP AKSES ANONIM (lubang terbesar) tanpa merusak
+// aplikasi live (kontrack.web.app) yang berbagi project Firebase ini.
+//
+// Batasan yang disadari (diperbaiki di Fase 2 multi-tenant + custom claims):
+// - Role admin belum bisa dicek di rules (dokumen `users` di-query by email,
+//   bukan keyed by uid) → semua user terautentikasi dianggap tim internal.
+// - `projects` masih public-read untuk fitur share link ke mitra →
+//   diganti share-token di Fase 2.
+// - Catch-all untuk koleksi milik versi live yang tidak terdaftar di sini.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Proyek: public-read (share link mitra via WhatsApp), tulis wajib login.
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create, update, delete: if signedIn();
+    }
+
+    // Transaksi: berisi pengeluaran internal (material, upah) — wajib login.
+    // Halaman share mitra menampilkan proyek tanpa transaksi bila anonim.
+    match /transactions/{txnId} {
+      allow read, write: if signedIn();
+    }
+
+    // Invoice + dokumen pajak: internal — wajib login.
+    match /invoices/{invoiceId} {
+      allow read, write: if signedIn();
+    }
+
+    // Pengaturan perusahaan: read publik (branding/tema dipakai halaman login
+    // versi live sebelum autentikasi), tulis wajib login.
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    // Data user & role: baca wajib login; tulis hanya via Console/Admin SDK
+    // (mencegah user menaikkan role-nya sendiri).
+    // CATATAN: catch-all di bawah tetap mengizinkan tulis oleh user login —
+    // lihat batasan di header. Match ini menjadi efektif penuh setelah
+    // catch-all dihapus di Fase 2.
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Catch-all SEMENTARA: koleksi lain yang dipakai versi live
+    // (clients, price items, dll.) — wajib login, tidak lagi publik.
+    // Fase 2: hapus blok ini dan daftarkan tiap koleksi secara eksplisit.
+    match /{document=**} {
+      allow read, write: if signedIn();
+    }
+  }
+}

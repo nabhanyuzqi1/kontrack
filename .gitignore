@@ -33,8 +33,11 @@ yarn-error.log*
 .firebaserc
 firebase-debug.log
 firestore-debug.log
-firestore.rules
-firestore.indexes.json
+
+# functions secrets — jangan commit key (pakai Secret Manager)
+functions/.env
+functions/.env.*
+!functions/.env.example
 
 # temporary files
 *.tmp

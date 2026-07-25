@@ -54,68 +54,65 @@ export const uploadTransactionImage = async (file, userId) => {
 };
 
 
-// 2. Fungsi utama untuk menganalisis gambar transaksi
+// Normalisasi satu hasil mentah AI + lampirkan info unggahan gambar.
+const normalizeResult = (parsed, upload) => {
+  const type = parsed?.type === 'income' || parsed?.type === 'expense' ? parsed.type : 'expense';
+  return {
+    date: parsed?.date || new Date().toISOString(),
+    amount: Math.abs(Number(parsed?.amount)) || 0,
+    type,
+    category: parsed?.category || (type === 'income' ? 'Pembayaran' : 'Operasional'),
+    description: parsed?.description || 'Transaksi dari gambar',
+    imageUrl: upload?.url,
+    imagePath: upload?.path,
+    isAIProcessed: true,
+  };
+};
+
+// 2b. Analisis BANYAK gambar sekaligus — 1 panggilan fungsi (hemat biaya).
+// Mengembalikan array hasil, satu per gambar (urut sesuai input).
+export const analyzeTransactionImages = async (files, userId) => {
+  if (!files || files.length === 0) {
+    throw new Error('Pilih minimal satu gambar.');
+  }
+  files.forEach(validateImageFile);
+
+  // Unggah semua + konversi base64 paralel
+  const [uploads, base64List] = await Promise.all([
+    Promise.all(files.map((f) => uploadTransactionImage(f, userId))),
+    Promise.all(files.map((f) => fileToBase64(f))),
+  ]);
+
+  const images = files.map((f, i) => ({
+    base64String: base64List[i].split(',')[1],
+    mimeType: f.type,
+  }));
+
+  const functions = getFunctions();
+  const analyzeFunction = httpsCallable(functions, 'analyzeTransactionImageWithAI');
+  const response = await analyzeFunction({ images });
+
+  // Kontrak baru: { transactions: [...] }. Fallback lama: { data: "<json string>" }.
+  let transactions = response.data?.transactions;
+  if (!transactions && response.data?.data) {
+    const parsed = JSON.parse(response.data.data);
+    transactions = Array.isArray(parsed) ? parsed : [parsed];
+  }
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    throw new Error('AI tidak dapat menganalisis gambar. Pastikan gambar jelas.');
+  }
+
+  // Pasangkan tiap hasil dengan gambar yang diunggah (berdasar urutan).
+  return transactions.map((t, i) => normalizeResult(t, uploads[i] || uploads[uploads.length - 1]));
+};
+
+// 2. Analisis satu gambar (backward-compat) — delegasi ke versi multi.
 export const analyzeTransactionImage = async (file, userId) => {
   try {
-    console.log('Memulai analisis AI untuk file:', file.name);
-
-    // Langkah A: Validasi file di sisi klien terlebih dahulu
-    validateImageFile(file);
-
-    // Langkah B: Unggah ke Firebase Storage dan ubah ke base64 secara paralel
-    const [uploadResult, base64Data] = await Promise.all([
-      uploadTransactionImage(file, userId),
-      fileToBase64(file),
-    ]);
-    
-    const base64String = base64Data.split(',')[1];
-    
-    console.log('Gambar diunggah dan diubah ke base64. Memanggil Cloud Function...');
-
-    // Langkah C: Panggil Firebase Cloud Function
-    const functions = getFunctions();
-    const analyzeFunction = httpsCallable(functions, 'analyzeTransactionImageWithAI');
-    
-    const response = await analyzeFunction({
-      base64String: base64String,
-      mimeType: file.type
-    });
-    
-    console.log('Respons Cloud Function diterima:', response);
-
-    // Langkah D: Proses respons dari Cloud Function
-    // **PERBAIKAN:** Menggunakan JSON.parse() untuk mengubah respons string dari AI menjadi objek.
-    // Respons dari onCall function terbungkus dalam objek 'data', jadi kita mengakses `response.data.data`.
-    const aiResponseString = response.data.data;
-    if (!aiResponseString) {
-        throw new Error('AI tidak memberikan respons. Coba lagi.');
-    }
-    const parsedData = JSON.parse(aiResponseString);
-
-    if (!parsedData || typeof parsedData !== 'object') {
-        throw new Error('AI tidak dapat menganalisis gambar. Pastikan gambar jelas dan berisi informasi transaksi.');
-    }
-
-    // Langkah E: Validasi dan format hasil akhir
-    const now = new Date();
-    const result = {
-      date: parsedData.date || now.toISOString(),
-      amount: Math.abs(Number(parsedData.amount)) || 0,
-      type: (parsedData.type === 'income' || parsedData.type === 'expense') ? parsedData.type : 'expense',
-      category: parsedData.category || (parsedData.type === 'income' ? 'Pembayaran' : 'Operasional'),
-      description: parsedData.description || 'Transaksi dari screenshot',
-      imageUrl: uploadResult.url, // URL dari hasil unggahan storage
-      imagePath: uploadResult.path, // Path dari hasil unggahan storage
-      isAIProcessed: true,
-    };
-
-    console.log('Hasil Akhir AI:', result);
+    const [result] = await analyzeTransactionImages([file], userId);
     return result;
-
   } catch (error) {
     console.error('Kesalahan dalam analyzeTransactionImage:', error);
-    // Memberikan pesan kesalahan yang lebih ramah pengguna
-    const errorMessage = error.message || 'Terjadi kesalahan saat menganalisis gambar. Silakan coba lagi.';
-    throw new Error(errorMessage);
+    throw new Error(error.message || 'Terjadi kesalahan saat menganalisis gambar. Coba lagi.');
   }
 };

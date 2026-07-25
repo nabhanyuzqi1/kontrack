@@ -1,5 +1,5 @@
 // src/components/reports/ReportCharts.jsx
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,13 +10,13 @@ import {
   ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import { formatCurrency, getMonthYearLabel } from '../../utils/formatters';
-import { CHART_COLORS } from '../../utils/constants';
+import { Card, CardHeader } from '../ui/Card';
 
-// Register ChartJS components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -26,65 +26,87 @@ ChartJS.register(
   ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
+);
+
+// Palet chart brand Kontrack
+const PALETTE = {
+  brand: '#3358f4',
+  cyan: '#06b6d4',
+  emerald: '#10b981',
+  red: '#ef4444',
+  amber: '#f59e0b',
+  violet: '#8b5cf6',
+  slate: '#94a3b8'
+};
+
+ChartJS.defaults.font.family = "'Inter', system-ui, sans-serif";
+ChartJS.defaults.color = '#64748b';
+
+const formatCompact = (value) =>
+  new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+
+const EmptyChart = ({ label }) => (
+  <p className="flex h-full items-center justify-center text-sm text-slate-400">{label}</p>
 );
 
 const ReportCharts = ({ projects, transactions, monthlyData }) => {
-  // Calculate expense by category
   const expenseByCategory = {};
   transactions
-    .filter(t => t.type === 'expense')
-    .forEach(t => {
+    .filter((t) => t.type === 'expense')
+    .forEach((t) => {
       expenseByCategory[t.category] = (expenseByCategory[t.category] || 0) + t.amount;
     });
 
-  // Calculate projects by partner
   const projectsByPartner = {};
-  projects.forEach(p => {
+  projects.forEach((p) => {
     if (!projectsByPartner[p.partner]) {
-      projectsByPartner[p.partner] = {
-        count: 0,
-        value: 0
-      };
+      projectsByPartner[p.partner] = { count: 0, value: 0 };
     }
     projectsByPartner[p.partner].count += 1;
     projectsByPartner[p.partner].value += p.value;
   });
 
-  // Sort partners by value
   const sortedPartners = Object.entries(projectsByPartner)
     .sort((a, b) => b[1].value - a[1].value)
-    .slice(0, 0); // Top 10 partners
+    .slice(0, 10);
 
-  // Prepare monthly trend data
   const months = Object.keys(monthlyData).sort();
-  const monthLabels = months.map(m => getMonthYearLabel(m + '-01'));
+  const monthLabels = months.map((m) => getMonthYearLabel(m + '-01'));
 
-  // Chart configurations
   const expenseCategoryData = {
     labels: Object.keys(expenseByCategory),
-    datasets: [{
-      data: Object.values(expenseByCategory),
-      backgroundColor: [
-        CHART_COLORS.primary,
-        CHART_COLORS.secondary,
-        CHART_COLORS.warning,
-        CHART_COLORS.danger,
-        CHART_COLORS.info,
-        CHART_COLORS.success
-      ],
-      borderWidth: 0
-    }]
+    datasets: [
+      {
+        data: Object.values(expenseByCategory),
+        backgroundColor: [
+          PALETTE.brand,
+          PALETTE.cyan,
+          PALETTE.amber,
+          PALETTE.violet,
+          PALETTE.emerald,
+          PALETTE.slate
+        ],
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        hoverOffset: 6
+      }
+    ]
   };
 
   const partnerData = {
     labels: sortedPartners.map(([partner]) => partner),
-    datasets: [{
-      label: 'Nilai Proyek',
-      data: sortedPartners.map(([, data]) => data.value),
-      backgroundColor: CHART_COLORS.primary,
-      borderRadius: 4
-    }]
+    datasets: [
+      {
+        label: 'Nilai Proyek',
+        data: sortedPartners.map(([, data]) => data.value),
+        backgroundColor: 'rgba(51, 88, 244, 0.85)',
+        hoverBackgroundColor: PALETTE.brand,
+        borderRadius: 6,
+        maxBarThickness: 42
+      }
+    ]
   };
 
   const monthlyTrendData = {
@@ -92,39 +114,49 @@ const ReportCharts = ({ projects, transactions, monthlyData }) => {
     datasets: [
       {
         label: 'Pemasukan',
-        data: months.map(m => monthlyData[m].income),
-        borderColor: CHART_COLORS.success,
-        backgroundColor: CHART_COLORS.success + '20',
-        tension: 0,
+        data: months.map((m) => monthlyData[m].income),
+        borderColor: PALETTE.emerald,
+        backgroundColor: 'rgba(16, 185, 129, 0.10)',
+        pointBackgroundColor: PALETTE.emerald,
+        pointRadius: 3,
+        borderWidth: 2,
+        tension: 0.35,
         fill: true
       },
       {
         label: 'Pengeluaran',
-        data: months.map(m => monthlyData[m].expense),
-        borderColor: CHART_COLORS.danger,
-        backgroundColor: CHART_COLORS.danger + '20',
-        tension: 0,
+        data: months.map((m) => monthlyData[m].expense),
+        borderColor: PALETTE.red,
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+        pointBackgroundColor: PALETTE.red,
+        pointRadius: 3,
+        borderWidth: 2,
+        tension: 0.35,
         fill: true
       }
     ]
   };
 
-  const chartOptions = {
+  const baseOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'bottom',
+        labels: { usePointStyle: true, pointStyleWidth: 8, boxHeight: 8, padding: 16 }
       },
       tooltip: {
+        backgroundColor: '#0b1220',
+        padding: 12,
+        cornerRadius: 10,
+        titleFont: { weight: '600' },
         callbacks: {
-          label: function(context) {
+          label: (context) => {
             let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            if (context.parsed.y !== null) {
-              label += formatCurrency(context.parsed.y);
+            if (label) label += ': ';
+            const value = context.parsed.y ?? context.parsed;
+            if (value !== null && value !== undefined) {
+              label += formatCurrency(value);
             }
             return label;
           }
@@ -133,47 +165,41 @@ const ReportCharts = ({ projects, transactions, monthlyData }) => {
     }
   };
 
-  const lineChartOptions = {
-    ...chartOptions,
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function(value) {
-            return formatCurrency(value);
-          }
-        }
-      }
+  const cartesianScales = {
+    y: {
+      beginAtZero: true,
+      grid: { color: 'rgba(148, 163, 184, 0.12)' },
+      border: { display: false },
+      ticks: { callback: (value) => formatCompact(value) }
+    },
+    x: {
+      grid: { display: false },
+      border: { display: false }
     }
   };
 
+  const lineChartOptions = { ...baseOptions, scales: cartesianScales };
+
   const barChartOptions = {
-    ...chartOptions,
+    ...baseOptions,
     scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function(value) {
-            return formatCurrency(value);
-          }
-        }
-      },
+      ...cartesianScales,
       x: {
-        ticks: {
-          maxRotation: 45,
-          minRotation: 45
-        }
+        ...cartesianScales.x,
+        ticks: { maxRotation: 45, minRotation: 0, autoSkip: true }
       }
     }
   };
 
   const doughnutOptions = {
-    ...chartOptions,
+    ...baseOptions,
+    cutout: '62%',
     plugins: {
-      ...chartOptions.plugins,
+      ...baseOptions.plugins,
       tooltip: {
+        ...baseOptions.plugins.tooltip,
         callbacks: {
-          label: function(context) {
+          label: (context) => {
             const label = context.label || '';
             const value = formatCurrency(context.parsed);
             const total = context.dataset.data.reduce((a, b) => a + b, 0);
@@ -186,42 +212,45 @@ const ReportCharts = ({ projects, transactions, monthlyData }) => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-      {/* Expense by Category */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Distribusi Pengeluaran</h3>
-        <div className="chart-container">
-          {Object.keys(expenseByCategory).length > 0 ? (
-            <Doughnut data={expenseCategoryData} options={doughnutOptions} />
-          ) : (
-            <p className="text-center text-gray-500 py-8">Belum ada data pengeluaran</p>
-          )}
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Card>
+        <CardHeader title="Distribusi Pengeluaran" />
+        <div className="p-5">
+          <div className="chart-container">
+            {Object.keys(expenseByCategory).length > 0 ? (
+              <Doughnut data={expenseCategoryData} options={doughnutOptions} />
+            ) : (
+              <EmptyChart label="Belum ada data pengeluaran" />
+            )}
+          </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Projects by Partner */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Top 10 Mitra (Nilai Proyek)</h3>
-        <div className="chart-container">
-          {sortedPartners.length > 0 ? (
-            <Bar data={partnerData} options={barChartOptions} />
-          ) : (
-            <p className="text-center text-gray-500 py-8">Belum ada data proyek</p>
-          )}
+      <Card>
+        <CardHeader title="Top 10 Mitra (Nilai Proyek)" />
+        <div className="p-5">
+          <div className="chart-container">
+            {sortedPartners.length > 0 ? (
+              <Bar data={partnerData} options={barChartOptions} />
+            ) : (
+              <EmptyChart label="Belum ada data proyek" />
+            )}
+          </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Monthly Trend - Full Width */}
-      <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Tren Bulanan</h3>
-        <div className="chart-container" style={{ height: '400px' }}>
-          {months.length > 0 ? (
-            <Line data={monthlyTrendData} options={lineChartOptions} />
-          ) : (
-            <p className="text-center text-gray-500 py-8">Belum ada data transaksi</p>
-          )}
+      <Card className="lg:col-span-2">
+        <CardHeader title="Tren Bulanan" />
+        <div className="p-5">
+          <div className="chart-container" style={{ height: '380px' }}>
+            {months.length > 0 ? (
+              <Line data={monthlyTrendData} options={lineChartOptions} />
+            ) : (
+              <EmptyChart label="Belum ada data transaksi" />
+            )}
+          </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

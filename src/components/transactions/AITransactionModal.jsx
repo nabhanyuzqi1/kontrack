@@ -1,103 +1,103 @@
 // src/components/transactions/AITransactionModal.jsx
 import React, { useState } from 'react';
+import { Sparkles, UploadCloud, CheckCircle2, X, Trash2 } from 'lucide-react';
 import { addTransaction } from '../../services/transactions';
-import { analyzeTransactionImage, validateImageFile } from '../../services/ai';
-import { formatDateTimeForInput } from '../../utils/formatters';
+import { analyzeTransactionImages, validateImageFile } from '../../services/ai';
+import { formatDateTimeForInput, formatCurrency } from '../../utils/formatters';
 import { TRANSACTION_TYPES, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../utils/constants';
+import Modal from '../ui/Modal';
+import Button from '../ui/Button';
+import { Field, Input, Select, Textarea } from '../ui/Field';
+
+const StepBadge = ({ number, label, done }) => (
+  <div className="mb-3 flex items-center gap-2.5">
+    <span
+      className={`flex h-7 w-7 items-center justify-center rounded-full font-display text-sm font-bold ${
+        done ? 'bg-emerald-100 text-emerald-600' : 'bg-brand-gradient text-white'
+      }`}
+    >
+      {done ? <CheckCircle2 className="h-4 w-4" /> : number}
+    </span>
+    <h3 className="font-display text-sm font-semibold text-slate-800">{label}</h3>
+  </div>
+);
+
+const MAX_FILES = 8;
 
 const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser }) => {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [aiResult, setAiResult] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState('');
-  const [editedData, setEditedData] = useState(null);
+  const [files, setFiles] = useState([]); // {file, previewUrl}
+  const [results, setResults] = useState(null); // array of edited results
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    try {
-      validateImageFile(file);
-      setSelectedFile(file);
-      setError('');
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreviewUrl(e.target.result);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setError(err.message);
-      setSelectedFile(null);
-      setPreviewUrl(null);
+  const handleFilesChange = (e) => {
+    const picked = Array.from(e.target.files || []);
+    if (picked.length === 0) return;
+    setError('');
+    const next = [...files];
+    for (const file of picked) {
+      if (next.length >= MAX_FILES) {
+        setError(`Maksimal ${MAX_FILES} gambar per analisis.`);
+        break;
+      }
+      try {
+        validateImageFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) =>
+          setFiles((prev) => [...prev, { file, previewUrl: ev.target.result }]);
+        reader.readAsDataURL(file);
+        next.push(file);
+      } catch (err) {
+        setError(err.message);
+      }
     }
+    e.target.value = ''; // izinkan pilih file yang sama lagi
   };
 
-  const handleAnalyze = async () => {
-    if (!selectedFile) {
-      setError('Pilih gambar terlebih dahulu');
-      return;
-    }
+  const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
-    if (!selectedProjectId) {
-      setError('Pilih proyek terlebih dahulu');
-      return;
-    }
+  const handleAnalyze = async () => {
+    if (!selectedProjectId) return setError('Pilih proyek terlebih dahulu');
+    if (files.length === 0) return setError('Pilih minimal satu gambar');
 
     setAnalyzing(true);
     setError('');
-
     try {
-      const result = await analyzeTransactionImage(selectedFile, currentUser.uid);
-      console.log('Analysis complete:', result);
-      
-      setAiResult(result);
-      setEditedData({
-        ...result,
-        projectId: selectedProjectId
-      });
+      const raw = await analyzeTransactionImages(files.map((f) => f.file), currentUser.uid);
+      setResults(raw.map((r) => ({ ...r, projectId: selectedProjectId })));
     } catch (err) {
       console.error('Analysis error:', err);
-      setError(err.message || 'Gagal menganalisis gambar. Pastikan gambar jelas dan berisi informasi transaksi.');
+      setError(err.message || 'Gagal menganalisis gambar. Pastikan gambar jelas.');
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const handleSubmit = async () => {
-    if (!editedData || !editedData.projectId) {
-      setError('Data tidak lengkap');
-      return;
-    }
+  const updateResult = (idx, patch) =>
+    setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
 
+  const removeResult = (idx) => setResults((prev) => prev.filter((_, i) => i !== idx));
+
+  const handleSubmit = async () => {
+    if (!results || results.length === 0) return;
     setLoading(true);
     setError('');
-
     try {
-      const project = projects.find(p => p.id === editedData.projectId);
-      if (!project) {
-        throw new Error('Proyek tidak ditemukan');
+      const project = projects.find((p) => p.id === selectedProjectId);
+      if (!project) throw new Error('Proyek tidak ditemukan');
+
+      for (const r of results) {
+        await addTransaction({
+          ...r,
+          projectId: selectedProjectId,
+          projectName: project.name,
+          date: r.date || new Date().toISOString(),
+          createdBy: currentUser.uid,
+          isAIProcessed: true
+        });
       }
-
-      const transactionData = {
-        ...editedData,
-        projectId: editedData.projectId,
-        projectName: project.name,
-        date: editedData.date || new Date().toISOString(),
-        createdAt: new Date(),
-        createdBy: currentUser.uid,
-        isAIProcessed: true,
-        imageUrl: editedData.imageUrl,
-        imagePath: editedData.imagePath
-      };
-
-      await addTransaction(transactionData);
-      console.log('Transaction saved successfully');
-      
       onSuccess();
       handleClose();
     } catch (err) {
@@ -109,302 +109,211 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
   };
 
   const handleClose = () => {
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setAiResult(null);
-    setEditedData(null);
+    setFiles([]);
+    setResults(null);
     setError('');
     setSelectedProjectId('');
     onClose();
   };
 
-  if (!isOpen) return null;
-
-  const categories = editedData?.type === TRANSACTION_TYPES.INCOME 
-    ? INCOME_CATEGORIES 
-    : EXPENSE_CATEGORIES;
+  const busy = loading || analyzing;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Input Transaksi dengan AI</h2>
-            <button
-              onClick={handleClose}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              {error}
-            </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={busy ? undefined : handleClose}
+      title="Input Transaksi dengan AI"
+      subtitle="Upload satu atau beberapa bukti transfer / invoice — AI membaca semuanya sekaligus"
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={handleClose} disabled={busy}>
+            Batal
+          </Button>
+          {results && results.length > 0 && (
+            <Button variant="success" onClick={handleSubmit} loading={loading}>
+              {loading ? 'Menyimpan…' : `Simpan ${results.length} Transaksi`}
+            </Button>
           )}
+        </>
+      }
+    >
+      {error && (
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-          {/* Step 1: Project Selection */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3 flex items-center">
-              <span className="bg-purple-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm mr-2">1</span>
-              Pilih Proyek
-            </h3>
-            <select
-              value={selectedProjectId}
-              onChange={(e) => {
-                setSelectedProjectId(e.target.value);
-                if (editedData) {
-                  setEditedData({ ...editedData, projectId: e.target.value });
-                }
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              required
-            >
-              <option value="">-- Pilih Proyek --</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.name} - {project.partner}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Langkah 1: proyek */}
+      <div className="mb-6">
+        <StepBadge number={1} label="Pilih Proyek" done={Boolean(selectedProjectId)} />
+        <Select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} required>
+          <option value="">— Pilih Proyek —</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name} — {project.partner}
+            </option>
+          ))}
+        </Select>
+      </div>
 
-          {/* Step 2: File Upload */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3 flex items-center">
-              <span className="bg-purple-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm mr-2">2</span>
-              Upload Screenshot
-            </h3>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-                id="file-upload"
-              />
-              <label htmlFor="file-upload" className="cursor-pointer">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p className="mt-2 text-sm text-gray-600">
-                  <span className="font-medium text-purple-600 hover:text-purple-500">
-                    Klik untuk upload
-                  </span> atau drag & drop
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  JPG, PNG, WebP hingga 5MB
-                </p>
-              </label>
-            </div>
+      {/* Langkah 2: upload multi */}
+      {!results && (
+        <div className="mb-6">
+          <StepBadge number={2} label={`Upload Bukti (${files.length}/${MAX_FILES})`} done={files.length > 0} />
+          <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-6 py-6 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+            <input type="file" accept="image/*" multiple onChange={handleFilesChange} className="hidden" />
+            <UploadCloud className="mb-2 h-9 w-9 text-slate-300 transition-colors group-hover:text-brand-400" />
+            <p className="text-sm text-slate-600">
+              <span className="font-semibold text-brand-600">Klik untuk upload</span> — bisa pilih banyak
+            </p>
+            <p className="mt-1 text-xs text-slate-400">JPG, PNG, WebP · maks 5MB/gambar</p>
+          </label>
 
-            {/* Preview */}
-            {previewUrl && (
-              <div className="mt-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-                <img 
-                  src={previewUrl} 
-                  alt="Preview" 
-                  className="max-w-full h-48 object-contain border rounded"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Step 3: Analyze Button */}
-          {selectedFile && selectedProjectId && !aiResult && (
-            <div className="mb-6">
-              <button
-                onClick={handleAnalyze}
-                disabled={analyzing}
-                className={`w-full px-4 py-3 rounded-md transition-colors flex items-center justify-center ${
-                  analyzing
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-purple-600 hover:bg-purple-700 text-white'
-                }`}
-              >
-                {analyzing ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Menganalisis gambar dengan AI...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                    Analisis dengan AI
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* Step 4: AI Result and Edit Form */}
-          {aiResult && editedData && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold mb-3 flex items-center">
-                <span className="bg-purple-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm mr-2">3</span>
-                Verifikasi Hasil AI
-              </h3>
-
-              <div className="p-4 bg-purple-50 rounded-lg mb-4">
-                <p className="text-sm font-medium text-purple-800 mb-2">Hasil Analisis AI:</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-gray-600">Tanggal:</span>
-                    <span className="ml-2 font-medium">{new Date(aiResult.date).toLocaleString('id-ID')}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Nominal:</span>
-                    <span className="ml-2 font-medium">Rp {aiResult.amount.toLocaleString('id-ID')}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Jenis:</span>
-                    <span className="ml-2 font-medium">{aiResult.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Kategori:</span>
-                    <span className="ml-2 font-medium">{aiResult.category}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-gray-600">Deskripsi:</span>
-                    <span className="ml-2 font-medium">{aiResult.description}</span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-sm text-gray-600 mb-4">
-                Periksa dan edit data jika diperlukan:
-              </p>
-
-              {/* Edit Form */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tanggal & Waktu
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={formatDateTimeForInput(editedData.date)}
-                      onChange={(e) => setEditedData({ ...editedData, date: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Jenis Transaksi
-                    </label>
-                    <select
-                      value={editedData.type}
-                      onChange={(e) => {
-                        const newType = e.target.value;
-                        setEditedData({ 
-                          ...editedData, 
-                          type: newType,
-                          category: newType === TRANSACTION_TYPES.INCOME 
-                            ? INCOME_CATEGORIES[0] 
-                            : EXPENSE_CATEGORIES[0]
-                        });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      <option value={TRANSACTION_TYPES.INCOME}>Pemasukan</option>
-                      <option value={TRANSACTION_TYPES.EXPENSE}>Pengeluaran</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Kategori
-                    </label>
-                    <select
-                      value={editedData.category}
-                      onChange={(e) => setEditedData({ ...editedData, category: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      {categories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nominal (Rp)
-                    </label>
-                    <input
-                      type="number"
-                      value={editedData.amount}
-                      onChange={(e) => setEditedData({ ...editedData, amount: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      min="0"
-                      step="10100"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Deskripsi
-                  </label>
-                  <textarea
-                    value={editedData.description}
-                    onChange={(e) => setEditedData({ ...editedData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    rows="3"
-                    placeholder="Deskripsi transaksi..."
+          {files.length > 0 && (
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {files.map((f, idx) => (
+                <div key={idx} className="relative">
+                  <img
+                    src={f.previewUrl}
+                    alt={`Bukti ${idx + 1}`}
+                    className="h-24 w-full rounded-lg border border-slate-200 object-cover"
                   />
+                  <button
+                    onClick={() => removeFile(idx)}
+                    disabled={busy}
+                    className="absolute -right-1.5 -top-1.5 rounded-full bg-white p-1 text-slate-500 shadow-card ring-1 ring-slate-200 hover:text-red-600"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
-              </div>
+              ))}
             </div>
           )}
+        </div>
+      )}
 
-          {/* Actions */}
-          <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
-            <button
-              onClick={handleClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Batal
-            </button>
-            {aiResult && (
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  loading
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                {loading ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Menyimpan...
-                  </span>
-                ) : (
-                  'Simpan Transaksi'
-                )}
-              </button>
-            )}
+      {/* Langkah 3: analisis */}
+      {!results && selectedProjectId && files.length > 0 && (
+        <Button variant="gradient" size="lg" onClick={handleAnalyze} loading={analyzing} className="w-full">
+          {analyzing ? (
+            `Menganalisis ${files.length} gambar…`
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              Analisis {files.length} Gambar dengan AI
+            </>
+          )}
+        </Button>
+      )}
+
+      {/* Langkah 4: verifikasi tiap hasil */}
+      {results && (
+        <div>
+          <StepBadge number={3} label={`Verifikasi ${results.length} Hasil`} done={false} />
+          <p className="mb-4 text-sm text-slate-500">
+            Periksa & edit tiap transaksi sebelum disimpan. Hapus yang tidak perlu.
+          </p>
+
+          <div className="space-y-4">
+            {results.map((r, idx) => {
+              const categories =
+                r.type === TRANSACTION_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+              return (
+                <div key={idx} className="rounded-xl border border-slate-200 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {r.imageUrl && (
+                        <img
+                          src={r.imageUrl}
+                          alt=""
+                          className="h-12 w-12 rounded-lg border border-slate-200 object-cover"
+                        />
+                      )}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">
+                          Bukti #{idx + 1}
+                        </p>
+                        <p
+                          className={`font-display text-sm font-bold ${
+                            r.type === 'income' ? 'text-emerald-600' : 'text-red-600'
+                          }`}
+                        >
+                          {r.type === 'income' ? '+' : '−'}
+                          {formatCurrency(r.amount)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeResult(idx)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      title="Hapus hasil ini"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Tanggal & Waktu">
+                      <Input
+                        type="datetime-local"
+                        value={formatDateTimeForInput(r.date)}
+                        onChange={(e) => updateResult(idx, { date: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Jenis">
+                      <Select
+                        value={r.type}
+                        onChange={(e) => {
+                          const newType = e.target.value;
+                          updateResult(idx, {
+                            type: newType,
+                            category:
+                              newType === TRANSACTION_TYPES.INCOME
+                                ? INCOME_CATEGORIES[0]
+                                : EXPENSE_CATEGORIES[0]
+                          });
+                        }}
+                      >
+                        <option value={TRANSACTION_TYPES.INCOME}>Pemasukan</option>
+                        <option value={TRANSACTION_TYPES.EXPENSE}>Pengeluaran</option>
+                      </Select>
+                    </Field>
+                    <Field label="Kategori">
+                      <Select value={r.category} onChange={(e) => updateResult(idx, { category: e.target.value })}>
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Nominal (Rp)">
+                      <Input
+                        type="number"
+                        value={r.amount}
+                        onChange={(e) => updateResult(idx, { amount: Number(e.target.value) })}
+                        min="0"
+                        step="1000"
+                      />
+                    </Field>
+                    <div className="sm:col-span-2">
+                      <Field label="Deskripsi">
+                        <Textarea
+                          value={r.description}
+                          onChange={(e) => updateResult(idx, { description: e.target.value })}
+                          rows="2"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 };
 

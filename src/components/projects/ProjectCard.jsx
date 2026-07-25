@@ -1,130 +1,134 @@
 // src/components/projects/ProjectCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { formatCurrency, calculateProjectProgress, calculateDaysLeft, getStatusLabel } from '../../utils/formatters';
+import { CalendarDays, Link2, PenLine, Trash2 } from 'lucide-react';
+import {
+  formatCurrency,
+  calculateProjectProgress,
+  calculateDaysLeft
+} from '../../utils/formatters';
+import { Card } from '../ui/Card';
+import { StatusBadge } from '../ui/Badge';
+import ProgressBar from '../ui/ProgressBar';
 
 const ProjectCard = ({ project, onEdit, onDelete, currentUser }) => {
   const progress = calculateProjectProgress(project);
   const daysLeft = calculateDaysLeft(project.endDate);
   const isAdmin = currentUser && currentUser.role === 'admin';
 
-  const copyProjectLink = (e, projectId) => {
+  const copyProjectLink = (e) => {
     e.stopPropagation();
     e.preventDefault();
-    const link = `${window.location.origin}/projects/${projectId}`;
-    navigator.clipboard.writeText(link).then(() => {
-      alert('Link proyek berhasil disalin!');
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-    });
+    const link = `${window.location.origin}/projects/${project.id}`;
+    navigator.clipboard
+      .writeText(link)
+      .then(() => alert('Link proyek berhasil disalin!'))
+      .catch((err) => console.error('Failed to copy:', err));
   };
 
   const handleEdit = (e) => {
     e.stopPropagation();
     e.preventDefault();
-    if (onEdit) {
-      onEdit(project);
-    }
+    onEdit?.(project);
   };
 
   const handleDelete = (e) => {
     e.stopPropagation();
     e.preventDefault();
-    if (onDelete) {
-      onDelete(project.id);
-    }
+    onDelete?.(project);
   };
 
+  const dateRange = `${new Date(project.startDate).toLocaleDateString('id-ID')} – ${new Date(
+    project.endDate
+  ).toLocaleDateString('id-ID')}`;
+
   return (
-    <Link to={`/projects/${project.id}`} className="block">
-      <div className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer h-full">
-        <div className="p-6 h-full flex flex-col">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-lg font-semibold text-gray-800 line-clamp-2">{project.name}</h3>
-            <span className={`status-badge status-${project.status} flex-shrink-0 ml-2`}>
-              {getStatusLabel(project.status)}
-            </span>
-          </div>
-          
-          <p className="text-sm text-gray-600 mb-2">{project.partner}</p>
-          <p className="text-sm text-gray-500 mb-4">
-            {new Date(project.startDate).toLocaleDateString('id-ID')} - 
-            {new Date(project.endDate).toLocaleDateString('id-ID')}
+    <Link to={`/projects/${project.id}`} className="block h-full">
+      <Card hover className="flex h-full flex-col p-4">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 font-display text-sm font-semibold leading-snug text-slate-900 sm:text-[15px]">
+            {project.name}
+          </h3>
+          <StatusBadge status={project.status} className="shrink-0" />
+        </div>
+
+        <p className="truncate text-sm font-medium text-slate-600">{project.partner}</p>
+        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+          <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+          {dateRange}
+        </p>
+
+        {/* Nilai proyek sebagai angka utama */}
+        <div className="mt-3">
+          <p className="text-xs text-slate-400">Nilai Proyek</p>
+          <p className="font-display text-lg font-bold tracking-tight text-slate-900">
+            {formatCurrency(project.value)}
           </p>
-          
-          <div className="space-y-2 mb-4">
-            <div className="flex justify-between text-sm">
-              <span>Nilai Proyek:</span>
-              <span className="font-semibold">{formatCurrency(project.value)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Pajak ({project.taxRate}%):</span>
-              <span>{formatCurrency(project.value * project.taxRate / 100)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Terbayar:</span>
-              <span className="text-green-600">{formatCurrency(project.paidAmount || 0)}</span>
-            </div>
-          </div>
-          
-          <div className="mt-auto">
-            <div className="mb-4">
-              <div className="flex justify-between text-sm mb-1">
-                <span>Progress</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
-              </div>
-              {daysLeft > 0 && project.status === 'ongoing' && (
-                <p className="text-xs text-gray-500 mt-1">Sisa {daysLeft} hari</p>
-              )}
-              {daysLeft === 0 && project.status === 'ongoing' && (
-                <p className="text-xs text-red-600 mt-1 font-semibold">Deadline hari ini!</p>
-              )}
-              {daysLeft < 0 && project.status === 'ongoing' && (
-                <p className="text-xs text-red-600 mt-1 font-semibold">Terlambat {Math.abs(daysLeft)} hari</p>
-              )}
-            </div>
-            
-            <div className="flex justify-between items-center">
-              <button
-                onClick={(e) => copyProjectLink(e, project.id)}
-                className="text-blue-600 hover:text-blue-800 text-sm p-1 inline-flex items-center"
-                title="Salin link proyek"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.032 4.026a9.001 9.001 0 01-7.522 3.756v1.042c4.518-1.322 6.88-5.556 7.522-4.798z" />
-                </svg>
-                Salin Link
-              </button>
-              
-              {isAdmin && (
-                <div className="flex space-x-2">
-                  <button
-                    onClick={handleEdit}
-                    className="text-gray-600 hover:text-gray-800 text-sm p-1"
-                    title="Edit proyek"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="text-red-600 hover:text-red-800 text-sm p-1"
-                    title="Hapus proyek"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
+          <div className="mt-1 flex items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+            <span>
+              Terbayar{' '}
+              <span className="font-semibold text-emerald-600">
+                {formatCurrency(project.paidAmount || 0)}
+              </span>
+            </span>
+            <span className="text-slate-300">·</span>
+            <span>Pajak {project.taxRate}%</span>
           </div>
         </div>
-      </div>
+
+        <div className="mt-auto pt-3">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-slate-500">Progress</span>
+            <span className="font-semibold text-slate-700">{progress}%</span>
+          </div>
+          <ProgressBar value={progress} />
+          {project.status === 'ongoing' && daysLeft > 0 && (
+            <p className="mt-1.5 text-xs text-slate-400">Sisa {daysLeft} hari</p>
+          )}
+          {project.status === 'ongoing' && daysLeft === 0 && (
+            <p className="mt-1.5 text-xs font-semibold text-red-600">Deadline hari ini!</p>
+          )}
+          {project.status === 'ongoing' && daysLeft < 0 && (
+            <p className="mt-1.5 text-xs font-semibold text-red-600">
+              Terlambat {Math.abs(daysLeft)} hari
+            </p>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
+            <button
+              onClick={copyProjectLink}
+              title="Salin link proyek"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              Salin Link
+            </button>
+
+            {isAdmin && (
+              <div className="flex gap-1">
+                {onEdit && (
+                  <button
+                    onClick={handleEdit}
+                    title="Edit proyek"
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <PenLine className="h-4 w-4" />
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={handleDelete}
+                    title="Hapus proyek"
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
     </Link>
   );
 };

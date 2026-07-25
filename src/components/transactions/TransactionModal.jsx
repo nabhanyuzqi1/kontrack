@@ -1,12 +1,25 @@
 // src/components/transactions/TransactionModal.jsx
 import React, { useState, useEffect } from 'react';
+import { UploadCloud, X, ImageIcon } from 'lucide-react';
 import { addTransaction, updateTransaction } from '../../services/transactions';
 import { getAllProjects } from '../../services/projects';
+import { uploadTransactionImage, validateImageFile } from '../../services/ai';
 import { TRANSACTION_TYPES, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../utils/constants';
+import Modal from '../ui/Modal';
+import Button from '../ui/Button';
+import { Field, Input, Select, Textarea } from '../ui/Field';
 
-const TransactionModal = ({ isOpen, onClose, onSuccess, transaction, projectId, projects: providedProjects, currentUser }) => {
+const TransactionModal = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  transaction,
+  projectId,
+  projects: providedProjects,
+  currentUser
+}) => {
   const isEdit = transaction !== null && transaction !== undefined;
-  
+
   const [projects, setProjects] = useState(providedProjects || []);
   const [formData, setFormData] = useState({
     projectId: transaction?.projectId || projectId || '',
@@ -16,9 +29,12 @@ const TransactionModal = ({ isOpen, onClose, onSuccess, transaction, projectId, 
     amount: transaction?.amount || '',
     description: transaction?.description || ''
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(transaction?.imageUrl || null);
+  const [imageError, setImageError] = useState('');
 
   useEffect(() => {
     if (!providedProjects) {
@@ -26,14 +42,33 @@ const TransactionModal = ({ isOpen, onClose, onSuccess, transaction, projectId, 
     }
   }, [providedProjects]);
 
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      validateImageFile(file);
+      setImageFile(file);
+      setImageError('');
+      const reader = new FileReader();
+      reader.onload = (ev) => setImagePreview(ev.target.result);
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setImageError(err.message);
+      setImageFile(null);
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setImageError('');
+  };
+
   useEffect(() => {
-    // Update category when type changes
     if (!isEdit || formData.type !== transaction?.type) {
-      const categories = formData.type === TRANSACTION_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-      setFormData(prev => ({
-        ...prev,
-        category: categories[0]
-      }));
+      const categories =
+        formData.type === TRANSACTION_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+      setFormData((prev) => ({ ...prev, category: categories[0] }));
     }
   }, [formData.type, isEdit, transaction]);
 
@@ -48,57 +83,65 @@ const TransactionModal = ({ isOpen, onClose, onSuccess, transaction, projectId, 
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.projectId) {
       newErrors.projectId = 'Proyek harus dipilih';
     }
-    
+
     if (!formData.date) {
       newErrors.date = 'Tanggal harus diisi';
     }
-    
+
     if (!formData.category) {
       newErrors.category = 'Kategori harus dipilih';
     }
-    
+
     if (!formData.amount || formData.amount <= 0) {
       newErrors.amount = 'Nominal harus lebih dari 0';
     }
-    
+
     if (!formData.description.trim()) {
       newErrors.description = 'Keterangan harus diisi';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
-      const project = projects.find(p => p.id === formData.projectId);
+      const project = projects.find((p) => p.id === formData.projectId);
       const transactionData = {
         ...formData,
         amount: parseFloat(formData.amount),
         projectName: project?.name || ''
       };
-      
+
+      // Unggah bukti gambar (opsional) bila ada file baru dipilih
+      if (imageFile) {
+        const uploaded = await uploadTransactionImage(imageFile, currentUser?.uid || 'manual');
+        transactionData.imageUrl = uploaded.url;
+        transactionData.imagePath = uploaded.path;
+      } else if (isEdit && transaction?.imageUrl && imagePreview) {
+        // Pertahankan bukti lama saat edit tanpa ganti gambar
+        transactionData.imageUrl = transaction.imageUrl;
+        transactionData.imagePath = transaction.imagePath;
+      }
+
       if (isEdit) {
-        await updateTransaction(
-          transaction.id,
-          transactionData
-        );
+        await updateTransaction(transaction.id, transactionData);
       } else {
         await addTransaction(transactionData);
       }
-      
+
       onSuccess();
     } catch (error) {
       console.error('Error saving transaction:', error);
@@ -110,187 +153,164 @@ const TransactionModal = ({ isOpen, onClose, onSuccess, transaction, projectId, 
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user starts typing
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
     if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
-  const categories = formData.type === TRANSACTION_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-
-  if (!isOpen) return null;
+  const categories =
+    formData.type === TRANSACTION_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {isEdit ? 'Edit' : 'Tambah'} Transaksi Manual
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-            disabled={loading}
+    <Modal
+      isOpen={isOpen}
+      onClose={loading ? undefined : onClose}
+      title={isEdit ? 'Edit Transaksi' : 'Transaksi Manual'}
+      subtitle="Catat pemasukan atau pengeluaran proyek"
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>
+            Batal
+          </Button>
+          <Button type="submit" form="transaction-form" loading={loading}>
+            {loading ? 'Menyimpan…' : isEdit ? 'Simpan Perubahan' : 'Simpan Transaksi'}
+          </Button>
+        </>
+      }
+    >
+      <form id="transaction-form" onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Proyek" required error={errors.projectId}>
+          <Select
+            name="projectId"
+            value={formData.projectId}
+            onChange={handleChange}
+            error={errors.projectId}
+            disabled={loading || Boolean(projectId)}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+            <option value="">Pilih Proyek</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name} — {project.partner}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Proyek <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="projectId"
-              value={formData.projectId}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.projectId ? 'border-red-500' : 'border-gray-300'
-              }`}
-              disabled={loading || projectId}
-            >
-              <option value="">Pilih Proyek</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.name} - {project.partner}
-                </option>
-              ))}
-            </select>
-            {errors.projectId && <p className="text-red-500 text-xs mt-1">{errors.projectId}</p>}
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tanggal <span className="text-red-500">*</span>
-            </label>
-            <input
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Tanggal" required error={errors.date}>
+            <Input
               type="datetime-local"
               name="date"
               value={formData.date}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.date ? 'border-red-500' : 'border-gray-300'
-              }`}
+              error={errors.date}
               disabled={loading}
             />
-            {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipe Transaksi <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={loading}
-            >
+          </Field>
+
+          <Field label="Tipe Transaksi" required>
+            <Select name="type" value={formData.type} onChange={handleChange} disabled={loading}>
               <option value={TRANSACTION_TYPES.INCOME}>Pemasukan</option>
               <option value={TRANSACTION_TYPES.EXPENSE}>Pengeluaran</option>
-            </select>
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Kategori <span className="text-red-500">*</span>
-            </label>
-            <select
+            </Select>
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Kategori" required error={errors.category}>
+            <Select
               name="category"
               value={formData.category}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.category ? 'border-red-500' : 'border-gray-300'
-              }`}
+              error={errors.category}
               disabled={loading}
             >
-              {categories.map(category => (
+              {categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
                 </option>
               ))}
-            </select>
-            {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nominal (Rp) <span className="text-red-500">*</span>
-            </label>
-            <input
+            </Select>
+          </Field>
+
+          <Field label="Nominal (Rp)" required error={errors.amount}>
+            <Input
               type="number"
               name="amount"
               value={formData.amount}
               onChange={handleChange}
+              error={errors.amount}
               min="0"
               step="1000"
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.amount ? 'border-red-500' : 'border-gray-300'
-              }`}
+              placeholder="0"
               disabled={loading}
             />
-            {errors.amount && <p className="text-red-500 text-xs mt-1">{errors.amount}</p>}
-          </div>
-          
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Keterangan <span className="text-red-500">*</span>
+          </Field>
+        </div>
+
+        <Field label="Keterangan" required error={errors.description}>
+          <Textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            error={errors.description}
+            rows="3"
+            placeholder="cth. Pembelian material semen 50 sak"
+            disabled={loading}
+          />
+        </Field>
+
+        {/* Bukti transaksi (opsional) */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            Bukti Transaksi <span className="font-normal text-slate-400">(opsional)</span>
+          </label>
+          {imagePreview ? (
+            <div className="relative inline-block">
+              <img
+                src={imagePreview}
+                alt="Bukti"
+                className="h-32 w-auto rounded-lg border border-slate-200 object-contain"
+              />
+              <button
+                type="button"
+                onClick={removeImage}
+                disabled={loading}
+                className="absolute -right-2 -top-2 rounded-full bg-white p-1 text-slate-500 shadow-card ring-1 ring-slate-200 hover:text-red-600"
+                title="Hapus gambar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+              <UploadCloud className="h-5 w-5 text-slate-400" />
+              <span>
+                <span className="font-medium text-brand-600">Upload bukti</span> — foto nota /
+                transfer (JPG, PNG, maks 5MB)
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageChange}
+                disabled={loading}
+              />
             </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows="3"
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.description ? 'border-red-500' : 'border-gray-300'
-              }`}
-              disabled={loading}
-            />
-            {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
-          </div>
-          
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              disabled={loading}
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Menyimpan...
-                </>
-              ) : (
-                isEdit ? 'Simpan Perubahan' : 'Simpan'
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          )}
+          {imageError && <p className="mt-1 text-xs text-red-600">{imageError}</p>}
+          {imageFile && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+              <ImageIcon className="h-3 w-3" />
+              {imageFile.name} — diunggah saat disimpan
+            </p>
+          )}
+        </div>
+      </form>
+    </Modal>
   );
 };
 

@@ -97,51 +97,65 @@ export const getCurrentUserWithRole = async () => {
   }
 };
 
+// Cache role terakhir yang diketahui per-uid. Mencegah menu admin "kadang hilang":
+// onAuthStateChanged dipanggil ulang tiap token refresh (±1 jam); bila query
+// koleksi `users` sesekali kosong/gagal (jaringan/eventual consistency), role
+// tidak boleh terjun ke 'user' — pakai role tersimpan terakhir sebagai fallback.
+const roleCacheKey = (uid) => `kontrack:role:${uid}`;
+
+const readCachedRole = (uid) => {
+  try {
+    return localStorage.getItem(roleCacheKey(uid)) || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const writeCachedRole = (uid, role) => {
+  try {
+    localStorage.setItem(roleCacheKey(uid), role);
+  } catch (e) {
+    /* private mode */
+  }
+};
+
 // Auth state observer
 export const onAuthStateChange = (callback) => {
   return onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      try {
-        // Query users collection by email field
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('email', '==', user.email));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          const userDoc = querySnapshot.docs[0];
-          const userData = userDoc.data();
-          
-          console.log('Auth state changed - user data:', userData); // Debug log
-          
-          const userWithRole = {
-            uid: user.uid,
-            email: user.email,
-            name: userData.name || user.email,
-            role: userData.role || 'user',
-            docId: userDoc.id
-          };
-          
-          callback(userWithRole);
-        } else {
-          console.log('No user document found for:', user.email);
-          callback({
-            uid: user.uid,
-            email: user.email,
-            name: user.email,
-            role: 'user'
-          });
-        }
-      } catch (error) {
-        console.error('Error in auth state change:', error);
+    if (!user) {
+      callback(null);
+      return;
+    }
+
+    const fallbackRole = readCachedRole(user.uid) || 'user';
+
+    try {
+      // Query users collection by email field
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', user.email));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const userData = userDoc.data();
+        const role = userData.role || fallbackRole;
+        writeCachedRole(user.uid, role);
+
         callback({
           uid: user.uid,
           email: user.email,
-          name: user.email,
-          role: 'user'
+          name: userData.name || user.email,
+          role,
+          docId: userDoc.id
         });
+      } else {
+        // Query kosong (transient / eventual consistency) → jangan downgrade
+        console.warn('User doc tidak ditemukan, pakai role cache:', fallbackRole);
+        callback({ uid: user.uid, email: user.email, name: user.email, role: fallbackRole });
       }
-    } else {
-      callback(null);
+    } catch (error) {
+      console.error('Error in auth state change, pakai role cache:', error);
+      callback({ uid: user.uid, email: user.email, name: user.email, role: fallbackRole });
     }
   });
 };

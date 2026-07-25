@@ -1,26 +1,67 @@
 // src/components/projects/ProjectDetail.jsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
+import {
+  ArrowLeft,
+  Link2,
+  FileDown,
+  FileText,
+  Sparkles,
+  Plus,
+  ArrowDownRight,
+  ArrowUpRight,
+  Scale,
+  CalendarDays,
+  FileSignature
+} from 'lucide-react';
 import { db } from '../../services/firebase';
 import { getTransactionsByProject, deleteTransaction } from '../../services/transactions';
 import TransactionModal from '../transactions/TransactionModal';
 import AITransactionModal from '../transactions/AITransactionModal';
 import TransactionTable from '../transactions/TransactionTable';
-import { formatCurrency, formatDate, getStatusLabel, calculateProjectProgress, calculateDaysLeft } from '../../utils/formatters';
-import { shareProjectWhatsApp } from '../../utils/sharing';
-import { generateProjectPDF, generateInvoice } from '../../utils/pdfGenerator';
+import InvoiceModal from '../invoices/InvoiceModal';
+import { formatCurrency, formatDate, calculateProjectProgress, calculateDaysLeft } from '../../utils/formatters';
+import { shareProjectWhatsAppRich } from '../../utils/sharing';
+import { generateProjectSummaryImage } from '../../utils/projectImage';
+import { generateProjectPDF } from '../../utils/pdfGenerator';
+import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
+import Button from '../ui/Button';
+import { Card, CardHeader } from '../ui/Card';
+import { StatusBadge } from '../ui/Badge';
+import ProgressBar from '../ui/ProgressBar';
+import { PageLoader } from '../ui/Spinner';
+import EmptyState from '../ui/EmptyState';
+
+const WhatsAppIcon = ({ className = 'h-4 w-4' }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+  </svg>
+);
+
+const SummaryTile = ({ icon: Icon, label, value, tone }) => (
+  <div className={`flex items-center gap-3 rounded-xl border p-4 ${tone.wrap}`}>
+    <div className={`rounded-lg p-2.5 ${tone.icon}`}>
+      <Icon className="h-5 w-5" />
+    </div>
+    <div className="min-w-0">
+      <p className={`text-xs font-medium ${tone.label}`}>{label}</p>
+      <p className={`truncate font-display text-lg font-bold ${tone.value}`}>{value}</p>
+    </div>
+  </div>
+);
 
 const ProjectDetail = ({ currentUser }) => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [txnRestricted, setTxnRestricted] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -32,22 +73,29 @@ const ProjectDetail = ({ currentUser }) => {
     setLoading(true);
     setError(null);
     try {
-      // Load project data directly from Firestore
       const projectRef = doc(db, 'projects', id);
       const projectSnap = await getDoc(projectRef);
-      
+
       if (projectSnap.exists()) {
         const projectData = { id: projectSnap.id, ...projectSnap.data() };
         setProject(projectData);
-        
-        // Load transactions
-        const transactionData = await getTransactionsByProject(id);
-        setTransactions(transactionData);
+
+        // Transaksi butuh login (security rules) — pengunjung share-link
+        // tetap bisa melihat info & progres proyek tanpa transaksi internal.
+        try {
+          const transactionData = await getTransactionsByProject(id);
+          setTransactions(transactionData);
+          setTxnRestricted(false);
+        } catch (txnErr) {
+          console.warn('Transaksi tidak dapat diakses (butuh login):', txnErr?.code || txnErr);
+          setTransactions([]);
+          setTxnRestricted(true);
+        }
       } else {
         setError('Proyek tidak ditemukan');
       }
-    } catch (error) {
-      console.error('Error loading project:', error);
+    } catch (err) {
+      console.error('Error loading project:', err);
       setError('Gagal memuat data proyek. Silakan coba lagi.');
     } finally {
       setLoading(false);
@@ -62,9 +110,9 @@ const ProjectDetail = ({ currentUser }) => {
   const handleDeleteTransaction = async (transaction) => {
     try {
       await deleteTransaction(transaction.id, transaction);
-      await loadProjectData(); // Reload data
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
+      await loadProjectData();
+    } catch (err) {
+      console.error('Error deleting transaction:', err);
       alert('Gagal menghapus transaksi');
     }
   };
@@ -80,20 +128,32 @@ const ProjectDetail = ({ currentUser }) => {
     loadProjectData();
   };
 
-  const handleShareWhatsApp = () => {
-    if (project) {
-      shareProjectWhatsApp(project, transactions);
+  const [sharingWa, setSharingWa] = useState(false);
+
+  const handleShareWhatsApp = async () => {
+    if (!project || sharingWa) return;
+    setSharingWa(true);
+    try {
+      const settings = await getCompanySettings().catch(() => null);
+      const company = mergeCompanyInfo(settings);
+      const image = await generateProjectSummaryImage(project, transactions, company).catch(() => null);
+      await shareProjectWhatsAppRich(project, transactions, company, image);
+    } catch (err) {
+      console.error('Gagal share WhatsApp:', err);
+    } finally {
+      setSharingWa(false);
     }
   };
 
   const copyProjectLink = () => {
     const link = `${window.location.origin}/projects/${project.id}`;
-    navigator.clipboard.writeText(link).then(() => {
-      alert('Link proyek berhasil disalin!');
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-      alert('Gagal menyalin link');
-    });
+    navigator.clipboard
+      .writeText(link)
+      .then(() => alert('Link proyek berhasil disalin!'))
+      .catch((err) => {
+        console.error('Failed to copy:', err);
+        alert('Gagal menyalin link');
+      });
   };
 
   const handleExportPDF = () => {
@@ -104,222 +164,264 @@ const ProjectDetail = ({ currentUser }) => {
 
   const handleGenerateInvoice = () => {
     if (project) {
-      const invoiceData = {
-        number: `INV-${project.id.slice(-6).toUpperCase()}-${new Date().getMonth() + 1}${new Date().getFullYear()}`,
-        date: new Date()
-      };
-      generateInvoice(project, invoiceData);
+      setShowInvoiceModal(true);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <PageLoader label="Memuat proyek…" />;
   }
 
   if (error || !project) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-        <p>{error || 'Proyek tidak ditemukan'}</p>
-        <Link
-          to="/projects"
-          className="mt-2 text-sm underline hover:no-underline inline-block"
-        >
-          Kembali ke daftar proyek
-        </Link>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title={error || 'Proyek tidak ditemukan'}
+        action={
+          <Link to="/projects">
+            <Button variant="secondary">
+              <ArrowLeft className="h-4 w-4" />
+              Kembali ke Daftar Proyek
+            </Button>
+          </Link>
+        }
+      />
     );
   }
 
   const progress = calculateProjectProgress(project);
   const daysLeft = calculateDaysLeft(project.endDate);
   const totalValue = project.value * (1 + project.taxRate / 100);
-  const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  const income = transactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+  const expense = transactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const balance = income - expense;
+  const isAdmin = currentUser && currentUser.role === 'admin';
 
   return (
-    <div className="fade-in">
-      {/* Header */}
-      <div className="mb-6">
+    <div className="animate-fade-in">
+      {/* Navigasi kembali — hanya untuk pengguna internal (tamu share-link tak punya daftar) */}
+      {currentUser && (
         <Link
           to="/projects"
-          className="text-blue-600 hover:text-blue-800 mb-4 inline-flex items-center"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600"
         >
-          <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Kembali ke Daftar Proyek
+          <ArrowLeft className="h-4 w-4" />
+          Daftar Proyek
         </Link>
-        
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">{project.name}</h1>
-            <p className="text-gray-600">{project.partner}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={copyProjectLink}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm transition-colors inline-flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.032 4.026a9.1001 9.1001 0 01-7.522 3.756v1.042c4.518-1.322 6.88-5.556 7.522-4.798z" />
-              </svg>
-              Salin Link
-            </button>
-            <button
-              onClick={handleShareWhatsApp}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm transition-colors inline-flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.1008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.1006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.1004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.1001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.1003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.1005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-              </svg>
-              WhatsApp
-            </button>
-            <button
-              onClick={handleExportPDF}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm transition-colors inline-flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export PDF
-            </button>
-            {currentUser && currentUser.role === 'admin' && (
-              <button
-                onClick={handleGenerateInvoice}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm transition-colors inline-flex items-center"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Invoice
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Project Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm text-gray-600 mb-3">Informasi Proyek</h3>
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500">
-              Status: <span className={`status-badge status-${project.status}`}>{getStatusLabel(project.status)}</span>
-            </p>
-            <p className="text-xs text-gray-500">Mulai: {formatDate(project.startDate)}</p>
-            <p className="text-xs text-gray-500">Selesai: {formatDate(project.endDate)}</p>
-            <p className="text-xs text-gray-500">No. SPK/MOU: {project.contractNumber || '-'}</p>
-            {project.description && (
-              <p className="text-xs text-gray-500 mt-2">Deskripsi: {project.description}</p>
-            )}
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm text-gray-600 mb-3">Nilai & Pembayaran</h3>
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500">Nilai: {formatCurrency(project.value)}</p>
-            <p className="text-xs text-gray-500">Pajak ({project.taxRate}%): {formatCurrency(project.value * project.taxRate / 100)}</p>
-            <p className="text-xs text-gray-500 font-semibold">Total: {formatCurrency(totalValue)}</p>
-            <div className="border-t pt-2 mt-2">
-              <p className="text-xs text-gray-500">
-                Terbayar: <span className="text-green-600 font-semibold">{formatCurrency(project.paidAmount || 0)}</span>
-              </p>
-              <p className="text-xs text-gray-500">
-                Sisa: <span className="text-red-600 font-semibold">{formatCurrency(project.value - (project.paidAmount || 0))}</span>
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm text-gray-600 mb-3">Progress</h3>
-          <div className="relative pt-1">
-            <div className="flex mb-2 items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold inline-block text-blue-600">
-                  {progress}%
-                </span>
-              </div>
-            </div>
-            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
-              <div 
-                style={{ width: `${progress}%` }} 
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-600 transition-all duration-300"
-              ></div>
-            </div>
-          </div>
-          {project.status === 'ongoing' && daysLeft > 0 && (
-            <p className="text-xs text-gray-500">Sisa waktu: {daysLeft} hari</p>
-          )}
-          {project.status === 'ongoing' && daysLeft === 0 && (
-            <p className="text-xs text-red-600 font-semibold">Deadline hari ini!</p>
-          )}
-          {project.status === 'ongoing' && daysLeft < 0 && (
-            <p className="text-xs text-red-600 font-semibold">Terlambat {Math.abs(daysLeft)} hari</p>
-          )}
-        </div>
-      </div>
-
-      {/* Add Transaction Buttons */}
-      {currentUser && currentUser.role === 'admin' && (
-        <div className="mb-6 flex flex-wrap gap-3 justify-end">
-          <button
-            onClick={() => setShowAIModal(true)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition-colors inline-flex items-center"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Input AI (Screenshot)
-          </button>
-          <button
-            onClick={() => setShowTransactionModal(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors inline-flex items-center"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Tambah Transaksi Manual
-          </button>
-        </div>
       )}
 
-      {/* Transaction Summary */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-green-50 p-4 rounded-lg">
-          <p className="text-sm text-green-600">Total Pemasukan</p>
-          <p className="text-xl font-bold text-green-700">{formatCurrency(income)}</p>
+      {/* Header proyek */}
+      <div className="mb-5 flex flex-col gap-3 sm:mb-6 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="font-display text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              {project.name}
+            </h1>
+            <StatusBadge status={project.status} />
+          </div>
+          <p className="mt-0.5 text-sm text-slate-500 sm:mt-1">{project.partner}</p>
         </div>
-        <div className="bg-red-50 p-4 rounded-lg">
-          <p className="text-sm text-red-600">Total Pengeluaran</p>
-          <p className="text-xl font-bold text-red-700">{formatCurrency(expense)}</p>
-        </div>
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <p className="text-sm text-blue-600">Saldo</p>
-          <p className="text-xl font-bold text-blue-700">{formatCurrency(balance)}</p>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={copyProjectLink}>
+            <Link2 className="h-4 w-4" />
+            Salin Link
+          </Button>
+          <Button variant="success" size="sm" onClick={handleShareWhatsApp} loading={sharingWa}>
+            {!sharingWa && <WhatsAppIcon />}
+            {sharingWa ? 'Menyiapkan…' : 'WhatsApp'}
+          </Button>
+          {/* Export PDF & Invoice hanya untuk pengguna internal, bukan tamu share-link */}
+          {currentUser && (
+            <Button variant="secondary" size="sm" onClick={handleExportPDF}>
+              <FileDown className="h-4 w-4" />
+              Export PDF
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="primary" size="sm" onClick={handleGenerateInvoice}>
+              <FileSignature className="h-4 w-4" />
+              Invoice
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-800">Transaksi Proyek</h3>
-        </div>
-        <TransactionTable
-          transactions={transactions}
-          onEdit={currentUser?.role === 'admin' ? handleEditTransaction : null}
-          onDelete={currentUser?.role === 'admin' ? handleDeleteTransaction : null}
-          showProject={false}
+      {/* Kartu info */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:mb-6 lg:grid-cols-3">
+        <Card className="p-4 sm:p-5">
+          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Informasi Proyek
+          </h3>
+          <dl className="space-y-2.5 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-slate-500">Mulai</dt>
+              <dd className="flex items-center gap-1.5 font-medium text-slate-700">
+                <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+                {formatDate(project.startDate)}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-slate-500">Selesai</dt>
+              <dd className="flex items-center gap-1.5 font-medium text-slate-700">
+                <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+                {formatDate(project.endDate)}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-slate-500">No. SPK/MOU</dt>
+              <dd className="font-medium text-slate-700">{project.contractNumber || '—'}</dd>
+            </div>
+            {project.description && (
+              <div className="border-t border-slate-100 pt-2.5">
+                <dt className="mb-1 text-slate-500">Deskripsi</dt>
+                <dd className="leading-relaxed text-slate-600">{project.description}</dd>
+              </div>
+            )}
+          </dl>
+        </Card>
+
+        <Card className="p-4 sm:p-5">
+          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Nilai & Pembayaran
+          </h3>
+          <dl className="space-y-2.5 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Nilai Kontrak</dt>
+              <dd className="font-semibold text-slate-800">{formatCurrency(project.value)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Pajak ({project.taxRate}%)</dt>
+              <dd className="text-slate-600">
+                {formatCurrency((project.value * project.taxRate) / 100)}
+              </dd>
+            </div>
+            <div className="flex justify-between border-t border-slate-100 pt-2.5">
+              <dt className="font-medium text-slate-600">Total + Pajak</dt>
+              <dd className="font-display font-bold text-slate-900">{formatCurrency(totalValue)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Terbayar</dt>
+              <dd className="font-semibold text-emerald-600">
+                {formatCurrency(project.paidAmount || 0)}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Sisa Tagihan</dt>
+              {project.value - (project.paidAmount || 0) <= 0 ? (
+                <dd className="font-semibold text-emerald-600">Lunas</dd>
+              ) : (
+                <dd className="font-semibold text-red-600">
+                  {formatCurrency(project.value - (project.paidAmount || 0))}
+                </dd>
+              )}
+            </div>
+          </dl>
+        </Card>
+
+        <Card className="p-4 sm:p-5">
+          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Progress
+          </h3>
+          <div className="mb-2 flex items-end justify-between">
+            <span className="font-display text-3xl font-bold text-slate-900">{progress}%</span>
+            {project.status === 'ongoing' && daysLeft > 0 && (
+              <span className="text-xs text-slate-400">Sisa {daysLeft} hari</span>
+            )}
+            {project.status === 'ongoing' && daysLeft === 0 && (
+              <span className="text-xs font-semibold text-red-600">Deadline hari ini!</span>
+            )}
+            {project.status === 'ongoing' && daysLeft < 0 && (
+              <span className="text-xs font-semibold text-red-600">
+                Terlambat {Math.abs(daysLeft)} hari
+              </span>
+            )}
+          </div>
+          <ProgressBar value={progress} className="h-2.5" />
+          <p className="mt-3 text-xs leading-relaxed text-slate-400">
+            Progress dihitung dari pembayaran yang diterima terhadap nilai kontrak.
+          </p>
+        </Card>
+      </div>
+
+      {/* Ringkasan & tabel transaksi — tersembunyi untuk pengunjung share-link */}
+      {txnRestricted ? (
+        <Card className="p-6 text-center">
+          <p className="text-sm font-medium text-slate-600">
+            Transaksi proyek hanya terlihat setelah login.
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Anda melihat halaman ini melalui link berbagi — informasi proyek dan progres tetap
+            tersedia di atas.
+          </p>
+        </Card>
+      ) : (
+        <>
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
+        <SummaryTile
+          icon={ArrowDownRight}
+          label="Total Pemasukan"
+          value={formatCurrency(income)}
+          tone={{
+            wrap: 'border-emerald-100 bg-emerald-50/60',
+            icon: 'bg-emerald-100 text-emerald-600',
+            label: 'text-emerald-700',
+            value: 'text-emerald-800'
+          }}
+        />
+        <SummaryTile
+          icon={ArrowUpRight}
+          label="Total Pengeluaran"
+          value={formatCurrency(expense)}
+          tone={{
+            wrap: 'border-red-100 bg-red-50/60',
+            icon: 'bg-red-100 text-red-600',
+            label: 'text-red-700',
+            value: 'text-red-800'
+          }}
+        />
+        <SummaryTile
+          icon={Scale}
+          label="Saldo"
+          value={formatCurrency(balance)}
+          tone={{
+            wrap: 'border-brand-100 bg-brand-50/60',
+            icon: 'bg-brand-100 text-brand-600',
+            label: 'text-brand-700',
+            value: 'text-brand-800'
+          }}
         />
       </div>
 
-      {/* Transaction Modal */}
+      {/* Tabel transaksi */}
+      <Card>
+        <CardHeader
+          title="Transaksi Proyek"
+          action={
+            isAdmin && (
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setShowAIModal(true)}>
+                  <Sparkles className="h-4 w-4 text-violet-500" />
+                  Input AI
+                </Button>
+                <Button size="sm" onClick={() => setShowTransactionModal(true)}>
+                  <Plus className="h-4 w-4" />
+                  Transaksi Manual
+                </Button>
+              </div>
+            )
+          }
+        />
+        <TransactionTable
+          transactions={transactions}
+          onEdit={isAdmin ? handleEditTransaction : null}
+          onDelete={isAdmin ? handleDeleteTransaction : null}
+          showProject={false}
+        />
+      </Card>
+        </>
+      )}
+
       {showTransactionModal && (
         <TransactionModal
           isOpen={showTransactionModal}
@@ -332,7 +434,6 @@ const ProjectDetail = ({ currentUser }) => {
         />
       )}
 
-      {/* AI Transaction Modal */}
       {showAIModal && (
         <AITransactionModal
           isOpen={showAIModal}
@@ -340,6 +441,14 @@ const ProjectDetail = ({ currentUser }) => {
           onSuccess={handleModalSuccess}
           projects={[project]}
           currentUser={currentUser}
+        />
+      )}
+
+      {showInvoiceModal && (
+        <InvoiceModal
+          isOpen={showInvoiceModal}
+          onClose={() => setShowInvoiceModal(false)}
+          project={project}
         />
       )}
     </div>

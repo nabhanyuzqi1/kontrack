@@ -1,9 +1,18 @@
 // src/components/projects/ProjectList.jsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getAllProjects } from '../../services/projects';
+import { Plus, Search, FolderKanban, RotateCw } from 'lucide-react';
+import { getAllProjects, deleteProject } from '../../services/projects';
 import ProjectModal from './ProjectModal';
 import ProjectCard from './ProjectCard';
+import PageHeader from '../ui/PageHeader';
+import Button from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Input } from '../ui/Field';
+import { PageLoader } from '../ui/Spinner';
+import EmptyState from '../ui/EmptyState';
+import { getStatusLabel } from '../../utils/formatters';
+
+const STATUS_FILTERS = ['all', 'akan-datang', 'ongoing', 'retensi', 'selesai'];
 
 const ProjectList = ({ currentUser }) => {
   const [projects, setProjects] = useState([]);
@@ -13,12 +22,6 @@ const ProjectList = ({ currentUser }) => {
   const [editingProject, setEditingProject] = useState(null);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Debug log
-  useEffect(() => {
-    console.log('ProjectList - Current User:', currentUser);
-    console.log('Is Admin?', currentUser?.role === 'admin');
-  }, [currentUser]);
 
   useEffect(() => {
     loadProjects();
@@ -30,8 +33,8 @@ const ProjectList = ({ currentUser }) => {
     try {
       const projectList = await getAllProjects();
       setProjects(projectList);
-    } catch (error) {
-      console.error('Error loading projects:', error);
+    } catch (err) {
+      console.error('Error loading projects:', err);
       setError('Gagal memuat daftar proyek. Silakan coba lagi.');
     } finally {
       setLoading(false);
@@ -43,17 +46,18 @@ const ProjectList = ({ currentUser }) => {
     setShowProjectModal(true);
   };
 
-  const handleDeleteProject = async (projectId) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus proyek ini?')) {
-      return;
-    }
-    
+  const handleDeleteProject = async (project) => {
+    const confirmed = window.confirm(
+      `Hapus proyek "${project.name}"? Semua transaksi di dalamnya ikut terhapus dan tidak bisa dikembalikan.`
+    );
+    if (!confirmed) return;
+
     try {
-      // Add delete logic here if needed
+      await deleteProject(project.id);
       await loadProjects();
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      alert('Gagal menghapus proyek');
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      alert('Gagal menghapus proyek. Silakan coba lagi.');
     }
   };
 
@@ -67,14 +71,11 @@ const ProjectList = ({ currentUser }) => {
     loadProjects();
   };
 
-  // Filter and search projects
-  const filteredProjects = projects.filter(project => {
-    // Status filter
+  const filteredProjects = projects.filter((project) => {
     if (filter !== 'all' && project.status !== filter) {
       return false;
     }
-    
-    // Search filter
+
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       return (
@@ -83,144 +84,117 @@ const ProjectList = ({ currentUser }) => {
         (project.contractNumber && project.contractNumber.toLowerCase().includes(search))
       );
     }
-    
+
     return true;
   });
 
-  // Group projects by status
-  const projectsByStatus = {
-    'akan-datang': filteredProjects.filter(p => p.status === 'akan-datang'),
-    'ongoing': filteredProjects.filter(p => p.status === 'ongoing'),
-    'retensi': filteredProjects.filter(p => p.status === 'retensi'),
-    'selesai': filteredProjects.filter(p => p.status === 'selesai')
-  };
-
-  const statusLabels = {
-    'akan-datang': 'Akan Datang',
-    'ongoing': 'On Going',
-    'retensi': 'Retensi',
-    'selesai': 'Selesai'
-  };
+  const countByStatus = (status) =>
+    status === 'all'
+      ? projects.length
+      : projects.filter((p) => p.status === status).length;
 
   const isAdmin = currentUser && currentUser.role === 'admin';
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <PageLoader label="Memuat proyek…" />;
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-        <p>{error}</p>
-        <button
-          onClick={loadProjects}
-          className="mt-2 text-sm underline hover:no-underline"
-        >
-          Coba lagi
-        </button>
-      </div>
+      <EmptyState
+        icon={RotateCw}
+        title="Gagal memuat proyek"
+        description={error}
+        action={
+          <Button variant="secondary" onClick={loadProjects}>
+            <RotateCw className="h-4 w-4" />
+            Coba Lagi
+          </Button>
+        }
+      />
     );
   }
 
   return (
-    <div className="fade-in">
-      <div className="mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">Daftar Proyek</h2>
-            {isAdmin && (
-              <p className="text-sm text-gray-600 mt-1">Logged in as Admin: {currentUser.email}</p>
-            )}
-          </div>
-          {isAdmin && (
-            <button
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Proyek"
+        subtitle={`${projects.length} proyek terdaftar`}
+        actions={
+          isAdmin && (
+            <Button
+              variant="gradient"
               onClick={() => {
                 setEditingProject(null);
                 setShowProjectModal(true);
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors inline-flex items-center"
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="h-4 w-4" />
               Tambah Proyek
-            </button>
-          )}
+            </Button>
+          )
+        }
+      />
+
+      {/* Pencarian + filter status */}
+      <div className="mb-4 space-y-3 sm:mb-6">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Cari proyek, mitra, atau no. SPK…"
+            className="pl-9"
+          />
         </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter Status
-            </label>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">Semua Status</option>
-              <option value="akan-datang">Akan Datang</option>
-              <option value="ongoing">On Going</option>
-              <option value="retensi">Retensi</option>
-              <option value="selesai">Selesai</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Cari Proyek
-            </label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Nama proyek, mitra, atau no. SPK..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Project Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {Object.entries(statusLabels).map(([status, label]) => (
-          <div key={status} className="bg-white p-4 rounded-lg shadow text-center">
-            <span className={`status-badge status-${status}`}>{label}</span>
-            <p className="text-2xl font-bold mt-2">{projectsByStatus[status].length}</p>
-            <p className="text-xs text-gray-500">proyek</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Projects Grid */}
-      {filteredProjects.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <p className="mt-4 text-gray-500">
-            {searchTerm || filter !== 'all'
-              ? 'Tidak nada proyek yang sesuai dengan filter'
-              : 'Belum ada proyek'}
-          </p>
-          {isAdmin && !searchTerm && filter === 'all' && (
+        <div className="custom-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {STATUS_FILTERS.map((status) => (
             <button
-              onClick={() => setShowProjectModal(true)}
-              className="mt-4 text-blue-600 hover:text-blue-800 underline"
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
+                filter === status
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
             >
-              Tambah proyek pertama
+              {status === 'all' ? 'Semua' : getStatusLabel(status)}
+              <span className={`ml-1.5 ${filter === status ? 'text-brand-200' : 'text-slate-400'}`}>
+                {countByStatus(status)}
+              </span>
             </button>
-          )}
+          ))}
         </div>
+      </div>
+
+      {/* Grid proyek */}
+      {filteredProjects.length === 0 ? (
+        <EmptyState
+          icon={FolderKanban}
+          title={
+            searchTerm || filter !== 'all'
+              ? 'Tidak ada proyek yang cocok'
+              : 'Belum ada proyek'
+          }
+          description={
+            searchTerm || filter !== 'all'
+              ? 'Coba ubah kata kunci pencarian atau filter status.'
+              : 'Mulai dengan menambahkan proyek atau kontrak pertama Anda.'
+          }
+          action={
+            isAdmin &&
+            !searchTerm &&
+            filter === 'all' && (
+              <Button variant="gradient" onClick={() => setShowProjectModal(true)}>
+                <Plus className="h-4 w-4" />
+                Tambah Proyek Pertama
+              </Button>
+            )
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}
@@ -233,7 +207,6 @@ const ProjectList = ({ currentUser }) => {
         </div>
       )}
 
-      {/* Project Modal */}
       {showProjectModal && isAdmin && (
         <ProjectModal
           isOpen={showProjectModal}

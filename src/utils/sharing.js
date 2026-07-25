@@ -1,39 +1,114 @@
 // src/utils/sharing.js
 import { formatCurrency, formatDate, getStatusLabel, calculateProjectProgress } from './formatters';
 
-export const shareProjectWhatsApp = (project, transactions) => {
-  const income = transactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const expense = transactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  const message = `
-*LAPORAN PROYEK*
-*${project.name}*
-Mitra: ${project.partner}
+// Susun pesan WhatsApp profesional untuk update proyek ke mitra/klien.
+// `company` opsional (dari settings) untuk kop nama perusahaan.
+export const buildProjectWhatsAppMessage = (project, transactions = [], company = null) => {
+  const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + (t.amount || 0), 0);
+  const expense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + (t.amount || 0), 0);
 
-📊 *Status:* ${getStatusLabel(project.status)}
-📅 *Periode:* ${formatDate(project.startDate)} - ${formatDate(project.endDate)}
+  const taxRate = Number(project.taxRate) || 0;
+  const taxAmount = (project.value * taxRate) / 100;
+  const total = project.value + taxAmount;
+  const paid = project.paidAmount || 0;
+  const outstanding = Math.max(project.value - paid, 0);
+  const progress = calculateProjectProgress(project);
+  const companyName = company?.name || company?.companyName || '';
 
-💰 *Keuangan:*
-• Nilai Proyek: ${formatCurrency(project.value)}
-• Pajak (${project.taxRate}%): ${formatCurrency(project.value * project.taxRate / 0)}
-• Total: ${formatCurrency(project.value * (1 + project.taxRate / 0))}
+  const line = '━━━━━━━━━━━━━━━';
+  const rows = [];
+  if (companyName) rows.push(`*${companyName}*`);
+  rows.push('*UPDATE PROYEK*', line, '');
+  rows.push(`*${project.name}*`);
+  rows.push(`Mitra: ${project.partner || '-'}`);
+  if (project.contractNumber) rows.push(`No. SPK: ${project.contractNumber}`);
+  rows.push('');
+  rows.push(`▪️ Status: *${getStatusLabel(project.status)}*`);
+  rows.push(`▪️ Periode: ${formatDate(project.startDate)} – ${formatDate(project.endDate)}`);
+  rows.push(`▪️ Progress: *${progress}%*`);
+  rows.push('');
+  rows.push('*Ringkasan Nilai*');
+  rows.push(`• Nilai Kontrak: ${formatCurrency(project.value)}`);
+  if (taxRate > 0) rows.push(`• Pajak (${taxRate}%): ${formatCurrency(taxAmount)}`);
+  rows.push(`• Total: ${formatCurrency(total)}`);
+  rows.push(`• Terbayar: ${formatCurrency(paid)}`);
+  rows.push(`• Sisa Tagihan: ${formatCurrency(outstanding)}`);
+  // Arus kas internal hanya bila transaksi disertakan (bukan untuk mitra murni)
+  if (transactions.length > 0) {
+    rows.push('');
+    rows.push('*Arus Kas Proyek*');
+    rows.push(`• Pemasukan: ${formatCurrency(income)}`);
+    rows.push(`• Pengeluaran: ${formatCurrency(expense)}`);
+    rows.push(`• Saldo: ${formatCurrency(income - expense)}`);
+  }
+  rows.push('');
+  rows.push(line);
+  rows.push(`🔗 Detail: ${window.location.origin}/projects/${project.id}`);
 
-📈 *Transaksi:*
-• Total Pemasukan: ${formatCurrency(income)}
-• Total Pengeluaran: ${formatCurrency(expense)}
-• Saldo: ${formatCurrency(income - expense)}
+  return rows.join('\n').trim();
+};
 
-📊 *Progress:* ${calculateProjectProgress(project)}%
-
-🔗 Link Detail: ${window.location.origin}/projects/${project.id}
-  `.trim();
-  
+export const shareProjectWhatsApp = (project, transactions, company = null) => {
+  const message = buildProjectWhatsAppMessage(project, transactions, company);
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
   window.open(whatsappUrl, '_blank');
+};
+
+// Share kaya: teks + kartu ringkasan (PNG). Prioritas:
+// 1) Web Share API dengan file (mobile) → teks & gambar sekaligus.
+// 2) Webhook WhatsApp (bila diset di settings) → kirim otomatis.
+// 3) Fallback: unduh gambar + buka wa.me dengan teks.
+export const shareProjectWhatsAppRich = async (project, transactions, company, imageBlob) => {
+  const message = buildProjectWhatsAppMessage(project, transactions, company);
+  const fileName = `Proyek_${(project.name || 'kontrack').replace(/[^a-z0-9]/gi, '_')}.png`;
+
+  // 1) Web Share API dengan file
+  if (imageBlob && navigator.canShare) {
+    const file = new File([imageBlob], fileName, { type: 'image/png' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], text: message });
+        return 'shared';
+      } catch (e) {
+        if (e?.name === 'AbortError') return 'cancelled';
+      }
+    }
+  }
+
+  // 2) Webhook WhatsApp (opsional)
+  const webhook = company?.whatsappWebhookUrl;
+  if (webhook) {
+    try {
+      let imageBase64 = null;
+      if (imageBlob) {
+        imageBase64 = await new Promise((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.readAsDataURL(imageBlob);
+        });
+      }
+      await fetch(webhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: message, image: imageBase64, project: project.name })
+      });
+      return 'webhook';
+    } catch (e) {
+      console.warn('Webhook WA gagal, fallback ke wa.me:', e);
+    }
+  }
+
+  // 3) Fallback: unduh gambar + buka wa.me
+  if (imageBlob) {
+    const url = URL.createObjectURL(imageBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+  return 'fallback';
 };
 
 export const copyProjectLink = (projectId) => {

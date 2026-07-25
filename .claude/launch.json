@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kontrack-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "npm install && npm run dev"],
+      "port": 3000
+    }
+  ]
+}
