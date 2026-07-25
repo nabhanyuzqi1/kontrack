@@ -57,7 +57,10 @@ export const mergeCompanyInfo = (settings) => {
     logoUrl: settings.logoUrl || '',
     signatureUrl: settings.signatureUrl || '',
     footerNote: settings.footerNote || settings.attachmentFooter || '',
-    whatsappWebhookUrl: settings.notifications?.whatsappWebhookUrl || settings.whatsappWebhookUrl || '',
+    // Webhook hanya aktif bila toggle whatsappEnabled true
+    whatsappWebhookUrl: settings.notifications?.whatsappEnabled
+      ? settings.notifications?.whatsappWebhookUrl || ''
+      : '',
     bank: {
       name: settings.bankName || COMPANY_INFO.bank.name,
       accountNumber: settings.bankAccountNumber || COMPANY_INFO.bank.accountNumber,
