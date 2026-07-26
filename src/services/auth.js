@@ -1,6 +1,12 @@
 // src/services/auth.js
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import {
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { withTimeout } from '../utils/async';
 
@@ -43,6 +49,48 @@ export const signInUser = async (email, password) => {
     console.error('Error signing in:', error);
     throw error;
   }
+};
+
+/**
+ * Masuk dengan akun Google.
+ * Pengguna baru otomatis dibuatkan dokumen `users` berperan 'staff' —
+ * administrator dapat menaikkan perannya lewat Pengaturan → Pengguna.
+ */
+export const signInWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  const { user } = await signInWithPopup(auth, provider);
+
+  // Cari dokumen user berdasarkan email (skema live memakai email, bukan uid)
+  const usersRef = collection(db, 'users');
+  const snap = await getDocs(query(usersRef, where('email', '==', user.email)));
+
+  if (!snap.empty) {
+    const userDoc = snap.docs[0];
+    const data = userDoc.data();
+    return {
+      uid: user.uid,
+      email: user.email,
+      name: data.name || user.displayName || user.email,
+      role: data.role || 'staff',
+      photoURL: user.photoURL || '',
+      docId: userDoc.id
+    };
+  }
+
+  // Pengguna baru → daftarkan dengan peran paling terbatas
+  const newUser = {
+    email: user.email,
+    name: user.displayName || user.email,
+    role: 'staff',
+    photoURL: user.photoURL || '',
+    provider: 'google',
+    createdAt: new Date().toISOString()
+  };
+  await setDoc(doc(db, 'users', user.uid), newUser);
+
+  return { uid: user.uid, ...newUser, docId: user.uid };
 };
 
 // Sign out

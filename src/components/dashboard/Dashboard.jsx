@@ -6,6 +6,7 @@ import { db } from '../../services/firebase';
 import ProjectModal from '../projects/ProjectModal';
 import TransactionModal from '../transactions/TransactionModal';
 import AITransactionModal from '../transactions/AITransactionModal';
+import CashflowChart from './CashflowChart';
 import ProjectReminders from './ProjectReminders';
 import RecentProjects from './RecentProjects';
 import RecentTransactions from './RecentTransactions';
@@ -32,6 +33,7 @@ const QuickAction = ({ icon: Icon, title, description, onClick, tone }) => (
 const Dashboard = ({ currentUser }) => {
   const [projects, setProjects] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [allTransactions, setAllTransactions] = useState([]); // untuk grafik arus kas
   const [loading, setLoading] = useState(true);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -89,6 +91,7 @@ const Dashboard = ({ currentUser }) => {
       allTransSnapshot.forEach((doc) => {
         allTrans.push({ id: doc.id, ...doc.data() });
       });
+      setAllTransactions(allTrans);
 
       const totalProjects = allProjects.length;
       const ongoingProjects = allProjects.filter((p) => p.status === 'ongoing').length;
@@ -190,7 +193,9 @@ const Dashboard = ({ currentUser }) => {
         />
       </div>
 
+      {/* Yang perlu ditindaklanjuti lebih dulu, baru gambaran & riwayat */}
       <ProjectReminders projects={projects} />
+      <CashflowChart transactions={allTransactions} />
       <RecentProjects projects={projects} />
       <RecentTransactions transactions={transactions} />
 

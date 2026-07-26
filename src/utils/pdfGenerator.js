@@ -828,159 +828,138 @@ export const generateFinancialReport = generateFullReportPDF;
 
 // New function for transaction report
 export const generateTransactionReport = (transactions, filters = {}) => {
-  // Use landscape for wide table
-  const doc = new jsPDF('l'); // Landscape orientation
+  const doc = new jsPDF('l'); // landscape agar kolom muat
+  const pageW = doc.internal.pageSize.width; // 297
+  const marginX = 12;
   let yPos = addHeaderLandscape(doc, 'LAPORAN TRANSAKSI');
-  
-  // Filter info
+
   if (filters.dateRange) {
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text(
       `Periode: ${formatDate(filters.dateRange.start)} - ${formatDate(filters.dateRange.end)}`,
-      148.5,
+      pageW / 2,
       yPos,
       { align: 'center' }
     );
-    yPos += 12;
+    yPos += 10;
   }
-  
   doc.setTextColor(0, 0, 0);
-  
-  // Transaction table
-  const tableData = transactions.map((t, index) => [
-    (index + 1).toString(),
-    formatDateShort(t.date),
-    t.projectName && t.projectName.length > 30 ? t.projectName.substring(0, 30) + '...' : (t.projectName || '-'),
-    t.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
-    t.category && t.category.length > 20 ? t.category.substring(0, 20) + '...' : (t.category || '-'),
-    t.description && t.description.length > 40 ? t.description.substring(0, 40) + '...' : (t.description || '-'),
-    t.type === 'income' ? formatCurrency(t.amount) : `(${formatCurrency(t.amount)})`
-  ]);
-  
-  // Calculate totals
+
   const totalIncome = transactions
-    .filter(t => t.type === 'income')
+    .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + (t.amount || 0), 0);
   const totalExpense = transactions
-    .filter(t => t.type === 'expense')
+    .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + (t.amount || 0), 0);
-  
-  // Add empty row before totals
-  if (tableData.length > 0) {
-    tableData.push(['', '', '', '', '', '', '']);
-  }
-  
-  // Add totals row
-  tableData.push([
-    '',
-    '',
-    '',
-    '',
-    '',
-    'TOTAL',
-    formatCurrency(totalIncome - totalExpense)
+
+  // Teks TIDAK dipotong — autoTable membungkus baris (overflow: linebreak)
+  // sehingga tidak ada informasi yang hilang.
+  const tableData = transactions.map((t, index) => [
+    String(index + 1),
+    formatDateShort(t.date),
+    t.projectName || '-',
+    t.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
+    t.category || '-',
+    t.description || '-',
+    t.type === 'income' ? formatCurrency(t.amount) : `(${formatCurrency(t.amount)})`
   ]);
-  
-  // Create table with proper centering
+
   autoTable(doc, {
     startY: yPos,
-    head: [['No', 'Tanggal', 'Proyek', 'Jenis', 'Kategori', 'Deskripsi', 'Jumlah']],
+    head: [['No', 'Tanggal', 'Proyek', 'Jenis', 'Kategori', 'Keterangan', 'Jumlah']],
     body: tableData,
+    foot: [[
+      { content: 'TOTAL', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } },
+      {
+        content: formatCurrency(totalIncome - totalExpense),
+        styles: { halign: 'right', fontStyle: 'bold' }
+      }
+    ]],
     theme: 'striped',
     headStyles: {
-      fillColor: [41, 128, 185],
+      fillColor: [51, 88, 244],
       textColor: 255,
       fontStyle: 'bold',
-      fontSize: 10,
+      fontSize: 9,
       halign: 'center'
     },
+    footStyles: { fillColor: [240, 243, 250], textColor: 20, fontSize: 9 },
     styles: {
-      fontSize: 9,
-      cellPadding: 4,
-      overflow: 'linebreak'
+      fontSize: 8,
+      cellPadding: 2.5,
+      overflow: 'linebreak', // bungkus teks panjang, jangan dipotong
+      valign: 'top'
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
-      1: { cellWidth: 25, halign: 'center' },
-      2: { cellWidth: 55, halign: 'left' },
-      3: { cellWidth: 25, halign: 'center' },
-      4: { cellWidth: 35, halign: 'left' },
-      5: { cellWidth: 80, halign: 'left' },
-      6: { cellWidth: 35, halign: 'right' }
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 22, halign: 'center' },
+      2: { cellWidth: 52 },
+      3: { cellWidth: 24, halign: 'center' },
+      4: { cellWidth: 32 },
+      5: { cellWidth: 'auto' },
+      6: { cellWidth: 32, halign: 'right' }
     },
-    margin: { left: 15, right: 15 },
-    tableWidth: 267, // 297 - 30 (margins)
-    showHead: 'firstPage',
-    didDrawPage: function(data) {
+    margin: { left: marginX, right: marginX, top: 22, bottom: 18 },
+    showHead: 'everyPage', // header kolom berulang di tiap halaman
+    rowPageBreak: 'avoid', // baris tidak terbelah antar halaman
+    didDrawPage: (data) => {
+      // Judul ringkas di halaman lanjutan (tanpa menimpa tabel)
       if (data.pageNumber > 1) {
-        doc.setFillColor(255, 255, 255);
-        doc.rect(0, 0, 297, 60, 'F');
-        addHeaderLandscape(doc, 'LAPORAN TRANSAKSI (Lanjutan)', true);
-      }
-    },
-    willDrawCell: function(data) {
-      // Style the empty row
-      if (data.row.index === tableData.length - 2 && tableData.length > 1) {
-        data.cell.styles.fillColor = [255, 255, 255];
-        data.cell.styles.minCellHeight = 5;
-      }
-      // Style the total row
-      if (data.row.index === tableData.length - 1) {
-        data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = [240, 240, 240];
-        if (data.column.index === 5) {
-          data.cell.styles.halign = 'right';
-        }
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(120, 120, 120);
+        doc.text(`LAPORAN TRANSAKSI — hal. ${data.pageNumber}`, marginX, 12);
+        doc.setTextColor(0, 0, 0);
       }
     }
   });
-  
-  // Summary box at bottom
-  yPos = doc.lastAutoTable.finalY + 15;
-  
-  // Check if need new page for summary
-  if (yPos > 180) {
+
+  // Ringkasan di halaman terakhir
+  let sumY = doc.lastAutoTable.finalY + 10;
+  const pageH = doc.internal.pageSize.height;
+  if (sumY > pageH - 45) {
     doc.addPage();
-    yPos = 70;
+    sumY = 25;
   }
-  
-  // Draw summary box
-  const summaryX = 180;
-  const boxWidth = 90;
-  
-  doc.setFillColor(248, 249, 250);
-  doc.rect(summaryX, yPos - 5, boxWidth, 35, 'F');
+
+  const boxW = 95;
+  const boxX = pageW - marginX - boxW;
+  doc.setFillColor(248, 250, 252);
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.3);
-  doc.rect(summaryX, yPos - 5, boxWidth, 35);
-  
+  doc.rect(boxX, sumY - 5, boxW, 34, 'FD');
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text('Total Pemasukan:', summaryX + 5, yPos);
-  doc.text(formatCurrency(totalIncome), summaryX + boxWidth - 5, yPos, { align: 'right' });
-  yPos += 8;
-  
-  doc.text('Total Pengeluaran:', summaryX + 5, yPos);
-  doc.text(formatCurrency(totalExpense), summaryX + boxWidth - 5, yPos, { align: 'right' });
-  yPos += 8;
-  
-  doc.setLineWidth(0.5);
-  doc.line(summaryX + 5, yPos - 2, summaryX + boxWidth - 5, yPos - 2);
-  yPos += 5;
-  
+  doc.setFontSize(9.5);
+  doc.text('Total Pemasukan', boxX + 5, sumY + 1);
+  doc.text(formatCurrency(totalIncome), boxX + boxW - 5, sumY + 1, { align: 'right' });
+
+  doc.text('Total Pengeluaran', boxX + 5, sumY + 9);
+  doc.text(formatCurrency(totalExpense), boxX + boxW - 5, sumY + 9, { align: 'right' });
+
+  doc.setLineWidth(0.4);
+  doc.line(boxX + 5, sumY + 13, boxX + boxW - 5, sumY + 13);
+
   doc.setFont('helvetica', 'bold');
-  doc.text('Selisih:', summaryX + 5, yPos);
-  doc.text(formatCurrency(totalIncome - totalExpense), summaryX + boxWidth - 5, yPos, { align: 'right' });
-  
-  // Footer
+  doc.setFontSize(11);
+  doc.text('Saldo', boxX + 5, sumY + 21);
+  doc.text(formatCurrency(totalIncome - totalExpense), boxX + boxW - 5, sumY + 21, {
+    align: 'right'
+  });
+
+  // Info jumlah transaksi (kiri)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(110, 110, 110);
+  doc.text(`Jumlah transaksi: ${transactions.length}`, marginX, sumY + 1);
+
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     addFooter(doc, i);
   }
-  
-  // Save
+
   doc.save(`Laporan_Transaksi_${new Date().toISOString().slice(0, 10)}.pdf`);
 };
 
