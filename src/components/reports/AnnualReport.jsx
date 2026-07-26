@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { TrendingUp, Target, ShieldAlert, Scale, Info } from 'lucide-react';
 import { Card, CardHeader } from '../ui/Card';
+import AIInsightCard from '../ai/AIInsightCard';
 import { Badge } from '../ui/Badge';
 import ProgressBar from '../ui/ProgressBar';
 import { formatCurrency } from '../../utils/formatters';
@@ -35,8 +36,25 @@ const AnnualReport = ({ projects, transactions, invoices, year }) => {
 
   const topExpenses = Object.entries(pl.expenseByCategory).sort((a, b) => b[1] - a[1]);
 
+  const yearTxns = useMemo(
+    () =>
+      transactions.filter((t) => {
+        const d = t.date?.seconds ? new Date(t.date.seconds * 1000) : new Date(t.date);
+        return !isNaN(d.getTime()) && d.getFullYear() === year;
+      }),
+    [transactions, year]
+  );
+
   return (
     <div className="space-y-5">
+      {/* Analisis AI untuk periode tahun berjalan */}
+      <AIInsightCard
+        projects={projects}
+        transactions={yearTxns}
+        invoices={invoices}
+        period={`tahun ${year}`}
+      />
+
       {/* Laba Rugi + Neraca */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

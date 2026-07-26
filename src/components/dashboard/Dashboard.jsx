@@ -7,6 +7,8 @@ import ProjectModal from '../projects/ProjectModal';
 import TransactionModal from '../transactions/TransactionModal';
 import AITransactionModal from '../transactions/AITransactionModal';
 import CashflowChart from './CashflowChart';
+import AIInsightCard from '../ai/AIInsightCard';
+import { getAllInvoices } from '../../services/invoices';
 import ProjectReminders from './ProjectReminders';
 import RecentProjects from './RecentProjects';
 import RecentTransactions from './RecentTransactions';
@@ -33,7 +35,9 @@ const QuickAction = ({ icon: Icon, title, description, onClick, tone }) => (
 const Dashboard = ({ currentUser }) => {
   const [projects, setProjects] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [allTransactions, setAllTransactions] = useState([]); // untuk grafik arus kas
+  const [allTransactions, setAllTransactions] = useState([]); // grafik arus kas & analisis AI
+  const [allProjects, setAllProjects] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -92,6 +96,10 @@ const Dashboard = ({ currentUser }) => {
         allTrans.push({ id: doc.id, ...doc.data() });
       });
       setAllTransactions(allTrans);
+      setAllProjects(allProjects);
+      getAllInvoices()
+        .then(setInvoices)
+        .catch(() => setInvoices([]));
 
       const totalProjects = allProjects.length;
       const ongoingProjects = allProjects.filter((p) => p.status === 'ongoing').length;
@@ -195,6 +203,15 @@ const Dashboard = ({ currentUser }) => {
 
       {/* Yang perlu ditindaklanjuti lebih dulu, baru gambaran & riwayat */}
       <ProjectReminders projects={projects} />
+
+      <AIInsightCard
+        projects={allProjects}
+        transactions={allTransactions}
+        invoices={invoices}
+        period="keseluruhan"
+        className="mb-6"
+      />
+
       <CashflowChart transactions={allTransactions} />
       <RecentProjects projects={projects} />
       <RecentTransactions transactions={transactions} />
