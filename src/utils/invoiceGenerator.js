@@ -5,6 +5,7 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { formatCurrency } from './formatters';
 import { terbilang } from './terbilang';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from './companyConfig';
@@ -37,11 +38,21 @@ const imageSize = (dataUrl) =>
     img.src = dataUrl;
   });
 
-// Muat gambar (letterhead/tanda tangan dari Firebase Storage) → { dataUrl, w, h }.
-// Pakai fetch→blob→dataURL: butuh CORS bucket aktif (lihat storage.cors.json).
+// Muat gambar → { dataUrl, w, h }.
+// Prioritas: data URL tersimpan (tidak butuh CORS sama sekali). Bila hanya ada
+// URL Storage, coba fetch — ini yang memerlukan CORS bucket aktif.
 // Mengembalikan null bila gagal agar invoice tetap tergenerate tanpa gambar.
-const loadImage = async (url) => {
+const loadImage = async (urlOrDataUrl) => {
+  const url = urlOrDataUrl;
   if (!url) return null;
+
+  // Data URL: langsung pakai, cukup ukur dimensinya.
+  if (typeof url === 'string' && url.startsWith('data:')) {
+    const { w, h } = await imageSize(url);
+    return { dataUrl: url, w, h };
+  }
+
+  // 1) Coba langsung (berhasil bila CORS bucket sudah aktif)
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -55,10 +66,23 @@ const loadImage = async (url) => {
     const { w, h } = await imageSize(dataUrl);
     return { dataUrl, w, h };
   } catch (e) {
-    console.warn(
-      'Letterhead/tanda tangan tak dapat dimuat (CORS bucket belum aktif?):',
-      e?.message || e
-    );
+    console.warn('Ambil gambar langsung gagal (CORS), coba lewat Cloud Function…');
+  }
+
+  // 2) Fallback: Cloud Function `getStorageAssetDataUrl` (sudah ter-deploy di
+  //    project ini) mengambilkan berkas dari Storage lalu mengembalikan data URL,
+  //    sehingga tidak terhalang CORS browser.
+  try {
+    const fn = httpsCallable(getFunctions(), 'getStorageAssetDataUrl');
+    const res = await fn({ url });
+    const dataUrl = res?.data?.dataUrl || res?.data?.data || res?.data;
+    if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+      const { w, h } = await imageSize(dataUrl);
+      return { dataUrl, w, h };
+    }
+    throw new Error('Respons function tidak berisi data URL');
+  } catch (e) {
+    console.warn('Kop surat/tanda tangan tak dapat dimuat:', e?.message || e);
     return null;
   }
 };
@@ -136,7 +160,7 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
 
   // ---------- HEADER ----------
   let headerBottom;
-  const letterhead = await loadImage(company.letterheadUrl);
+  const letterhead = await loadImage(company.letterheadDataUrl || company.letterheadUrl);
 
   if (letterhead) {
     // Letterhead PNG (logo + identitas) sebagai banner, jaga rasio
@@ -357,14 +381,15 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
   sy += 6;
   doc.text('Hormat kami,', mR, sy, { align: 'right' });
 
-  // Gambar tanda tangan (bila ada) di atas nama penanda tangan
-  const signature = await loadImage(company.signatureUrl);
+  // Gambar tanda tangan (bila ada) di atas nama penanda tangan.
+  // Jarak diberi ruang lebih agar tanda tangan tidak menempel ke nama.
+  const signature = await loadImage(company.signatureDataUrl || company.signatureUrl);
   if (signature && signature.w) {
     const sigW = 38;
     const sigH = Math.min((signature.h / signature.w) * sigW, 22);
-    doc.addImage(signature.dataUrl, 'PNG', mR - sigW, sy + 2, sigW, sigH);
+    doc.addImage(signature.dataUrl, 'PNG', mR - sigW, sy + 4, sigW, sigH);
   }
-  sy += 26;
+  sy += 34;
   doc.setFont('helvetica', 'bold');
   doc.text(company.name, mR, sy, { align: 'right' });
   sy += 6;

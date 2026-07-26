@@ -24,13 +24,48 @@ export const saveCompanySettings = async (data) => {
   await setDoc(SETTINGS_REF(), { ...data, updatedAt: new Date().toISOString() }, { merge: true });
 };
 
-// Upload letterhead/kopsurat PNG ke Storage (path sama dengan live).
+// Kecilkan gambar lalu ubah ke data URL (PNG) — dipakai langsung oleh jsPDF
+// sehingga TIDAK bergantung pada konfigurasi CORS bucket Storage.
+export const imageFileToDataUrl = (file, maxWidth = 1200) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.naturalWidth);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+// Upload letterhead/kopsurat PNG ke Storage (path sama dengan live) DAN
+// kembalikan data URL-nya untuk disimpan di Firestore — agar PDF tetap
+// memuat kop surat walau CORS bucket belum diaktifkan.
 export const uploadLetterhead = async (file) => {
   const path = `settings/companyProfile/letterhead/${Date.now()}_${file.name}`;
   const storageRef = ref(storage, path);
   const snapshot = await uploadBytes(storageRef, file);
   const url = await getDownloadURL(snapshot.ref);
-  return { url, path: snapshot.metadata.fullPath };
+  const dataUrl = await imageFileToDataUrl(file).catch(() => '');
+  return { url, path: snapshot.metadata.fullPath, dataUrl };
+};
+
+// Upload tanda tangan (PNG transparan) + data URL.
+export const uploadSignature = async (file) => {
+  const path = `settings/companyProfile/signature/${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+  const snapshot = await uploadBytes(storageRef, file);
+  const url = await getDownloadURL(snapshot.ref);
+  const dataUrl = await imageFileToDataUrl(file, 600).catch(() => '');
+  return { url, path: snapshot.metadata.fullPath, dataUrl };
 };
 
 // Gabungkan settings tersimpan + fallback statis → bentuk yang dipakai invoice generator.
@@ -54,6 +89,9 @@ export const mergeCompanyInfo = (settings) => {
     npwp: settings.npwp || COMPANY_INFO.npwp,
     // Header invoice = letterhead (banner logo+identitas). Logo & tanda tangan terpisah.
     letterheadUrl: settings.letterheadUrl || COMPANY_INFO.letterheadUrl,
+    // Data URL diprioritaskan generator PDF (tak butuh CORS bucket)
+    letterheadDataUrl: settings.letterheadDataUrl || '',
+    signatureDataUrl: settings.signatureDataUrl || '',
     logoUrl: settings.logoUrl || '',
     signatureUrl: settings.signatureUrl || '',
     footerNote: settings.footerNote || settings.attachmentFooter || '',

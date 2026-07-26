@@ -10,6 +10,7 @@ import {
   getCompanySettings,
   saveCompanySettings,
   uploadLetterhead,
+  uploadSignature,
   getThemeFromSettings
 } from '../../services/settings';
 import { THEME_PRESETS, applyTheme } from '../../utils/themes';
@@ -36,6 +37,9 @@ const emptyForm = {
   signatoryName: '',
   signatoryTitle: '',
   letterheadUrl: '',
+  letterheadDataUrl: '',
+  signatureUrl: '',
+  signatureDataUrl: '',
   footerNote: '',
   themePreset: 'electric',
   notifications: { whatsappWebhookUrl: '', whatsappEnabled: false }
@@ -48,6 +52,27 @@ const SettingsPage = () => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadingLetterhead, setUploadingLetterhead] = useState(false);
+  const [uploadingSignature, setUploadingSignature] = useState(false);
+
+  const handleSignatureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran file maksimal 5MB');
+      return;
+    }
+    setUploadingSignature(true);
+    try {
+      const { url, dataUrl } = await uploadSignature(file);
+      setForm((prev) => ({ ...prev, signatureUrl: url, signatureDataUrl: dataUrl || '' }));
+      setSaved(false);
+    } catch (err) {
+      console.error('Upload tanda tangan gagal:', err);
+      alert('Gagal mengunggah tanda tangan. Coba lagi.');
+    } finally {
+      setUploadingSignature(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -89,8 +114,9 @@ const SettingsPage = () => {
     }
     setUploadingLetterhead(true);
     try {
-      const { url } = await uploadLetterhead(file);
-      setForm((prev) => ({ ...prev, letterheadUrl: url }));
+      // dataUrl disimpan agar PDF tetap memuat kop surat tanpa bergantung CORS
+      const { url, dataUrl } = await uploadLetterhead(file);
+      setForm((prev) => ({ ...prev, letterheadUrl: url, letterheadDataUrl: dataUrl || '' }));
       setSaved(false);
     } catch (err) {
       console.error('Upload letterhead gagal:', err);
@@ -235,6 +261,44 @@ const SettingsPage = () => {
               {uploadingLetterhead ? 'Mengunggah…' : form.letterheadUrl ? 'Ganti Kopsurat' : 'Upload Kopsurat'}
               <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={handleLetterheadUpload} />
             </label>
+
+            <div className="mt-6 border-t border-slate-100 pt-5">
+              <h3 className="mb-1 font-display text-sm font-semibold text-slate-800">
+                Tanda Tangan Direktur
+              </h3>
+              <p className="mb-4 text-xs text-slate-400">
+                PNG latar transparan. Ditempatkan di atas nama penanda tangan pada invoice.
+              </p>
+
+              {(form.signatureDataUrl || form.signatureUrl) && (
+                <div className="mb-4 inline-block rounded-lg border border-slate-200 bg-white p-3">
+                  <img
+                    src={form.signatureDataUrl || form.signatureUrl}
+                    alt="Tanda tangan"
+                    className="max-h-20 w-auto"
+                  />
+                </div>
+              )}
+
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-card transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+                {uploadingSignature ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+                ) : (
+                  <UploadCloud className="h-4 w-4 text-brand-600" />
+                )}
+                {uploadingSignature
+                  ? 'Mengunggah…'
+                  : form.signatureUrl
+                    ? 'Ganti Tanda Tangan'
+                    : 'Upload Tanda Tangan'}
+                <input
+                  type="file"
+                  accept="image/png"
+                  className="hidden"
+                  onChange={handleSignatureUpload}
+                />
+              </label>
+            </div>
           </Card>
         </div>
       )}
