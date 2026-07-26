@@ -3,15 +3,17 @@
 
 import { collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { cached, invalidate, CACHE_KEYS } from './cache';
 
 const COLLECTION = 'clients';
 
-export const getAllClients = async () => {
-  const snap = await getDocs(collection(db, COLLECTION));
-  const list = [];
-  snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-  return list;
-};
+export const getAllClients = async () =>
+  cached(CACHE_KEYS.CLIENTS, async () => {
+    const snap = await getDocs(collection(db, COLLECTION));
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    return list;
+  });
 
 // Map id → client untuk join cepat di halaman invoice.
 export const getClientMap = async () => {
@@ -39,13 +41,16 @@ export const addClient = async (data) => {
     createdAt: now,
     updatedAt: now
   });
+  invalidate(CACHE_KEYS.CLIENTS);
   return ref.id;
 };
 
 export const updateClient = async (id, data) => {
   await updateDoc(doc(db, COLLECTION, id), { ...data, updatedAt: new Date().toISOString() });
+  invalidate(CACHE_KEYS.CLIENTS);
 };
 
 export const deleteClient = async (id) => {
   await deleteDoc(doc(db, COLLECTION, id));
+  invalidate(CACHE_KEYS.CLIENTS);
 };

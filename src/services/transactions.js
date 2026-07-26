@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { deleteObject, ref } from 'firebase/storage';
 import { db, storage } from './firebase';
+import { invalidate, CACHE_KEYS } from './cache';
 
 // Collection reference
 const TRANSACTIONS_COLLECTION = 'transactions';
@@ -44,7 +45,8 @@ export const addTransaction = async (transactionData) => {
     
     // Add to Firestore
     const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave);
-    console.log('Transaction created with ID:', docRef.id);
+    invalidate(CACHE_KEYS.TRANSACTIONS);
+    invalidate(CACHE_KEYS.PROJECTS);
     
     // Update project paid amount if it's an income transaction
     if (transactionData.type === 'income' && transactionData.projectId) {
@@ -82,7 +84,8 @@ export const updateTransaction = async (transactionId, updates) => {
     }
     
     await updateDoc(transactionRef, dataToUpdate);
-    console.log('Transaction updated successfully');
+    invalidate(CACHE_KEYS.TRANSACTIONS);
+    invalidate(CACHE_KEYS.PROJECTS);
     
     // Update project paid amount if relevant
     if (updates.projectId || updates.amount !== undefined || updates.type) {

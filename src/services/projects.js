@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { withTimeout } from '../utils/async';
+import { cached, invalidate, CACHE_KEYS } from './cache';
 
 // Collection reference
 const PROJECTS_COLLECTION = 'projects';
@@ -51,8 +52,7 @@ export const addProject = async (projectData, userId = null, userEmail = null) =
     
     // Add to Firestore
     const docRef = await addDoc(collection(db, PROJECTS_COLLECTION), dataToSave);
-    console.log('Project created with ID:', docRef.id);
-    
+    invalidate(CACHE_KEYS.PROJECTS);
     return docRef.id;
   } catch (error) {
     console.error('Error adding project:', error);
@@ -95,7 +95,7 @@ export const updateProject = async (projectId, updates, userId = null, userEmail
     }
     
     await updateDoc(projectRef, dataToUpdate);
-    console.log('Project updated successfully');
+    invalidate(CACHE_KEYS.PROJECTS);
   } catch (error) {
     console.error('Error updating project:', error);
     throw new Error(`Failed to update project: ${error.message}`);
@@ -132,7 +132,8 @@ export const deleteProject = async (projectId) => {
     // Commit the batch
     await batch.commit();
     
-    console.log(`Project ${projectId} and ${transactionSnapshot.size} related transactions deleted`);
+    invalidate(CACHE_KEYS.PROJECTS);
+    invalidate(CACHE_KEYS.TRANSACTIONS);
   } catch (error) {
     console.error('Error deleting project:', error);
     throw new Error(`Failed to delete project: ${error.message}`);
@@ -143,7 +144,10 @@ export const deleteProject = async (projectId) => {
  * Get all projects
  * @returns {Promise<Array>} - Array of project objects
  */
-export const getAllProjects = async () => {
+export const getAllProjects = async () =>
+  cached(CACHE_KEYS.PROJECTS, () => fetchAllProjects());
+
+const fetchAllProjects = async () => {
   try {
     const q = query(
       collection(db, PROJECTS_COLLECTION),

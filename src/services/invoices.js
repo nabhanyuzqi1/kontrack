@@ -22,6 +22,7 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { cached, invalidate, CACHE_KEYS } from './cache';
 import { addTransaction } from './transactions';
 
 const COLLECTION = 'invoices';
@@ -99,24 +100,27 @@ export const addInvoice = async (data) => {
     createdAt: now,
     updatedAt: now
   });
+  invalidate(CACHE_KEYS.INVOICES);
   return docRef.id;
 };
 
-export const getAllInvoices = async () => {
-  // orderBy issueDate desc; fallback tanpa order bila field campur/absen.
-  let snapshot;
-  try {
-    snapshot = await getDocs(query(collection(db, COLLECTION), orderBy('issueDate', 'desc')));
-  } catch (e) {
-    snapshot = await getDocs(collection(db, COLLECTION));
-  }
-  const list = [];
-  snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
-  return list;
-};
+export const getAllInvoices = async () =>
+  cached(CACHE_KEYS.INVOICES, async () => {
+    // orderBy issueDate desc; fallback tanpa order bila field campur/absen.
+    let snapshot;
+    try {
+      snapshot = await getDocs(query(collection(db, COLLECTION), orderBy('issueDate', 'desc')));
+    } catch (e) {
+      snapshot = await getDocs(collection(db, COLLECTION));
+    }
+    const list = [];
+    snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    return list;
+  });
 
 export const updateInvoice = async (invoiceId, data) => {
   await updateDoc(doc(db, COLLECTION, invoiceId), { ...data, updatedAt: new Date().toISOString() });
+  invalidate(CACHE_KEYS.INVOICES);
 };
 
 export const setInvoiceStatus = (invoiceId, status) =>
@@ -124,6 +128,7 @@ export const setInvoiceStatus = (invoiceId, status) =>
 
 export const deleteInvoice = async (invoiceId) => {
   await deleteDoc(doc(db, COLLECTION, invoiceId));
+  invalidate(CACHE_KEYS.INVOICES);
 };
 
 // ---------- Dokumen pajak (Fase C) ----------
@@ -143,6 +148,7 @@ export const updateTaxDocs = async (invoiceId, fields, historyNote) => {
       note: historyNote || 'Dokumen pajak diperbarui'
     })
   });
+  invalidate(CACHE_KEYS.INVOICES);
 };
 
 // ---------- Auto-transaksi saat terbayar (Fase D) ----------

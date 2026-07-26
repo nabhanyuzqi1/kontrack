@@ -1,6 +1,10 @@
 // src/components/reports/Reports.jsx
 import React, { useState, useEffect } from 'react';
-import { FileDown, FileSpreadsheet, FilterX } from 'lucide-react';
+import { FileDown, FileSpreadsheet, FilterX, BarChart3, Landmark, CalendarRange } from 'lucide-react';
+import TaxMonthlyReport from './TaxMonthlyReport';
+import AnnualReport from './AnnualReport';
+import { getAllInvoices } from '../../services/invoices';
+import { availableYears } from '../../utils/reportCalc';
 import { getAllProjects } from '../../services/projects';
 import { getAllTransactions } from '../../services/transactions';
 import ReportCharts from './ReportCharts';
@@ -23,7 +27,16 @@ const Th = ({ children, className = '' }) => (
   </th>
 );
 
+const REPORT_TABS = [
+  { key: 'summary', label: 'Ringkasan', icon: BarChart3 },
+  { key: 'tax', label: 'Pajak Bulanan', icon: Landmark },
+  { key: 'annual', label: 'Analisis Tahunan', icon: CalendarRange }
+];
+
 const Reports = ({ currentUser }) => {
+  const [tab, setTab] = useState('summary');
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [invoices, setInvoices] = useState([]);
   const [projects, setProjects] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [stats, setStats] = useState({
@@ -48,13 +61,17 @@ const Reports = ({ currentUser }) => {
   const loadReportData = async () => {
     setLoading(true);
     try {
-      const [projectList, transactionList] = await Promise.all([
+      const [projectList, transactionList, invoiceList] = await Promise.all([
         getAllProjects(),
-        getAllTransactions()
+        getAllTransactions(),
+        getAllInvoices().catch(() => [])
       ]);
 
       setProjects(projectList);
       setTransactions(transactionList);
+      setInvoices(invoiceList);
+      const yrs = availableYears(projectList, transactionList, invoiceList);
+      setYear((y) => (yrs.includes(y) ? y : yrs[0]));
       calculateStats(projectList, transactionList);
     } catch (error) {
       console.error('Error loading report data:', error);
@@ -167,6 +184,8 @@ const Reports = ({ currentUser }) => {
     generateTransactionReport(filteredTransactions, filters);
   };
 
+  const years = availableYears(projects, transactions, invoices);
+
   if (loading) {
     return <SkeletonListPage variant="table" stats={4} />;
   }
@@ -175,7 +194,7 @@ const Reports = ({ currentUser }) => {
     <div className="animate-fade-in">
       <PageHeader
         title="Laporan Keuangan"
-        subtitle="Ringkasan kinerja proyek dan arus kas"
+        subtitle="Ringkasan kinerja proyek, pajak, dan analisis tahunan"
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={handleExportTransactionReport}>
@@ -190,6 +209,49 @@ const Reports = ({ currentUser }) => {
         }
       />
 
+      {/* Tab laporan + pemilih tahun */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="custom-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {REPORT_TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${
+                tab === key
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+        {tab !== 'summary' && (
+          <div className="w-full sm:w-40">
+            <Select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  Tahun {y}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {tab === 'tax' && <TaxMonthlyReport invoices={invoices} year={year} />}
+      {tab === 'annual' && (
+        <AnnualReport
+          projects={projects}
+          transactions={transactions}
+          invoices={invoices}
+          year={year}
+        />
+      )}
+
+      {tab === 'summary' && (
+      <>
       {/* Filter rentang tanggal */}
       <Card className="mb-6 p-4">
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
@@ -329,6 +391,8 @@ const Reports = ({ currentUser }) => {
           </table>
         </div>
       </Card>
+      </>
+      )}
     </div>
   );
 };
