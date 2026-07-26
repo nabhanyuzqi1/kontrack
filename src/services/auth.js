@@ -2,6 +2,7 @@
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { withTimeout } from '../utils/async';
 
 // Sign in with email and password
 export const signInUser = async (email, password) => {
@@ -130,10 +131,18 @@ export const onAuthStateChange = (callback) => {
     const fallbackRole = readCachedRole(user.uid) || 'user';
 
     try {
-      // Query users collection by email field
+      // Query users collection by email field.
+      // Dibatasi waktu: Firestore tidak selalu reject saat offline — tanpa guard
+      // ini callback tak pernah dipanggil dan aplikasi macet di splash screen.
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('email', '==', user.email));
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await withTimeout(getDocs(q), 8000, null);
+
+      if (!querySnapshot) {
+        // Timeout → jangan blokir UI, pakai role cache.
+        callback({ uid: user.uid, email: user.email, name: user.email, role: fallbackRole });
+        return;
+      }
 
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];

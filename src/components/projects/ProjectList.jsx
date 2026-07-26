@@ -8,7 +8,7 @@ import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Field';
-import { PageLoader } from '../ui/Spinner';
+import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import { getStatusLabel } from '../../utils/formatters';
 
@@ -96,7 +96,7 @@ const ProjectList = ({ currentUser }) => {
   const isAdmin = currentUser && currentUser.role === 'admin';
 
   if (loading) {
-    return <PageLoader label="Memuat proyek…" />;
+    return <SkeletonListPage variant="cards" />;
   }
 
   if (error) {

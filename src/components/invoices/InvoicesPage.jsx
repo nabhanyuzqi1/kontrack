@@ -8,7 +8,7 @@ import Button from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Input, Select } from '../ui/Field';
 import { Badge } from '../ui/Badge';
-import { PageLoader } from '../ui/Spinner';
+import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -173,7 +173,7 @@ const InvoicesPage = () => {
     }
   };
 
-  if (loading) return <PageLoader label="Memuat invoice…" />;
+  if (loading) return <SkeletonListPage variant="cards" stats={4} />;
 
   return (
     <div className="animate-fade-in">

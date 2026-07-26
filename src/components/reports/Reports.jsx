@@ -13,7 +13,7 @@ import { Card, CardHeader } from '../ui/Card';
 import { Field, Input } from '../ui/Field';
 import { StatusBadge } from '../ui/Badge';
 import ProgressBar from '../ui/ProgressBar';
-import { PageLoader } from '../ui/Spinner';
+import { SkeletonListPage } from '../ui/Skeleton';
 
 const Th = ({ children, className = '' }) => (
   <th
@@ -168,7 +168,7 @@ const Reports = ({ currentUser }) => {
   };
 
   if (loading) {
-    return <PageLoader label="Menyusun laporan…" />;
+    return <SkeletonListPage variant="table" stats={4} />;
   }
 
   return (

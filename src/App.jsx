@@ -39,7 +39,12 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Jaring pengaman: bila SDK auth tak pernah emit (jaringan mati), jangan
+    // biarkan pengguna terjebak di splash screen selamanya.
+    const failSafe = setTimeout(() => setLoading(false), 10000);
+
     const unsubscribe = onAuthStateChange((user) => {
+      clearTimeout(failSafe);
       setCurrentUser(user);
       setLoading(false);
     });
@@ -49,7 +54,10 @@ function App() {
       if (settings) applyTheme(getThemeFromSettings(settings));
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(failSafe);
+      unsubscribe();
+    };
   }, []);
 
   if (loading) {

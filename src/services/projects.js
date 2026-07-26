@@ -14,6 +14,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { withTimeout } from '../utils/async';
 
 // Collection reference
 const PROJECTS_COLLECTION = 'projects';
@@ -149,17 +150,17 @@ export const getAllProjects = async () => {
       orderBy('createdAt', 'desc')
     );
     
-    const querySnapshot = await getDocs(q);
+    // Batas waktu: Firestore tak selalu reject saat offline → cegah UI menggantung.
+    const querySnapshot = await withTimeout(getDocs(q), 15000);
     const projects = [];
-    
+
     querySnapshot.forEach((doc) => {
       projects.push({
         id: doc.id,
         ...doc.data()
       });
     });
-    
-    console.log(`Retrieved ${projects.length} projects`);
+
     return projects;
   } catch (error) {
     console.error('Error getting projects:', error);

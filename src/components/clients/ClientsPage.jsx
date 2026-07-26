@@ -6,7 +6,7 @@ import Button from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Field';
 import { Badge } from '../ui/Badge';
-import { PageLoader } from '../ui/Spinner';
+import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import ClientModal from './ClientModal';
 import { getAllClients, deleteClient, clientDisplayName } from '../../services/clients';
@@ -66,7 +66,7 @@ const ClientsPage = () => {
     navigator.clipboard.writeText(npwp).then(() => {});
   };
 
-  if (loading) return <PageLoader label="Memuat klien…" />;
+  if (loading) return <SkeletonListPage variant="cards" />;
 
   return (
     <div className="animate-fade-in">

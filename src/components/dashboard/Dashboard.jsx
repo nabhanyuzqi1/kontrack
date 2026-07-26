@@ -11,7 +11,7 @@ import RecentProjects from './RecentProjects';
 import RecentTransactions from './RecentTransactions';
 import PageHeader from '../ui/PageHeader';
 import StatCard from '../ui/StatCard';
-import { PageLoader } from '../ui/Spinner';
+import { SkeletonListPage } from '../ui/Skeleton';
 import { formatCurrency } from '../../utils/formatters';
 
 const QuickAction = ({ icon: Icon, title, description, onClick, tone }) => (
@@ -117,7 +117,7 @@ const Dashboard = ({ currentUser }) => {
   };
 
   if (loading) {
-    return <PageLoader />;
+    return <SkeletonListPage variant="cards" stats={4} />;
   }
 
   const paidPct = stats.totalValue > 0 ? Math.round((stats.totalPaid / stats.totalValue) * 100) : 0;

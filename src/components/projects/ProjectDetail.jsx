@@ -30,7 +30,7 @@ import Button from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
 import { StatusBadge } from '../ui/Badge';
 import ProgressBar from '../ui/ProgressBar';
-import { PageLoader } from '../ui/Spinner';
+import { SkeletonDetail } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 
 const WhatsAppIcon = ({ className = 'h-4 w-4' }) => (
@@ -169,7 +169,7 @@ const ProjectDetail = ({ currentUser }) => {
   };
 
   if (loading) {
-    return <PageLoader label="Memuat proyek…" />;
+    return <SkeletonDetail />;
   }
 
   if (error || !project) {
