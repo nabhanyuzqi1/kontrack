@@ -1,7 +1,8 @@
 // src/components/invoices/InvoicesPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark } from 'lucide-react';
+import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2 } from 'lucide-react';
 import TaxDocsModal from './TaxDocsModal';
+import CoretaxExportModal from './CoretaxExportModal';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -41,6 +42,14 @@ const InvoicesPage = () => {
   const [stageFilter, setStageFilter] = useState('all');
   const [busyId, setBusyId] = useState(null);
   const [taxDocsInvoice, setTaxDocsInvoice] = useState(null);
+  const [showCoretax, setShowCoretax] = useState(false);
+  const [company, setCompany] = useState(null);
+
+  useEffect(() => {
+    getCompanySettings()
+      .then((s) => setCompany(mergeCompanyInfo(s)))
+      .catch(() => setCompany(null));
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -168,7 +177,18 @@ const InvoicesPage = () => {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Invoice" subtitle="Pantau termin pembayaran dan nilai tagihan setiap proyek" />
+      <PageHeader
+        title="Invoice"
+        subtitle="Pantau termin pembayaran dan nilai tagihan setiap proyek"
+        actions={
+          invoices.length > 0 && (
+            <Button variant="secondary" size="sm" onClick={() => setShowCoretax(true)}>
+              <FileCode2 className="h-4 w-4" />
+              Export Faktur Pajak
+            </Button>
+          )
+        }
+      />
 
       <div className="mb-5 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <StatCard icon={ReceiptText} tone="brand" label="Total Invoice" value={stats.count} sub="Semua termin & status" />
@@ -291,6 +311,15 @@ const InvoicesPage = () => {
             );
           })}
         </div>
+      )}
+
+      {showCoretax && (
+        <CoretaxExportModal
+          isOpen={showCoretax}
+          onClose={() => setShowCoretax(false)}
+          invoices={filtered.length > 0 ? filtered : invoices}
+          company={company}
+        />
       )}
 
       {taxDocsInvoice && (
