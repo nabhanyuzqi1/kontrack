@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "node scripts/check-imports.mjs && vite build",
+    "preview": "vite preview",
+    "check": "node scripts/check-imports.mjs"
   },
   "dependencies": {
     "chart.js": "^4.4.1",
