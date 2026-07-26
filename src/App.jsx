@@ -10,6 +10,7 @@ import ProjectDetail from './components/projects/ProjectDetail';
 import Reports from './components/reports/Reports';
 import SettingsPage from './components/settings/SettingsPage';
 import InvoicesPage from './components/invoices/InvoicesPage';
+import TaxInvoicesPage from './components/invoices/TaxInvoicesPage';
 import ClientsPage from './components/clients/ClientsPage';
 import { LogoMark } from './components/brand/Logo';
 import { applyTheme, getCachedTheme } from './utils/themes';
@@ -122,12 +123,18 @@ function App() {
                   element={isAdmin ? <InvoicesPage /> : <Navigate to="/login" replace />}
                 />
                 <Route
+                  path="/tax-invoices"
+                  element={isAdmin ? <TaxInvoicesPage /> : <Navigate to="/login" replace />}
+                />
+                <Route
                   path="/clients"
                   element={isAdmin ? <ClientsPage /> : <Navigate to="/login" replace />}
                 />
                 <Route
                   path="/settings"
-                  element={isAdmin ? <SettingsPage /> : <Navigate to="/login" replace />}
+                  element={
+                    isAdmin ? <SettingsPage currentUser={currentUser} /> : <Navigate to="/login" replace />
+                  }
                 />
                 <Route
                   path="*"

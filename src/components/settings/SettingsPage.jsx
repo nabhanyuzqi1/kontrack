@@ -1,6 +1,7 @@
 // src/components/settings/SettingsPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Building2, Palette, Bell, UploadCloud, Check, Loader2 } from 'lucide-react';
+import { Building2, Palette, Bell, Users, UploadCloud, Check, Loader2 } from 'lucide-react';
+import UsersTab from './UsersTab';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -18,7 +19,8 @@ import { THEME_PRESETS, applyTheme } from '../../utils/themes';
 const TABS = [
   { key: 'company', label: 'Perusahaan', icon: Building2 },
   { key: 'theme', label: 'Tema & Tampilan', icon: Palette },
-  { key: 'notifications', label: 'Notifikasi', icon: Bell }
+  { key: 'notifications', label: 'Notifikasi', icon: Bell },
+  { key: 'users', label: 'Pengguna', icon: Users }
 ];
 
 const emptyForm = {
@@ -45,7 +47,7 @@ const emptyForm = {
   notifications: { whatsappWebhookUrl: '', whatsappEnabled: false }
 };
 
-const SettingsPage = () => {
+const SettingsPage = ({ currentUser }) => {
   const [tab, setTab] = useState('company');
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -359,6 +361,8 @@ const SettingsPage = () => {
           </div>
         </Card>
       )}
+
+      {tab === 'users' && <UsersTab currentUser={currentUser} />}
 
       {tab === 'notifications' && (
         <Card className="p-4 sm:p-5">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, ReceiptText, Users, BarChart3, Settings, LogOut, LogIn, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, ReceiptText, Landmark, Users, BarChart3, Settings, LogOut, LogIn, Menu, X } from 'lucide-react';
 import { signOutUser } from '../../services/auth';
 import Logo, { LogoMark } from '../brand/Logo';
 
@@ -10,6 +10,7 @@ const navItems = (isAdmin) => [
   ...(isAdmin
     ? [
         { to: '/invoices', label: 'Invoice', icon: ReceiptText },
+        { to: '/tax-invoices', label: 'Faktur Pajak', icon: Landmark },
         { to: '/clients', label: 'Klien', icon: Users }
       ]
     : []),
