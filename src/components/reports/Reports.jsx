@@ -14,7 +14,7 @@ import { generateFullReportPDF, generateTransactionReport } from '../../utils/pd
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
-import { Field, Input } from '../ui/Field';
+import { Field, Input, Select } from '../ui/Field';
 import { StatusBadge } from '../ui/Badge';
 import ProgressBar from '../ui/ProgressBar';
 import { SkeletonListPage } from '../ui/Skeleton';
