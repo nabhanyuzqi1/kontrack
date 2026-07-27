@@ -5,7 +5,8 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { legacyFunctions } from '../services/functionsRegion';
 import { formatCurrency } from './formatters';
 import { terbilang } from './terbilang';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from './companyConfig';
@@ -73,7 +74,7 @@ const loadImage = async (urlOrDataUrl) => {
   //    project ini) mengambilkan berkas dari Storage lalu mengembalikan data URL,
   //    sehingga tidak terhalang CORS browser.
   try {
-    const fn = httpsCallable(getFunctions(), 'getStorageAssetDataUrl');
+    const fn = httpsCallable(legacyFunctions(), 'getStorageAssetDataUrl');
     const res = await fn({ url });
     const dataUrl = res?.data?.dataUrl || res?.data?.data || res?.data;
     if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {

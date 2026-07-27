@@ -4,7 +4,8 @@
 // (addUserToCompany, updateUserRole) agar konsisten dengan Kontrack lama.
 
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { legacyFunctions } from './functionsRegion';
 import { db } from './firebase';
 import { cached, invalidate } from './cache';
 
@@ -34,7 +35,7 @@ export const getAllUsers = async () =>
  * pernah melewati aplikasi ini.
  */
 export const inviteUser = async ({ email, name, role }) => {
-  const fn = httpsCallable(getFunctions(), 'addUserToCompany');
+  const fn = httpsCallable(legacyFunctions(), 'addUserToCompany');
   const res = await fn({ email, name, role });
   invalidate(CACHE_KEY);
   return res?.data;
@@ -43,7 +44,7 @@ export const inviteUser = async ({ email, name, role }) => {
 /** Ubah peran lewat Cloud Function `updateUserRole` (fallback: tulis langsung). */
 export const changeUserRole = async (userId, role, email) => {
   try {
-    const fn = httpsCallable(getFunctions(), 'updateUserRole');
+    const fn = httpsCallable(legacyFunctions(), 'updateUserRole');
     await fn({ userId, uid: userId, email, role });
   } catch (e) {
     console.warn('updateUserRole function gagal, menulis langsung:', e?.message || e);

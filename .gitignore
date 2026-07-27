@@ -46,3 +46,5 @@ functions/.env.*
 
 # OS files
 Thumbs.db
+# source function produksi hasil unduhan (tinjau dulu sebelum commit)
+functions-live/

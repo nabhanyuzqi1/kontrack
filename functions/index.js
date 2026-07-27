@@ -14,6 +14,11 @@ const GEMINI_API_URL =
 // Set nilainya sekali via: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
+// Region Jakarta — pengguna Kontrack ada di Indonesia (Sampit, Kalteng).
+// us-central1 (Iowa) menambah ±200ms per panggilan; asia-southeast2 ±30-50ms.
+// Function lama (addUserToCompany dll) masih di us-central1 sampai dimigrasi.
+const REGION = "asia-southeast2";
+
 // Schema output (enum + tipe) → menegakkan struktur tanpa prompt panjang = hemat token.
 const RESPONSE_SCHEMA = {
   type: "ARRAY",
@@ -40,7 +45,7 @@ Aturan:
 - date: ISO 8601 bila tertera; jika tidak, kosongkan.`;
 
 exports.analyzeTransactionImageWithAI = onCall(
-    {cors: true, maxInstances: 5, secrets: [geminiApiKey]},
+    {region: REGION, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
     async (request) => {
       // Wajib login — cegah pemakaian kuota Gemini oleh pihak luar.
       if (!request.auth) {
@@ -182,7 +187,7 @@ Ringkasan:
 `;
 
 exports.analyzeFinancialInsights = onCall(
-    {cors: true, maxInstances: 5, secrets: [geminiApiKey]},
+    {region: REGION, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "Anda harus login.");

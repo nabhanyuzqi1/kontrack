@@ -1,5 +1,6 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { aiFunctions } from './functionsRegion';
 import { storage } from './firebase'; // Pastikan firebase.js Anda sudah diinisialisasi
 
 // Fungsi helper untuk memvalidasi file gambar
@@ -88,7 +89,7 @@ export const analyzeTransactionImages = async (files, userId) => {
     mimeType: f.type,
   }));
 
-  const functions = getFunctions();
+  const functions = aiFunctions();
   const analyzeFunction = httpsCallable(functions, 'analyzeTransactionImageWithAI');
   const response = await analyzeFunction({ images });
 

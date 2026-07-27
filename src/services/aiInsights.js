@@ -3,7 +3,8 @@
 // sudah dihitung lokal (~300 token), bukan ratusan dokumen transaksi.
 // Hasil di-cache di sessionStorage agar tidak memanggil AI berulang kali.
 
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { aiFunctions } from './functionsRegion';
 
 const CACHE_PREFIX = 'kontrack-ai-insight:';
 const CACHE_TTL = 30 * 60 * 1000; // 30 menit
@@ -127,7 +128,7 @@ export const getFinancialInsight = async (summary, { force = false } = {}) => {
     if (hit) return hit;
   }
 
-  const fn = httpsCallable(getFunctions(), 'analyzeFinancialInsights');
+  const fn = httpsCallable(aiFunctions(), 'analyzeFinancialInsights');
   const res = await fn({ summary });
   const insight = res?.data?.insight;
   if (!insight) throw new Error('AI tidak memberi hasil analisis.');
