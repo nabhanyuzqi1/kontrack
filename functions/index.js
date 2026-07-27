@@ -110,8 +110,18 @@ exports.analyzeTransactionImageWithAI = onCall(
         }
 
         // responseSchema menjamin JSON array valid.
-        const transactions = JSON.parse(text);
-        return {transactions: Array.isArray(transactions) ? transactions : [transactions]};
+        const parsed = JSON.parse(text);
+        const transactions = Array.isArray(parsed) ? parsed : [parsed];
+
+        // Kompatibel dua arah:
+        // - Kontrack baru membaca `transactions` (mendukung banyak gambar).
+        // - Kontrack lama membaca `data` berupa string JSON satu objek.
+        // Dengan menyertakan keduanya, aplikasi lama tetap berfungsi setelah
+        // function ini di-deploy ulang.
+        return {
+          transactions,
+          data: JSON.stringify(transactions[0] || {}),
+        };
       } catch (error) {
         if (error instanceof HttpsError) throw error;
         logger.error("Kesalahan memanggil Gemini:", error);
