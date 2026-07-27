@@ -3,7 +3,8 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {logger} = require("firebase-functions");
 // Secret Manager (menggantikan defineString yang membaca .env plaintext ter-commit).
 const {defineSecret} = require("firebase-functions/params");
-const fetch = require("node-fetch");
+// Node 22 sudah menyediakan fetch secara global — tidak perlu paket node-fetch
+// (yang memang tidak terdaftar di dependencies dan membuat deploy gagal).
 
 // gemini-flash-latest: alias yang selalu menunjuk Flash terbaru — cepat & murah,
 // cocok untuk ekstraksi terstruktur & ringkasan analitik.
@@ -18,6 +19,13 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 // us-central1 (Iowa) menambah ±200ms per panggilan; asia-southeast2 ±30-50ms.
 // Function lama (addUserToCompany dll) masih di us-central1 sampai dimigrasi.
 const REGION = "asia-southeast2";
+
+// analyzeTransactionImageWithAI dideklarasikan di DUA region:
+// - asia-southeast2 → dipakai Kontrack baru (latensi rendah)
+// - us-central1     → dipakai Kontrack lama yang masih berjalan
+// Tanpa us-central1, deploy akan menghapus function yang masih melayani
+// aplikasi live. Setelah Kontrack lama pensiun, hapus us-central1 dari daftar.
+const TRANSACTION_AI_REGIONS = ["asia-southeast2", "us-central1"];
 
 // Schema output (enum + tipe) → menegakkan struktur tanpa prompt panjang = hemat token.
 const RESPONSE_SCHEMA = {
@@ -45,7 +53,7 @@ Aturan:
 - date: ISO 8601 bila tertera; jika tidak, kosongkan.`;
 
 exports.analyzeTransactionImageWithAI = onCall(
-    {region: REGION, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
     async (request) => {
       // Wajib login — cegah pemakaian kuota Gemini oleh pihak luar.
       if (!request.auth) {
