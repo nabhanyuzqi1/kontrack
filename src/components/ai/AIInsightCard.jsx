@@ -46,11 +46,16 @@ const AIInsightCard = ({ projects, transactions, invoices, period = 'keseluruhan
       setInsight(await getFinancialInsight(summary, { force }));
     } catch (err) {
       console.error('Analisis AI gagal:', err);
-      setError(
-        err?.code === 'functions/unauthenticated'
-          ? 'Sesi berakhir — masuk ulang untuk memakai analisis AI.'
-          : 'Analisis AI belum tersedia. Pastikan fungsi AI sudah aktif.'
-      );
+      // Cloud Function mengirim penyebab yang spesifik (kredit habis, key tidak
+      // valid, model pensiun). Menampilkannya apa adanya jauh lebih berguna
+      // daripada "AI belum tersedia" yang menyembunyikan akar masalahnya.
+      if (err?.code === 'functions/unauthenticated') {
+        setError('Sesi berakhir — masuk ulang untuk memakai analisis AI.');
+      } else if (err?.message && !/^internal$/i.test(err.message)) {
+        setError(err.message);
+      } else {
+        setError('Analisis AI belum tersedia. Pastikan fungsi AI sudah aktif.');
+      }
     } finally {
       setLoading(false);
     }

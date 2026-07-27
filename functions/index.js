@@ -29,6 +29,63 @@ const STORAGE_BUCKET = "kontrack";
 admin.initializeApp({storageBucket: STORAGE_BUCKET});
 const firestore = getFirestore(FIRESTORE_DB);
 
+/**
+ * Terjemahkan kegagalan Gemini menjadi pesan yang bisa ditindaklanjuti.
+ * Tanpa ini, semua kegagalan tampil sebagai "AI tidak aktif" di aplikasi dan
+ * penyebab sebenarnya (kredit habis, key salah, model pensiun) hanya terlihat
+ * di Cloud Logging.
+ */
+const geminiError = (status, body) => {
+  const text = String(body || "");
+
+  if (status === 429) {
+    if (/prepayment credits are depleted|RESOURCE_EXHAUSTED/i.test(text) &&
+        /credits/i.test(text)) {
+      return new HttpsError(
+          "resource-exhausted",
+          "Kredit Gemini habis. Isi ulang saldo di Google AI Studio " +
+        "(ai.studio/projects) agar fitur AI aktif kembali.",
+      );
+    }
+    return new HttpsError(
+        "resource-exhausted",
+        "Kuota AI sedang penuh. Coba lagi beberapa saat lagi.",
+    );
+  }
+
+  if (status === 400 && /API key not valid/i.test(text)) {
+    return new HttpsError(
+        "failed-precondition",
+        "API key Gemini tidak valid. Perbarui secret GEMINI_API_KEY.",
+    );
+  }
+
+  if (status === 403) {
+    return new HttpsError(
+        "permission-denied",
+        "API key Gemini ditolak. Pastikan Generative Language API aktif " +
+      "untuk proyek pemilik key tersebut.",
+    );
+  }
+
+  if (status === 404) {
+    return new HttpsError(
+        "failed-precondition",
+        `Model AI "${GEMINI_MODEL}" tidak tersedia. Model mungkin sudah ` +
+      "dihentikan Google — perbarui GEMINI_MODEL.",
+    );
+  }
+
+  if (status >= 500) {
+    return new HttpsError(
+        "unavailable",
+        "Layanan Gemini sedang bermasalah. Coba lagi beberapa saat lagi.",
+    );
+  }
+
+  return new HttpsError("internal", `Gemini API error: ${status}`);
+};
+
 // Schema output (enum + tipe) → menegakkan struktur tanpa prompt panjang = hemat token.
 const RESPONSE_SCHEMA = {
   type: "ARRAY",
@@ -115,7 +172,7 @@ exports.analyzeTransactionImageWithAI = onCall(
         if (!response.ok) {
           const errorBody = await response.text();
           logger.error("Gemini API gagal.", {status: response.status, body: errorBody});
-          throw new HttpsError("internal", `Gemini API error: ${response.status}`);
+          throw geminiError(response.status, errorBody);
         }
 
         const data = await response.json();
@@ -235,7 +292,7 @@ exports.analyzeFinancialInsights = onCall(
         if (!response.ok) {
           const errBody = await response.text();
           logger.error("Gemini insight gagal.", {status: response.status, body: errBody});
-          throw new HttpsError("internal", `Gemini API error: ${response.status}`);
+          throw geminiError(response.status, errBody);
         }
 
         const data = await response.json();
