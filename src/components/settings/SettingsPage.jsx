@@ -266,6 +266,8 @@ const SettingsPage = ({ currentUser }) => {
                     <img
                       src={form.letterheadDataUrl || form.letterheadUrl}
                       alt="Kopsurat"
+                      loading="lazy"
+                      decoding="async"
                       className="max-h-24 w-auto object-contain"
                     />
                   </div>
@@ -314,6 +316,8 @@ const SettingsPage = ({ currentUser }) => {
                     <img
                       src={form.signatureDataUrl || form.signatureUrl}
                       alt="Tanda tangan"
+                      loading="lazy"
+                      decoding="async"
                       className="max-h-24 w-auto object-contain"
                     />
                   </div>

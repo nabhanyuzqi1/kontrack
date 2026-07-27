@@ -34,7 +34,13 @@ try {
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager(),
       cacheSizeBytes: CACHE_SIZE_UNLIMITED
-    })
+    }),
+    // Firestore memakai WebChannel (streaming) yang kerap tersendat di balik
+    // proxy/CDN atau jaringan seluler — gejalanya: request `channel` menggantung
+    // sampai semenit dan data tidak muncul sampai pengguna berpindah menu.
+    // Opsi ini membuat SDK mendeteksi kondisi tersebut dan otomatis beralih ke
+    // long-polling yang lebih tahan banting.
+    experimentalAutoDetectLongPolling: true
   });
 } catch (e) {
   // Fallback: browser tanpa IndexedDB (mode privat/Safari lama) tetap jalan,
