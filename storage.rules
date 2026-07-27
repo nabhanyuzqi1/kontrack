@@ -1,15 +1,71 @@
-// Firebase Storage Rules (set in Firebase Console)
 rules_version = '2';
+
+// Kontrack — Cloud Storage Rules (bucket `kontrack`, asia-southeast2)
+//
+// Aturan lama hanya mengizinkan path transactions/{uid}/** dan menolak sisanya,
+// padahal aplikasi juga menulis ke settings/, invoices/, projects/, dan
+// tax-documents/ — unggahan kop surat, tanda tangan, BAST, serta bukti setor
+// pajak semuanya tertolak. Berikut daftar path yang benar-benar dipakai.
+//
+// Catatan: URL unduh Firebase membawa `token=` sendiri dan dapat diakses tanpa
+// melewati aturan ini; blok `read` di bawah mengatur akses lewat SDK.
+
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow authenticated users to upload transaction images
-    match /transactions/{userId}/{allPaths=**} {
-      allow read: if true;  // Public read for transaction images
-      allow write: if request.auth != null && request.auth.uid == userId;
-      allow delete: if request.auth != null && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
     }
-    
-    // Default deny all
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isDocument() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType == 'application/pdf';
+    }
+
+    // Batas ukuran. Gambar sudah dikompresi ke WebP di sisi peramban
+    // (utils/imageCompress.js), jadi 10 MB sangat longgar; PDF bisa lebih besar.
+    function sizeOk(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // Bukti transaksi. Dua bentuk path dipakai: per-uid (Kontrack baru) dan
+    // transactions/personal/{uid}/ (warisan Kontrack lama) — keduanya tercakup
+    // oleh wildcard di bawah.
+    match /transactions/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if signedIn() && isDocument() && sizeOk(10);
+      allow delete: if signedIn();
+    }
+
+    // Aset perusahaan: kop surat, logo, tanda tangan.
+    // Read publik karena halaman login menampilkan branding sebelum autentikasi.
+    match /settings/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if signedIn() && isImage() && sizeOk(10);
+    }
+
+    // Lampiran invoice: BAST, WPHO, berita acara.
+    match /invoices/{allPaths=**} {
+      allow read: if signedIn();
+      allow write, delete: if signedIn() && isDocument() && sizeOk(25);
+    }
+
+    // Dokumen pajak: kode billing & bukti setor (NTPN).
+    match /tax-documents/{allPaths=**} {
+      allow read: if signedIn();
+      allow write, delete: if signedIn() && isDocument() && sizeOk(25);
+    }
+
+    // Dokumen proyek: SPK, kontrak, foto progres.
+    match /projects/{allPaths=**} {
+      allow read: if signedIn();
+      allow write, delete: if signedIn() && isDocument() && sizeOk(25);
+    }
+
+    // Selebihnya ditolak — tidak ada path lain yang ditulis aplikasi.
     match /{allPaths=**} {
       allow read, write: if false;
     }

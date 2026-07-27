@@ -1,21 +1,19 @@
 // src/services/functionsRegion.js
-// Region Cloud Functions.
-//
-// Function AI milik Kontrack baru di-deploy ke Jakarta (asia-southeast2) karena
-// penggunanya di Indonesia — latensi ±30-50ms dibanding ±200ms+ ke us-central1.
-//
-// Function warisan Kontrack lama (addUserToCompany, updateUserRole,
-// getStorageAssetDataUrl, parseBoqWithAI) masih di us-central1. Selama belum
-// dimigrasi, pemanggilnya harus memakai LEGACY_REGION.
+// Seluruh Cloud Function Kontrack berada di asia-southeast2 (Jakarta) —
+// penggunanya di Indonesia, latensi ±30-50ms dibanding ±200ms+ ke us-central1.
+// Tidak ada lagi function yang tersisa di region lain.
 
 import { getFunctions } from 'firebase/functions';
 import app from './firebase';
 
-export const AI_REGION = 'asia-southeast2';
-export const LEGACY_REGION = 'us-central1';
+export const REGION = 'asia-southeast2';
 
-/** Functions instance untuk function AI (Jakarta). */
-export const aiFunctions = () => getFunctions(app, AI_REGION);
+/** Instance Functions Kontrack (Jakarta). */
+export const kontrackFunctions = () => getFunctions(app, REGION);
 
-/** Functions instance untuk function warisan (us-central1). */
-export const legacyFunctions = () => getFunctions(app, LEGACY_REGION);
+// Alias historis — dulu memisahkan function AI (Jakarta) dari function warisan
+// (us-central1). Setelah konsolidasi region, keduanya menunjuk instance sama.
+export const aiFunctions = kontrackFunctions;
+export const legacyFunctions = kontrackFunctions;
+export const AI_REGION = REGION;
+export const LEGACY_REGION = REGION;

@@ -16,7 +16,7 @@ export const COMPANY_INFO = {
   // Kopsurat/letterhead lengkap (logo diamond + identitas) dari Firebase Storage —
   // dipakai sebagai banner header invoice. Nanti dibaca dinamis dari settings/companyProfile.
   letterheadUrl:
-    'https://firebasestorage.googleapis.com/v0/b/sistem-keuangan-ptpeb.firebasestorage.app/o/settings%2FcompanyProfile%2Fletterhead%2F1764897239809_PT.%20PERMATA%20ENERGI%20BORNEO.png?alt=media&token=2818d2a6-f7cb-4fbc-83dd-114363080fc2',
+    'https://firebasestorage.googleapis.com/v0/b/kontrack/o/settings%2FcompanyProfile%2Fletterhead%2F1764897239809_PT.%20PERMATA%20ENERGI%20BORNEO.png?alt=media&token=2818d2a6-f7cb-4fbc-83dd-114363080fc2',
   logoDataUrl: '', // opsional: logo saja (jika tanpa letterhead)
   bank: {
     name: 'BCA',

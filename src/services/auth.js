@@ -3,6 +3,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  browserPopupRedirectResolver,
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
@@ -60,7 +61,9 @@ export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  const { user } = await signInWithPopup(auth, provider);
+  // Resolver dioper di sini (bukan saat initializeAuth) supaya iframe gapi hanya
+  // dimuat ketika pengguna benar-benar menekan tombol Google — lihat firebase.js.
+  const { user } = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
 
   // Cari dokumen user berdasarkan email (skema live memakai email, bukan uid)
   const usersRef = collection(db, 'users');

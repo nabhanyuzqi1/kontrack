@@ -1,7 +1,8 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
 import { aiFunctions } from './functionsRegion';
-import { storage } from './firebase'; // Pastikan firebase.js Anda sudah diinisialisasi
+import { storage } from './firebase';
+import { compressImage } from '../utils/imageCompress';
 
 // Fungsi helper untuk memvalidasi file gambar
 export const validateImageFile = (file) => {
@@ -33,13 +34,18 @@ const fileToBase64 = (file) => {
 // --- ALUR ANALISIS AI YANG TELAH DIREFAKTOR ---
 
 // 1. Fungsi untuk mengunggah gambar ke Firebase Storage
-export const uploadTransactionImage = async (file, userId) => {
+export const uploadTransactionImage = async (file, userId, { compress = true } = {}) => {
   try {
+    // Bukti transfer dikompresi ke WebP 1600px sebelum diunggah — foto WhatsApp
+    // 3 MB menyusut ke ±150 KB, sehingga Storage & waktu muat jauh lebih hemat.
+    // compress:false dipakai bila pemanggil SUDAH mengompresi, agar tidak
+    // ter-encode dua kali (lossy ganda menurunkan kualitas tanpa hemat berarti).
+    const compressed = compress ? await compressImage(file) : file;
     const timestamp = Date.now();
-    const fileName = `transactions/${userId}/${timestamp}_${file.name}`;
+    const fileName = `transactions/${userId}/${timestamp}_${compressed.name}`;
     const storageRef = ref(storage, fileName);
-    
-    const snapshot = await uploadBytes(storageRef, file);
+
+    const snapshot = await uploadBytes(storageRef, compressed);
     const downloadURL = await getDownloadURL(snapshot.ref);
     
     console.log('Gambar diunggah ke Firebase Storage:', downloadURL);
@@ -78,13 +84,17 @@ export const analyzeTransactionImages = async (files, userId) => {
   }
   files.forEach(validateImageFile);
 
-  // Unggah semua + konversi base64 paralel
+  // Kompresi dilakukan SEKALI di sini, lalu hasilnya dipakai untuk dua-duanya:
+  // diunggah ke Storage DAN dikirim ke Gemini. Gambar yang lebih kecil berarti
+  // token vision lebih sedikit, jadi biaya analisis ikut turun.
+  const compressed = await Promise.all(files.map((f) => compressImage(f)));
+
   const [uploads, base64List] = await Promise.all([
-    Promise.all(files.map((f) => uploadTransactionImage(f, userId))),
-    Promise.all(files.map((f) => fileToBase64(f))),
+    Promise.all(compressed.map((f) => uploadTransactionImage(f, userId, { compress: false }))),
+    Promise.all(compressed.map((f) => fileToBase64(f))),
   ]);
 
-  const images = files.map((f, i) => ({
+  const images = compressed.map((f, i) => ({
     base64String: base64List[i].split(',')[1],
     mimeType: f.type,
   }));

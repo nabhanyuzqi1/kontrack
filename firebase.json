@@ -1,7 +1,7 @@
 {
   "firestore": {
-    "database": "(default)",
-    "location": "asia-east1",
+    "database": "kontrack",
+    "location": "asia-southeast2",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -21,9 +21,12 @@
       }
     ]
   },
-  "storage": {
-    "rules": "storage.rules"
-  },
+  "storage": [
+    {
+      "bucket": "kontrack",
+      "rules": "storage.rules"
+    }
+  ],
   "functions": [
     {
       "source": "functions",

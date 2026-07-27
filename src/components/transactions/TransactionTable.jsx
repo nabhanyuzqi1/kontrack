@@ -1,9 +1,10 @@
 // src/components/transactions/TransactionTable.jsx
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Sparkles, ImageIcon, PenLine, Trash2, Inbox } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 import { TRANSACTION_TYPES } from '../../utils/constants';
 import { Badge } from '../ui/Badge';
+import Lightbox from '../ui/Lightbox';
 
 const Th = ({ children, className = '' }) => (
   <th
@@ -15,6 +16,21 @@ const Th = ({ children, className = '' }) => (
 
 const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }) => {
   const [deletingId, setDeletingId] = useState(null);
+  const [previewIndex, setPreviewIndex] = useState(null);
+
+  // Semua bukti pada tabel ini menjadi satu galeri, sehingga pengguna bisa
+  // menelusuri bukti transaksi berikutnya tanpa menutup pratinjau.
+  const proofs = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.imageUrl)
+        .map((t) => ({
+          url: t.imageUrl,
+          name: `${t.description || 'Bukti'} — ${formatCurrency(t.amount)}`,
+          id: t.id
+        })),
+    [transactions]
+  );
 
   const handleDelete = async (transaction) => {
     if (!window.confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
@@ -81,15 +97,16 @@ const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }
                   <div className="max-w-xs">
                     <p className="truncate">{transaction.description}</p>
                     {transaction.imageUrl && (
-                      <a
-                        href={transaction.imageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewIndex(proofs.findIndex((p) => p.id === transaction.id))
+                        }
                         className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
                       >
                         <ImageIcon className="h-3 w-3" />
                         Lihat Bukti
-                      </a>
+                      </button>
                     )}
                   </div>
                 </td>
@@ -135,6 +152,15 @@ const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }
           })}
         </tbody>
       </table>
+
+      {previewIndex !== null && previewIndex >= 0 && (
+        <Lightbox
+          items={proofs}
+          index={previewIndex}
+          onNavigate={setPreviewIndex}
+          onClose={() => setPreviewIndex(null)}
+        />
+      )}
     </div>
   );
 };

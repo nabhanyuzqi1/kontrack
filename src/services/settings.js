@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from '../utils/companyConfig';
 import { DEFAULT_THEME } from '../utils/themes';
+import { compressImage } from '../utils/imageCompress';
 
 const SETTINGS_REF = () => doc(db, 'settings', 'companyProfile');
 
@@ -50,9 +51,11 @@ export const imageFileToDataUrl = (file, maxWidth = 1200) =>
 // kembalikan data URL-nya untuk disimpan di Firestore — agar PDF tetap
 // memuat kop surat walau CORS bucket belum diaktifkan.
 export const uploadLetterhead = async (file) => {
-  const path = `settings/companyProfile/letterhead/${Date.now()}_${file.name}`;
+  // preserveAlpha: kop surat kerap PNG transparan agar menyatu dengan kertas.
+  const asset = await compressImage(file, { maxDimension: 2000, preserveAlpha: true });
+  const path = `settings/companyProfile/letterhead/${Date.now()}_${asset.name}`;
   const storageRef = ref(storage, path);
-  const snapshot = await uploadBytes(storageRef, file);
+  const snapshot = await uploadBytes(storageRef, asset);
   const url = await getDownloadURL(snapshot.ref);
   const dataUrl = await imageFileToDataUrl(file).catch(() => '');
   return { url, path: snapshot.metadata.fullPath, dataUrl };
@@ -60,9 +63,12 @@ export const uploadLetterhead = async (file) => {
 
 // Upload tanda tangan (PNG transparan) + data URL.
 export const uploadSignature = async (file) => {
-  const path = `settings/companyProfile/signature/${Date.now()}_${file.name}`;
+  // Tanda tangan WAJIB tetap transparan — kalau tidak, akan muncul kotak putih
+  // menutupi teks invoice di bawahnya.
+  const asset = await compressImage(file, { maxDimension: 1200, preserveAlpha: true });
+  const path = `settings/companyProfile/signature/${Date.now()}_${asset.name}`;
   const storageRef = ref(storage, path);
-  const snapshot = await uploadBytes(storageRef, file);
+  const snapshot = await uploadBytes(storageRef, asset);
   const url = await getDownloadURL(snapshot.ref);
   const dataUrl = await imageFileToDataUrl(file, 600).catch(() => '');
   return { url, path: snapshot.metadata.fullPath, dataUrl };
