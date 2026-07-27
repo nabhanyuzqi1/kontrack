@@ -9,7 +9,8 @@ import {
   Check,
   Loader2,
   Image as ImageIcon,
-  PenTool
+  PenTool,
+  Trash2
 } from 'lucide-react';
 import UsersTab from './UsersTab';
 import PageHeader from '../ui/PageHeader';
@@ -22,9 +23,110 @@ import {
   saveCompanySettings,
   uploadLetterhead,
   uploadSignature,
+  removeCompanyAsset,
   getThemeFromSettings
 } from '../../services/settings';
 import { THEME_PRESETS, applyTheme } from '../../utils/themes';
+
+/** Saklar kecil untuk menyalakan/mematikan aset dokumen. */
+const Switch = ({ checked, onChange, label }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={label}
+    onClick={() => onChange(!checked)}
+    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+      checked ? 'bg-brand-600' : 'bg-slate-200'
+    }`}
+  >
+    <span
+      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+        checked ? 'translate-x-4' : 'translate-x-0.5'
+      }`}
+    />
+  </button>
+);
+
+/**
+ * Kartu aset dokumen (kop surat / tanda tangan).
+ *
+ * Sebelumnya kedua aset ini ditulis sebagai dua blok JSX yang hampir identik.
+ * Disatukan agar saklar dan tombol hapus cukup ditulis sekali dan keduanya
+ * dijamin berperilaku sama.
+ */
+const AssetCard = ({
+  title,
+  description,
+  hint,
+  accept,
+  icon: EmptyIcon,
+  previewUrl,
+  enabled,
+  uploading,
+  removing,
+  onUpload,
+  onToggle,
+  onRemove
+}) => (
+  <Card className="flex flex-col p-4 sm:p-5">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="font-display text-sm font-semibold text-slate-800">{title}</h3>
+        <p className="mb-4 mt-1 text-xs text-slate-400">{description}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2 pt-0.5">
+        <span className={`text-[11px] font-medium ${enabled ? 'text-brand-600' : 'text-slate-400'}`}>
+          {enabled ? 'Tampil' : 'Disembunyikan'}
+        </span>
+        <Switch checked={enabled} onChange={onToggle} label={`Tampilkan ${title} di invoice`} />
+      </div>
+    </div>
+
+    <div className="flex flex-1 flex-col">
+      {previewUrl ? (
+        <div className="relative mb-3 flex flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+          {/* Saat dimatikan, pratinjau diredupkan supaya jelas aset masih
+              tersimpan tetapi tidak ikut tercetak di invoice. */}
+          <img
+            src={previewUrl}
+            alt={title}
+            loading="lazy"
+            decoding="async"
+            className={`max-h-24 w-auto object-contain transition ${
+              enabled ? '' : 'opacity-30 grayscale'
+            }`}
+          />
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={removing}
+            title={`Hapus ${title}`}
+            className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-400 shadow-sm transition-colors hover:text-red-600 disabled:opacity-40"
+          >
+            {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        </div>
+      ) : (
+        <div className="mb-3 flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/40 px-4 py-6 text-center">
+          <EmptyIcon className="mb-1.5 h-6 w-6 text-slate-300" />
+          <p className="text-xs text-slate-400">Belum ada {title.toLowerCase()}</p>
+        </div>
+      )}
+
+      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+        {uploading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+        ) : (
+          <UploadCloud className="h-4 w-4 text-brand-600" />
+        )}
+        {uploading ? 'Mengunggah…' : previewUrl ? `Ganti ${title}` : `Unggah ${title}`}
+        <input type="file" accept={accept} className="hidden" onChange={onUpload} />
+      </label>
+      <p className="mt-2 text-center text-[11px] text-slate-400">{hint}</p>
+    </div>
+  </Card>
+);
 
 const TABS = [
   { key: 'company', label: 'Perusahaan', icon: Building2 },
@@ -50,8 +152,12 @@ const emptyForm = {
   signatoryTitle: '',
   letterheadUrl: '',
   letterheadDataUrl: '',
+  letterheadPath: '',
+  letterheadEnabled: true,
   signatureUrl: '',
   signatureDataUrl: '',
+  signaturePath: '',
+  signatureEnabled: true,
   footerNote: '',
   themePreset: 'electric',
   notifications: { whatsappWebhookUrl: '', whatsappEnabled: false }
@@ -65,6 +171,36 @@ const SettingsPage = ({ currentUser }) => {
   const [saved, setSaved] = useState(false);
   const [uploadingLetterhead, setUploadingLetterhead] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
+  const [removingAsset, setRemovingAsset] = useState('');
+
+  /**
+   * Hapus kop surat / tanda tangan. Penghapusan langsung disimpan ke Firestore
+   * (tidak menunggu tombol Simpan) supaya berkas Storage dan dokumen settings
+   * tidak pernah berbeda keadaan.
+   */
+  const handleRemoveAsset = async (kind) => {
+    const label = kind === 'letterhead' ? 'kopsurat' : 'tanda tangan';
+    if (!window.confirm(`Hapus ${label}? Invoice akan memakai tampilan cadangan tanpa gambar.`)) {
+      return;
+    }
+
+    setRemovingAsset(kind);
+    try {
+      await removeCompanyAsset(kind, form);
+      setForm((prev) => ({
+        ...prev,
+        [`${kind}Url`]: '',
+        [`${kind}DataUrl`]: '',
+        [`${kind}Path`]: '',
+        [`${kind}Enabled`]: false
+      }));
+    } catch (err) {
+      console.error(`Hapus ${kind} gagal:`, err);
+      alert(`Gagal menghapus ${label}. Coba lagi.`);
+    } finally {
+      setRemovingAsset('');
+    }
+  };
 
   const handleSignatureUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -75,8 +211,17 @@ const SettingsPage = ({ currentUser }) => {
     }
     setUploadingSignature(true);
     try {
-      const { url, dataUrl } = await uploadSignature(file);
-      setForm((prev) => ({ ...prev, signatureUrl: url, signatureDataUrl: dataUrl || '' }));
+      const { url, dataUrl, path } = await uploadSignature(file);
+      // path disimpan agar tombol Hapus tahu berkas Storage mana yang dibuang.
+      // Mengunggah juga otomatis menyalakan kembali asetnya — pengguna yang
+      // baru saja mengunggah jelas ingin aset itu tampil.
+      setForm((prev) => ({
+        ...prev,
+        signatureUrl: url,
+        signatureDataUrl: dataUrl || '',
+        signaturePath: path || '',
+        signatureEnabled: true
+      }));
       setSaved(false);
     } catch (err) {
       console.error('Upload tanda tangan gagal:', err);
@@ -127,8 +272,14 @@ const SettingsPage = ({ currentUser }) => {
     setUploadingLetterhead(true);
     try {
       // dataUrl disimpan agar PDF tetap memuat kop surat tanpa bergantung CORS
-      const { url, dataUrl } = await uploadLetterhead(file);
-      setForm((prev) => ({ ...prev, letterheadUrl: url, letterheadDataUrl: dataUrl || '' }));
+      const { url, dataUrl, path } = await uploadLetterhead(file);
+      setForm((prev) => ({
+        ...prev,
+        letterheadUrl: url,
+        letterheadDataUrl: dataUrl || '',
+        letterheadPath: path || '',
+        letterheadEnabled: true
+      }));
       setSaved(false);
     } catch (err) {
       console.error('Upload letterhead gagal:', err);
@@ -252,105 +403,35 @@ const SettingsPage = ({ currentUser }) => {
 
           {/* Aset dokumen — dua kartu berdampingan agar tidak menumpuk */}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <Card className="flex flex-col p-4 sm:p-5">
-              <h3 className="font-display text-sm font-semibold text-slate-800">
-                Kopsurat / Letterhead
-              </h3>
-              <p className="mb-4 mt-1 text-xs text-slate-400">
-                Muncul sebagai header invoice & dokumen resmi.
-              </p>
+            <AssetCard
+              title="Kopsurat"
+              description="Muncul sebagai header invoice & dokumen resmi."
+              hint="PNG latar transparan · maks 10MB"
+              accept="image/png,image/jpeg"
+              icon={ImageIcon}
+              previewUrl={form.letterheadDataUrl || form.letterheadUrl}
+              enabled={form.letterheadEnabled !== false}
+              uploading={uploadingLetterhead}
+              removing={removingAsset === 'letterhead'}
+              onUpload={handleLetterheadUpload}
+              onToggle={(v) => setForm((prev) => ({ ...prev, letterheadEnabled: v }))}
+              onRemove={() => handleRemoveAsset('letterhead')}
+            />
 
-              <div className="flex flex-1 flex-col">
-                {form.letterheadDataUrl || form.letterheadUrl ? (
-                  <div className="mb-3 flex flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                    <img
-                      src={form.letterheadDataUrl || form.letterheadUrl}
-                      alt="Kopsurat"
-                      loading="lazy"
-                      decoding="async"
-                      className="max-h-24 w-auto object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="mb-3 flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/40 px-4 py-6 text-center">
-                    <ImageIcon className="mb-1.5 h-6 w-6 text-slate-300" />
-                    <p className="text-xs text-slate-400">Belum ada kopsurat</p>
-                  </div>
-                )}
-
-                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
-                  {uploadingLetterhead ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
-                  ) : (
-                    <UploadCloud className="h-4 w-4 text-brand-600" />
-                  )}
-                  {uploadingLetterhead
-                    ? 'Mengunggah…'
-                    : form.letterheadUrl
-                      ? 'Ganti Kopsurat'
-                      : 'Unggah Kopsurat'}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="hidden"
-                    onChange={handleLetterheadUpload}
-                  />
-                </label>
-                <p className="mt-2 text-center text-[11px] text-slate-400">
-                  PNG latar transparan · maks 10MB
-                </p>
-              </div>
-            </Card>
-
-            <Card className="flex flex-col p-4 sm:p-5">
-              <h3 className="font-display text-sm font-semibold text-slate-800">
-                Tanda Tangan Direktur
-              </h3>
-              <p className="mb-4 mt-1 text-xs text-slate-400">
-                Ditempatkan di atas nama penanda tangan pada invoice.
-              </p>
-
-              <div className="flex flex-1 flex-col">
-                {form.signatureDataUrl || form.signatureUrl ? (
-                  <div className="mb-3 flex flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                    <img
-                      src={form.signatureDataUrl || form.signatureUrl}
-                      alt="Tanda tangan"
-                      loading="lazy"
-                      decoding="async"
-                      className="max-h-24 w-auto object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="mb-3 flex flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/40 px-4 py-6 text-center">
-                    <PenTool className="mb-1.5 h-6 w-6 text-slate-300" />
-                    <p className="text-xs text-slate-400">Belum ada tanda tangan</p>
-                  </div>
-                )}
-
-                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
-                  {uploadingSignature ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
-                  ) : (
-                    <UploadCloud className="h-4 w-4 text-brand-600" />
-                  )}
-                  {uploadingSignature
-                    ? 'Mengunggah…'
-                    : form.signatureUrl
-                      ? 'Ganti Tanda Tangan'
-                      : 'Unggah Tanda Tangan'}
-                  <input
-                    type="file"
-                    accept="image/png"
-                    className="hidden"
-                    onChange={handleSignatureUpload}
-                  />
-                </label>
-                <p className="mt-2 text-center text-[11px] text-slate-400">
-                  PNG latar transparan · maks 5MB
-                </p>
-              </div>
-            </Card>
+            <AssetCard
+              title="Tanda Tangan"
+              description="Ditempatkan di atas nama penanda tangan pada invoice."
+              hint="PNG latar transparan · maks 5MB"
+              accept="image/png"
+              icon={PenTool}
+              previewUrl={form.signatureDataUrl || form.signatureUrl}
+              enabled={form.signatureEnabled !== false}
+              uploading={uploadingSignature}
+              removing={removingAsset === 'signature'}
+              onUpload={handleSignatureUpload}
+              onToggle={(v) => setForm((prev) => ({ ...prev, signatureEnabled: v }))}
+              onRemove={() => handleRemoveAsset('signature')}
+            />
           </div>
         </div>
       )}

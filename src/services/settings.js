@@ -3,7 +3,7 @@
 // path yang sama dengan Kontrack live sehingga data PT PEB yang ada ikut terbaca.
 
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from '../utils/companyConfig';
 import { DEFAULT_THEME } from '../utils/themes';
@@ -74,10 +74,50 @@ export const uploadSignature = async (file) => {
   return { url, path: snapshot.metadata.fullPath, dataUrl };
 };
 
+/**
+ * Hapus kop surat / tanda tangan.
+ *
+ * Berkas di Storage ikut dihapus supaya tidak menyisakan sampah, tetapi
+ * kegagalan penghapusan berkas TIDAK boleh menggagalkan aksi — yang menentukan
+ * tampil-tidaknya aset di invoice adalah field di Firestore, dan berkas lama
+ * bisa saja sudah tidak ada (mis. sisa migrasi bucket).
+ *
+ * @param {'letterhead'|'signature'} kind
+ * @param {object} settings dokumen settings saat ini (untuk tahu path berkas)
+ */
+export const removeCompanyAsset = async (kind, settings = {}) => {
+  const path = settings[`${kind}Path`];
+  if (path) {
+    try {
+      await deleteObject(ref(storage, path));
+    } catch (e) {
+      console.warn(`Berkas ${kind} tidak dapat dihapus dari Storage:`, e?.code || e);
+    }
+  }
+
+  await saveCompanySettings({
+    [`${kind}Url`]: '',
+    [`${kind}DataUrl`]: '',
+    [`${kind}Path`]: '',
+    [`${kind}Enabled`]: false
+  });
+};
+
 // Gabungkan settings tersimpan + fallback statis → bentuk yang dipakai invoice generator.
 // Nama field mengikuti dokumen live `settings/companyProfile`.
 export const mergeCompanyInfo = (settings) => {
   if (!settings) return COMPANY_INFO;
+
+  // Saklar kop surat & tanda tangan. Default menyala agar dokumen lama yang
+  // belum punya field ini tetap tampil seperti semula — hanya nilai `false`
+  // eksplisit yang mematikannya.
+  //
+  // Saat dimatikan, URL-nya dikosongkan sehingga generator PDF otomatis memakai
+  // jalur cadangannya: header teks untuk kop surat, dan baris nama penanda
+  // tangan tanpa gambar.
+  const letterheadOn = settings.letterheadEnabled !== false;
+  const signatureOn = settings.signatureEnabled !== false;
+
   const addressLines =
     settings.addressLines ||
     [
@@ -94,12 +134,14 @@ export const mergeCompanyInfo = (settings) => {
     city: settings.city || COMPANY_INFO.city,
     npwp: settings.npwp || COMPANY_INFO.npwp,
     // Header invoice = letterhead (banner logo+identitas). Logo & tanda tangan terpisah.
-    letterheadUrl: settings.letterheadUrl || COMPANY_INFO.letterheadUrl,
+    letterheadUrl: letterheadOn ? settings.letterheadUrl || COMPANY_INFO.letterheadUrl : '',
     // Data URL diprioritaskan generator PDF (tak butuh CORS bucket)
-    letterheadDataUrl: settings.letterheadDataUrl || '',
-    signatureDataUrl: settings.signatureDataUrl || '',
+    letterheadDataUrl: letterheadOn ? settings.letterheadDataUrl || '' : '',
+    signatureDataUrl: signatureOn ? settings.signatureDataUrl || '' : '',
     logoUrl: settings.logoUrl || '',
-    signatureUrl: settings.signatureUrl || '',
+    signatureUrl: signatureOn ? settings.signatureUrl || '' : '',
+    letterheadEnabled: letterheadOn,
+    signatureEnabled: signatureOn,
     footerNote: settings.footerNote || settings.attachmentFooter || '',
     // Webhook hanya aktif bila toggle whatsappEnabled true
     whatsappWebhookUrl: settings.notifications?.whatsappEnabled

@@ -16,6 +16,106 @@ const GEMINI_API_URL =
 // Set nilainya sekali via: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
+// ---------------------------------------------------------------------------
+// DUA JALUR MENUJU GEMINI
+//
+// 1. Vertex AI (UTAMA) — ditagih ke Cloud Billing proyek ini, sama seperti
+//    Firestore/Functions. Tidak memakai API key sama sekali: otentikasinya
+//    memakai service account function lewat metadata server, jadi tidak ada
+//    kunci yang perlu dirotasi atau bisa bocor.
+//
+// 2. Gemini Developer API + API key (CADANGAN) — ditagih ke kredit prabayar
+//    Google AI Studio. Inilah yang kehabisan kredit dan membuat fitur AI mati.
+//
+// Vertex dicoba lebih dulu; bila Vertex belum aktif di proyek (403/404), barulah
+// jatuh ke API key. Dengan begitu fitur AI tidak lagi bergantung pada satu
+// sumber tagihan.
+// ---------------------------------------------------------------------------
+
+// Vertex memakai nama model bertversi (bukan alias "-latest" milik Developer API).
+const VERTEX_MODEL = "gemini-2.5-flash";
+// Endpoint global: ketersediaan lebih baik daripada mengunci satu region, dan
+// tidak membuat sumber daya baru di region mana pun.
+const VERTEX_URL = () =>
+  `https://aiplatform.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT}` +
+  `/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`;
+
+/** Token service account function, diambil dari metadata server Cloud Run. */
+const metadataToken = async () => {
+  const res = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+      {headers: {"Metadata-Flavor": "Google"}},
+  );
+  if (!res.ok) throw new Error(`metadata token ${res.status}`);
+  return (await res.json()).access_token;
+};
+
+/**
+ * Panggil Gemini. Mengembalikan teks jawaban.
+ * @param {object} body payload generateContent (contents + generationConfig)
+ * @param {string} apiKey API key Developer API, dipakai hanya sebagai cadangan
+ * @param {string} label untuk log
+ */
+const callGemini = async (body, apiKey, label) => {
+  // --- Jalur 1: Vertex AI ---
+  try {
+    const token = await metadataToken();
+    const res = await fetch(VERTEX_URL(), {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+      logger.warn(`${label}: Vertex membalas tanpa teks, coba API key.`);
+    } else {
+      const errBody = await res.text();
+      // 401/403/404 = Vertex belum aktif / SA belum diberi izin → wajar, mundur
+      // ke API key. Status lain (429, 5xx) berarti Vertex aktif tetapi bermasalah,
+      // dan itu harus dilaporkan apa adanya, bukan disamarkan.
+      if (![401, 403, 404].includes(res.status)) {
+        logger.error(`${label}: Vertex gagal.`, {status: res.status, body: errBody});
+        throw geminiError(res.status, errBody);
+      }
+      logger.warn(`${label}: Vertex belum tersedia (${res.status}), memakai API key.`);
+    }
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    logger.warn(`${label}: Vertex tidak dapat dihubungi (${e?.message}), memakai API key.`);
+  }
+
+  // --- Jalur 2: Developer API + API key ---
+  if (!apiKey) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Fitur AI belum dikonfigurasi: Vertex AI belum aktif dan GEMINI_API_KEY kosong.",
+    );
+  }
+
+  const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    logger.error(`${label}: Gemini API gagal.`, {status: res.status, body: errBody});
+    throw geminiError(res.status, errBody);
+  }
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new HttpsError("internal", "AI tidak memberi respons.");
+  return text;
+};
+
 // Seluruh sumber daya Kontrack berada di asia-southeast2 (Jakarta) — pengguna
 // ada di Indonesia. us-central1 (Iowa) menambah ±200ms per panggilan.
 const REGION = "asia-southeast2";
@@ -119,11 +219,8 @@ exports.analyzeTransactionImageWithAI = onCall(
         throw new HttpsError("unauthenticated", "Anda harus login untuk memakai fitur AI.");
       }
 
+      // API key opsional: hanya dipakai bila Vertex AI belum aktif.
       const apiKey = geminiApiKey.value();
-      if (!apiKey) {
-        logger.error("GEMINI_API_KEY belum di-set di Secret Manager.");
-        throw new HttpsError("failed-precondition", "Fitur AI belum dikonfigurasi (API key).");
-      }
 
       // Terima multi-gambar: images:[{base64String, mimeType}].
       // Backward-compat: single {base64String, mimeType}.
@@ -154,32 +251,22 @@ exports.analyzeTransactionImageWithAI = onCall(
           temperature: 0.2,
           topK: 1,
           topP: 1,
-          maxOutputTokens: 256 * images.length,
+          maxOutputTokens: 512 * images.length,
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
+          // Gemini 2.5 adalah model "thinking": token berpikir DIHITUNG terhadap
+          // maxOutputTokens. Tanpa ini, jatah token bisa habis untuk berpikir
+          // sehingga jawaban kosong (finishReason MAX_TOKENS, parts kosong).
+          // Ekstraksi terstruktur berpandu responseSchema tidak butuh penalaran
+          // bertahap, jadi mematikannya sekaligus menekan biaya.
+          thinkingConfig: {thinkingBudget: 0},
         },
       };
 
       logger.info(`Analisis ${images.length} gambar via Gemini.`);
 
       try {
-        const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-          const errorBody = await response.text();
-          logger.error("Gemini API gagal.", {status: response.status, body: errorBody});
-          throw geminiError(response.status, errorBody);
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          throw new HttpsError("internal", "AI tidak memberi respons.");
-        }
+        const text = await callGemini(requestBody, apiKey, "analyzeTransactionImage");
 
         // responseSchema menjamin JSON array valid.
         const parsed = JSON.parse(text);
@@ -261,9 +348,6 @@ exports.analyzeFinancialInsights = onCall(
       }
 
       const apiKey = geminiApiKey.value();
-      if (!apiKey) {
-        throw new HttpsError("failed-precondition", "Fitur AI belum dikonfigurasi.");
-      }
 
       const summary = request.data?.summary;
       if (!summary || typeof summary !== "object") {
@@ -276,30 +360,17 @@ exports.analyzeFinancialInsights = onCall(
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 700,
+          maxOutputTokens: 1200,
           responseMimeType: "application/json",
           responseSchema: INSIGHT_SCHEMA,
+          // Lihat catatan thinkingConfig di analyzeTransactionImageWithAI.
+          thinkingConfig: {thinkingBudget: 0},
         },
       };
 
       try {
-        const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const errBody = await response.text();
-          logger.error("Gemini insight gagal.", {status: response.status, body: errBody});
-          throw geminiError(response.status, errBody);
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new HttpsError("internal", "AI tidak memberi respons.");
-
-        return {insight: JSON.parse(text), model: GEMINI_MODEL};
+        const text = await callGemini(body, apiKey, "analyzeFinancialInsights");
+        return {insight: JSON.parse(text), model: VERTEX_MODEL};
       } catch (error) {
         if (error instanceof HttpsError) throw error;
         logger.error("Kesalahan analisis AI:", error);
