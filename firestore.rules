@@ -52,6 +52,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Penghitung kuota AI harian. HARUS tertutup dari klien: kalau pengguna
+    // bisa menulis ke sini, dia tinggal menol-kan penghitungnya sendiri dan
+    // batas harian jadi hiasan. Hanya Admin SDK (Cloud Function) yang menulis,
+    // dan Admin SDK memang melewati rules.
+    match /ai_usage/{docId} {
+      allow read, write: if false;
+    }
+
+    // Jejak audit — ditulis Cloud Function, tidak boleh disunting klien.
+    match /audit_logs/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     // Catch-all SEMENTARA: koleksi lain yang dipakai versi live
     // (clients, price items, dll.) — wajib login, tidak lagi publik.
     // Fase 2: hapus blok ini dan daftarkan tiap koleksi secara eksplisit.

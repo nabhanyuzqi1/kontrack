@@ -80,7 +80,12 @@ const callGemini = async (body, apiKey, label) => {
     if (res.ok) {
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) return text;
+      if (text) {
+        // Dicatat supaya biaya bisa diaudit dari log, bukan ditebak.
+        const u = data.usageMetadata || {};
+        logger.info(`${label}: token in=${u.promptTokenCount} out=${u.candidatesTokenCount} total=${u.totalTokenCount}`);
+        return text;
+      }
       logger.warn(`${label}: Vertex membalas tanpa teks, coba API key.`);
     } else {
       const errBody = await res.text();
@@ -136,6 +141,67 @@ const STORAGE_BUCKET = "kontrack";
 
 admin.initializeApp({storageBucket: STORAGE_BUCKET});
 const firestore = getFirestore(FIRESTORE_DB);
+
+// ---------------------------------------------------------------------------
+// Kuota AI harian per pengguna
+//
+// Batas ditegakkan di SERVER. Menegakkannya di klien tidak ada artinya: siapa
+// pun bisa memanggil callable ini langsung dan melewati UI.
+//
+// Angkanya dipasang jauh di bawah kuota gratis harian Gemini supaya satu
+// pengguna tidak bisa menghabiskan jatah seluruh perusahaan dalam sekali duduk.
+// ---------------------------------------------------------------------------
+
+const DAILY_LIMITS = {
+  image: 50, // analisis gambar transaksi (1 panggilan bisa memuat 8 gambar)
+  insight: 20, // analisis keuangan Dashboard/Laporan
+};
+
+/** Tanggal WIB — pemakaian direset tengah malam waktu pengguna, bukan UTC. */
+const jakartaDate = () =>
+  new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+/**
+ * Tambah pemakaian & tolak bila kuota harian habis.
+ *
+ * Dijalankan dalam transaksi supaya dua permintaan bersamaan tidak sama-sama
+ * lolos pada hitungan terakhir.
+ *
+ * @param {string} uid
+ * @param {'image'|'insight'} kind
+ * @param {number} cost jumlah unit yang dipakai panggilan ini
+ */
+const enforceDailyQuota = async (uid, kind, cost = 1) => {
+  const limit = DAILY_LIMITS[kind];
+  const day = jakartaDate();
+  const ref = firestore.collection("ai_usage").doc(`${uid}_${day}`);
+
+  const used = await firestore.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists ? snap.data()[kind] || 0 : 0;
+
+    if (current + cost > limit) return -1;
+
+    tx.set(ref, {
+      [kind]: current + cost,
+      uid,
+      day,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+
+    return current + cost;
+  });
+
+  if (used === -1) {
+    throw new HttpsError(
+        "resource-exhausted",
+        `Kuota AI harian Anda habis (${limit} ${kind === "image" ? "analisis gambar" : "analisis keuangan"} per hari). ` +
+      "Kuota disetel ulang pukul 00:00 WIB.",
+    );
+  }
+
+  logger.info(`Kuota AI ${kind} ${uid}: ${used}/${limit}`);
+};
 
 /**
  * Terjemahkan kegagalan Gemini menjadi pesan yang bisa ditindaklanjuti.
@@ -243,6 +309,10 @@ exports.analyzeTransactionImageWithAI = onCall(
       if (images.length > 8) {
         throw new HttpsError("invalid-argument", "Maksimal 8 gambar per analisis.");
       }
+
+      // Kuota dipotong SEBELUM memanggil Gemini — kalau dipotong sesudah,
+      // permintaan yang gagal di tengah tetap membakar biaya tanpa tercatat.
+      await enforceDailyQuota(request.auth.uid, "image", images.length);
 
       // Satu request Gemini berisi prompt + semua gambar → hemat biaya (prompt dipakai bersama).
       const parts = [{text: PROMPT}];
@@ -361,6 +431,8 @@ exports.analyzeFinancialInsights = onCall(
       if (!summary || typeof summary !== "object") {
         throw new HttpsError("invalid-argument", "Ringkasan metrik tidak ada.");
       }
+
+      await enforceDailyQuota(request.auth.uid, "insight");
 
       const body = {
         contents: [{

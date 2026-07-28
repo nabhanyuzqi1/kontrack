@@ -85,12 +85,17 @@ try {
         tabManager: persistentMultipleTabManager(),
         cacheSizeBytes: CACHE_SIZE_UNLIMITED
       }),
-      // Firestore memakai WebChannel (streaming) yang kerap tersendat di balik
-      // proxy/CDN atau jaringan seluler — gejalanya: request `channel` menggantung
-      // sampai semenit dan data tidak muncul sampai pengguna berpindah menu.
-      // Opsi ini membuat SDK mendeteksi kondisi tersebut dan beralih otomatis ke
-      // long-polling yang lebih tahan banting.
-      experimentalAutoDetectLongPolling: true
+      // Long-polling DIPAKSA, bukan auto-deteksi.
+      //
+      // Auto-deteksi menjajal transport streaming lebih dulu. Di Safari,
+      // permintaan Listen/channel-nya gagal dengan
+      //   "Fetch API cannot load ... due to access control checks"
+      // dan SDK baru mundur ke long-polling setelah probe itu habis waktunya —
+      // selama jeda tersebut halaman diam berputar. Memaksa long-polling
+      // melewatkan probe yang memang selalu gagal di Safari.
+      experimentalForceLongPolling: true,
+      // Long-polling paksa harus memakai XHR; fetch-stream itulah yang diblokir.
+      useFetchStreams: false
     },
     FIRESTORE_DB_ID
   );

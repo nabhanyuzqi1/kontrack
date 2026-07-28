@@ -1,14 +1,14 @@
 // src/components/dashboard/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { FolderKanban, Wallet, CircleCheckBig, TrendingUp, Plus, Sparkles, PenLine } from 'lucide-react';
-import { db } from '../../services/firebase';
 import ProjectModal from '../projects/ProjectModal';
 import TransactionModal from '../transactions/TransactionModal';
 import AITransactionModal from '../transactions/AITransactionModal';
 import CashflowChart from './CashflowChart';
 import AIInsightCard from '../ai/AIInsightCard';
 import { getAllInvoices } from '../../services/invoices';
+import { getAllProjects } from '../../services/projects';
+import { getAllTransactions } from '../../services/transactions';
 import ProjectReminders from './ProjectReminders';
 import RecentProjects from './RecentProjects';
 import RecentTransactions from './RecentTransactions';
@@ -58,72 +58,50 @@ const Dashboard = ({ currentUser }) => {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const projectsQuery = query(collection(db, 'projects'), orderBy('createdAt', 'desc'), limit(5));
-      const projectSnapshot = await getDocs(projectsQuery);
-      const projectList = [];
-      projectSnapshot.forEach((doc) => {
-        projectList.push({ id: doc.id, ...doc.data() });
-      });
-      setProjects(projectList);
+      // Sebelumnya halaman ini memanggil getDocs mentah lima kali secara
+      // BERURUTAN, tanpa cache dan tanpa batas waktu. Dua di antaranya (5 proyek
+      // terbaru, 10 transaksi terbaru) hanya potongan dari koleksi yang toh
+      // diambil seluruhnya di query berikutnya — jadi murni query mubazir.
+      //
+      // Kini: tiga service ber-cache, paralel, masing-masing dijaga batas waktu
+      // di services/cache.js. Daftar "terbaru" cukup diiris dari data yang sama.
+      const [projectList, transactionList, invoiceList] = await Promise.all([
+        getAllProjects(),
+        getAllTransactions(),
+        getAllInvoices().catch(() => [])
+      ]);
 
-      const transQuery = query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(10));
-      const transSnapshot = await getDocs(transQuery);
-      const transList = [];
-      transSnapshot.forEach((doc) => {
-        transList.push({ id: doc.id, ...doc.data() });
-      });
-      setTransactions(transList);
+      setAllProjects(projectList);
+      setAllTransactions(transactionList);
+      setInvoices(invoiceList);
 
-      await calculateStats();
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const byNewest = (field) => (a, b) =>
+        String(b?.[field] || '').localeCompare(String(a?.[field] || ''));
 
-  const calculateStats = async () => {
-    try {
-      const allProjectsSnapshot = await getDocs(collection(db, 'projects'));
-      const allProjects = [];
-      allProjectsSnapshot.forEach((doc) => {
-        allProjects.push({ id: doc.id, ...doc.data() });
-      });
+      setProjects([...projectList].sort(byNewest('createdAt')).slice(0, 5));
+      setTransactions([...transactionList].sort(byNewest('date')).slice(0, 10));
 
-      const allTransSnapshot = await getDocs(collection(db, 'transactions'));
-      const allTrans = [];
-      allTransSnapshot.forEach((doc) => {
-        allTrans.push({ id: doc.id, ...doc.data() });
-      });
-      setAllTransactions(allTrans);
-      setAllProjects(allProjects);
-      getAllInvoices()
-        .then(setInvoices)
-        .catch(() => setInvoices([]));
-
-      const totalProjects = allProjects.length;
-      const ongoingProjects = allProjects.filter((p) => p.status === 'ongoing').length;
-      const totalValue = allProjects.reduce((sum, p) => sum + (p.value || 0), 0);
-      const totalPaid = allProjects.reduce((sum, p) => sum + (p.paidAmount || 0), 0);
-
-      const totalIncome = allTrans
+      const totalValue = projectList.reduce((sum, p) => sum + (p.value || 0), 0);
+      const totalPaid = projectList.reduce((sum, p) => sum + (p.paidAmount || 0), 0);
+      const totalIncome = transactionList
         .filter((t) => t.type === 'income')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-      const totalExpense = allTrans
+      const totalExpense = transactionList
         .filter((t) => t.type === 'expense')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       setStats({
-        totalProjects,
-        ongoingProjects,
+        totalProjects: projectList.length,
+        ongoingProjects: projectList.filter((p) => p.status === 'ongoing').length,
         totalValue,
         totalPaid,
         totalExpense,
         totalProfit: totalIncome - totalExpense
       });
     } catch (error) {
-      console.error('Error calculating stats:', error);
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
