@@ -57,6 +57,14 @@ const metadataToken = async () => {
  * @param {string} label untuk log
  */
 const callGemini = async (body, apiKey, label) => {
+  // Vertex menolak contents tanpa role ("Please use a valid role: user, model"),
+  // sedangkan Developer API membolehkannya. Dinormalkan di sini supaya kedua
+  // pemanggil tidak perlu tahu perbedaan itu.
+  const payload = {
+    ...body,
+    contents: (body.contents || []).map((c) => ({role: "user", ...c})),
+  };
+
   // --- Jalur 1: Vertex AI ---
   try {
     const token = await metadataToken();
@@ -66,7 +74,7 @@ const callGemini = async (body, apiKey, label) => {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (res.ok) {
@@ -101,7 +109,7 @@ const callGemini = async (body, apiKey, label) => {
   const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
