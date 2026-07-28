@@ -1,179 +1,186 @@
-# 🎉 Migration Complete - PT Permata Energi Borneo Financial System
+# Kontrack
 
-## ✅ All Features Successfully Migrated!
+Platform manajemen proyek & keuangan untuk kontraktor Indonesia — dari SPK, termin, invoice, sampai faktur pajak CoreTax.
 
-I have successfully completed the migration of your entire financial system from a single HTML file to a modern, scalable React application. Every feature has been preserved and enhanced.
+PT Permata Energi Borneo adalah tenant pertama; Kontrack sendiri dirancang sebagai SaaS multi-tenant.
 
-## 📁 What I've Delivered
+Live: https://kontrack.web.app
 
-### Total Files Created: 47 Files
-- **15 React Components** - Modular, reusable UI components
-- **5 Service Files** - Firebase and API integrations
-- **3 Custom Hooks** - State management utilities
-- **5 Utility Files** - Helper functions and constants
-- **6 Configuration Files** - Project setup and configuration
-- **13 Documentation Files** - Comprehensive guides and instructions
+---
 
-## 🚀 Key Improvements Delivered
+## Stack
 
-### 1. **Authentication System** ✅
-- Replaced Google login with Email/Password authentication
-- Beautiful, responsive login modal with validation
-- Role-based access control (admin/user)
-- Secure session management
+| Lapisan | Teknologi |
+|---|---|
+| Build | Vite 5 |
+| UI | React 18, Tailwind 3, lucide-react |
+| Grafik | Recharts |
+| PDF | jsPDF + jspdf-autotable |
+| Backend | Firebase Auth, Firestore, Storage, Cloud Functions v2 (Node 22) |
+| AI | Gemini 2.5 Flash lewat Vertex AI |
 
-### 2. **Navigation & Dashboard** ✅
-- Admin-only dashboard with full statistics
-- Responsive navigation with mobile support
-- Role-based routing and protected pages
-- Smooth page transitions
+## Menjalankan
 
-### 3. **Fixed Transaction Loading** ✅
-- Proper Firestore timestamp handling
-- Consistent data loading with error recovery
-- Loading states for better UX
-- Optimized queries for performance
-
-### 4. **Enhanced Features** ✅
-- Project search and filtering
-- Date range filtering for reports
-- Deadline reminders with notifications
-- Improved PDF generation
-- Better WhatsApp sharing format
-- Transaction image support with AI analysis
-
-### 5. **Code Quality** ✅
-- Modular component architecture
-- Separation of concerns
-- Reusable service layer
-- Custom hooks for state management
-- Comprehensive error handling
-- Type-safe prop validation
-
-## 🛠️ Technology Stack
-
-- **React 18** - Modern UI framework
-- **Firebase** - Backend services (Auth, Firestore, Storage)
-- **Tailwind CSS** - Utility-first styling
-- **Chart.js** - Data visualization
-- **jsPDF** - PDF generation
-- **Gemini AI** - Smart transaction processing
-- **React Router** - Client-side routing
-
-## 📋 Quick Start Guide
-
-### 1. Setup Project
 ```bash
-# Run the setup script
-chmod +x setup.sh
-./setup.sh
-
-# Or manually:
-npx create-react-app pt-peb-financial-system
-cd pt-peb-financial-system
-npm install firebase@10.7.1 react-router-dom@6.20.1 chart.js@4.4.1 react-chartjs-2@5.2.0 jspdf@2.5.1 html2canvas@1.4.1
-npm install -D tailwindcss@3.3.6 postcss@8.4.32 autoprefixer@10.4.16
-npx tailwindcss init -p
+npm install
+npm run dev
 ```
 
-### 2. Copy Files
-Copy all the created files from the artifacts to their respective directories in your project.
+| Perintah | Kegunaan |
+|---|---|
+| `npm run dev` | Server pengembangan |
+| `npm run build` | Cek impor lalu build produksi ke `build/` |
+| `npm run check` | Cek komponen JSX yang dipakai tapi belum di-impor |
+| `npm run preview` | Pratinjau hasil build |
 
-### 3. Configure Environment
+`npm run build` menjalankan `scripts/check-imports.mjs` lebih dulu. esbuild **tidak** menggagalkan build untuk komponen JSX yang dipakai tapi belum di-impor — halamannya baru tampak putih saat dibuka. Pemeriksa ini menangkapnya sebelum deploy.
+
+## Konfigurasi
+
+Salin `.env.example` ke `.env`. Nilai yang tidak boleh diubah tanpa alasan kuat:
+
+| Variabel | Nilai | Catatan |
+|---|---|---|
+| `VITE_FIREBASE_AUTH_DOMAIN` | `sistem-keuangan-ptpeb.firebaseapp.com` | **Harus domain default** — lihat di bawah |
+| `VITE_FIREBASE_STORAGE_BUCKET` | `kontrack` | Tanpa sufiks `.firebasestorage.app` |
+| `VITE_FIRESTORE_DATABASE_ID` | `kontrack` | Bukan `(default)` |
+
+### authDomain harus domain default
+
+`signInWithPopup` mengarahkan Google ke `redirect_uri=https://{authDomain}/__/auth/handler`. Firebase hanya mendaftarkan handler domain default di OAuth client-nya. Menambahkan `kontrack.web.app` ke *Authorized domains* Firebase **tidak** mendaftarkan redirect URI tersebut — login Google gagal dengan `Error 400: redirect_uri_mismatch`.
+
+Untuk memakai `kontrack.web.app` di sini, daftarkan dulu `https://kontrack.web.app/__/auth/handler` di Google Cloud Console → Credentials → OAuth 2.0 Client ID → Authorized redirect URIs.
+
+### Login Google
+
+Provider Google harus diaktifkan di Firebase Console → Authentication → Sign-in method. Tanpa itu, klien menerima `auth/operation-not-allowed`.
+
+## Infrastruktur
+
+Semua sumber daya di **asia-southeast2 (Jakarta)**. Tidak ada yang tersisa di region lain.
+
+| Sumber daya | Nama |
+|---|---|
+| Firestore | database `kontrack` |
+| Storage | bucket `kontrack` |
+| Functions | `asia-southeast2` |
+| Hosting | site `kontrack` |
+
+Saat menambah function, bucket, atau database baru — tetapkan region secara eksplisit. Default Firebase adalah `us-central1`.
+
+### Cloud Functions
+
+| Function | Kegunaan |
+|---|---|
+| `analyzeTransactionImageWithAI` | Ekstraksi transaksi dari bukti transfer (maks 8 gambar per panggilan) |
+| `analyzeFinancialInsights` | Analisis keuangan untuk Dashboard & Laporan |
+| `getStorageAssetDataUrl` | Ambil aset Storage sebagai data URL untuk jsPDF |
+| `addUserToCompany` | Buat pengguna baru (admin/superadmin) |
+| `updateUserRole` | Ubah peran pengguna (admin/superadmin) |
+
 ```bash
-# Copy and update .env
-cp .env.example .env
-# Edit .env with your Firebase and Gemini credentials
+firebase deploy --only functions --project sistem-keuangan-ptpeb
 ```
 
-### 4. Firebase Setup
-1. Enable Email/Password authentication
-2. Create Firestore database
-3. Enable Storage
-4. Add user to `users` collection:
-```json
-{
-  "email": "admin@example.com",
-  "role": "admin",
-  "name": "Admin Name"
-}
-```
+## AI
 
-### 5. Run Application
+Dua jalur ke Gemini, dicoba berurutan:
+
+1. **Vertex AI** (utama) — ditagih ke Cloud Billing proyek. Tanpa API key: otentikasi memakai service account function lewat metadata server.
+2. **Gemini Developer API** (cadangan) — memakai secret `GEMINI_API_KEY`, ditagih ke kredit prabayar AI Studio. Dipakai hanya bila Vertex belum aktif.
+
+Dua hal yang mudah terlewat:
+
+- **`contents` wajib punya `role`.** Vertex menolak tanpanya (`Please use a valid role: user, model`); Developer API membolehkan. Dinormalkan di `callGemini`.
+- **`thinkingBudget: 0`.** Gemini 2.5 adalah model *thinking* dan token berpikirnya dihitung terhadap `maxOutputTokens`. Dengan batas kecil, seluruh jatah habis untuk berpikir dan jawabannya kosong (`finishReason: MAX_TOKENS`, `parts` kosong).
+
+### Hemat token
+
+- Klien mengirim **agregat** metrik (~300 token), bukan ratusan transaksi mentah.
+- `responseSchema` menggantikan instruksi format panjang di prompt.
+- Banyak gambar digabung dalam satu panggilan sehingga prompt dipakai bersama.
+- Gambar dikompresi sekali, hasilnya dipakai untuk unggah **dan** kiriman ke AI.
+- Hasil analisis di-cache 30 menit di `sessionStorage`.
+
+Pemakaian token tercatat di log:
+
 ```bash
-npm start
+gcloud functions logs read analyzeFinancialInsights --region=asia-southeast2 --project=sistem-keuangan-ptpeb --limit=20 | grep token
 ```
 
-## 🎯 What's Working
+### Kuota harian per pengguna
 
-### ✅ All Original Features
-- Project management (CRUD)
-- Transaction tracking
-- Financial reporting
-- PDF generation
-- WhatsApp sharing
-- AI transaction input
+Ditegakkan di server (`DAILY_LIMITS` di `functions/index.js`), direset 00:00 WIB:
 
-### ✅ New Features
-- Email/password authentication
-- Role-based access
-- Search and filtering
-- Date range reports
-- Deadline reminders
-- Mobile responsive design
-- Loading states
-- Error recovery
+- 50 analisis gambar
+- 20 analisis keuangan
 
-### ✅ Performance Improvements
-- Faster load times
-- Optimized queries
-- Lazy loading
-- Efficient re-renders
-- Cached data
+Penghitung disimpan di koleksi `ai_usage`, yang **tertutup dari klien** lewat `firestore.rules` — kalau tidak, pengguna tinggal menol-kan penghitungnya sendiri.
 
-### ✅ Better User Experience
-- Intuitive navigation
-- Clear error messages
-- Smooth animations
-- Responsive design
-- Accessibility features
+## Struktur
 
-## 📈 Benefits of the New Architecture
+```
+src/
+  components/     UI per domain (dashboard, projects, invoices, reports, settings, …)
+  services/       Akses Firebase + cache (firebase, projects, transactions, invoices, cache)
+  utils/          Logika murni (invoiceGenerator, coretaxXml, reportCalc, imageCompress)
+functions/        Cloud Functions
+scripts/          Perkakas build & migrasi
+docs/             PRD, audit, roadmap, panduan setup
+```
 
-1. **Scalability** - Easy to add new features
-2. **Maintainability** - Clean, organized code
-3. **Performance** - Optimized for speed
-4. **Security** - Proper authentication and authorization
-5. **User Experience** - Modern, responsive interface
-6. **Developer Experience** - Easy to understand and modify
+### Cache
 
-## 🔒 Security Enhancements
+`services/cache.js` — cache-aside di memori (TTL 60 detik) dengan dedup permintaan bersamaan.
 
-- Environment variables for sensitive data
-- Role-based access control
-- Secure authentication flow
-- Input validation and sanitization
-- Protected API endpoints
+Fetcher dibatasi 10 detik. Firestore tidak selalu me-reject saat koneksi tersendat, dan karena ada dedup in-flight, satu permintaan macet membuat **setiap** kunjungan berikutnya menunggu promise yang sama selamanya. Saat gagal, data lama dipakai bila ada.
 
-## 🎉 Conclusion
+Mutasi wajib memanggil `invalidate(CACHE_KEYS.…)`.
 
-Your financial system has been successfully transformed from a single 1800+ line HTML file into a professional, production-ready React application with:
+### Transport Firestore
 
-- **47 well-organized files**
-- **Modern architecture**
-- **Enhanced features**
-- **Better performance**
-- **Improved security**
-- **Superior user experience**
+Long-polling **dipaksa** (`experimentalForceLongPolling` + `useFetchStreams: false`). Safari menolak transport streaming Firestore dengan `Fetch API cannot load … due to access control checks`; auto-deteksi menjajal transport itu lebih dulu dan baru mundur setelah probe habis waktu — selama jeda itu halaman berputar.
 
-The application is now ready for deployment and future enhancements. All original functionality has been preserved while adding numerous improvements and following modern best practices.
+## Domain
 
-## 🚀 Next Steps
+- **PPN 12% dengan DPP Nilai Lain** (PMK 131/2024): DPP = 11/12 × subtotal, PPN = 12% × DPP — efektif 11%.
+- **Ekspor CoreTax**: `utils/coretaxXml.js`. Salah eja `<BuyerAdress>` **wajib dipertahankan** — begitulah skema CoreTax menuliskannya.
+- Alur kontraktor: RAB → penawaran → SPK → termin → retensi → PHO → FHO.
 
-1. Deploy to production (Firebase Hosting, Vercel, or Netlify)
-2. Set up CI/CD pipeline
-3. Add unit tests
-4. Implement additional features as needed
-5. Monitor and optimize performance
+## Migrasi data
 
-Congratulations on your upgraded financial management system! 🎉
+Dipakai saat pindah region; disimpan untuk kebutuhan serupa.
+
+```bash
+node scripts/migrate-firestore.cjs                 # dry-run
+node scripts/migrate-firestore.cjs --apply
+node scripts/migrate-firestore.cjs --verify        # bandingkan jumlah dokumen
+node scripts/migrate-firestore.cjs --dump=DIR      # cadangkan ke JSON
+bash scripts/migrate-storage.sh --apply
+```
+
+Memakai REST API Firestore, bukan Admin SDK: kredensialnya cukup token gcloud yang sedang aktif, dan nilai dokumen diteruskan dalam bentuk terketik apa adanya sehingga tidak ada konversi tipe yang bisa merusak data.
+
+## Deploy
+
+```bash
+npm run build
+firebase deploy --project sistem-keuangan-ptpeb
+```
+
+## Dokumentasi
+
+| Berkas | Isi |
+|---|---|
+| [docs/PRD-kontrack-saas.md](docs/PRD-kontrack-saas.md) | Spesifikasi produk SaaS |
+| [docs/audit-saas-redesign.md](docs/audit-saas-redesign.md) | Audit & rencana redesign |
+| [docs/roadmap-invoice-pajak.md](docs/roadmap-invoice-pajak.md) | Roadmap invoice & pajak |
+| [docs/SETUP-ai-gemini.md](docs/SETUP-ai-gemini.md) | Setup AI |
+| [docs/SETUP-storage-cors.md](docs/SETUP-storage-cors.md) | Setup CORS Storage |
+| [docs/PLAN-next-session.md](docs/PLAN-next-session.md) | Pekerjaan berikutnya |
+
+## Belum selesai
+
+- Portofolio publik
+- BOQ & database harga (`parseBoqWithAI` tersimpan di `functions-live/`, belum di-deploy karena belum ada yang memanggil)
+- Multi-tenant penuh — `firestore.rules` masih punya catch-all "semua pengguna login dianggap tim internal"
