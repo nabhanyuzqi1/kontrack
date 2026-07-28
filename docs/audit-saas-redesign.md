@@ -1,5 +1,10 @@
 # Kontrack — Audit & Desain Redesign SaaS
 
+> **Dokumen historis.** Ditulis 2026-07-21 sebagai dasar perancangan; sebagian besar
+> sudah terbangun. Untuk status terkini lihat [ROADMAP.md](ROADMAP.md), untuk aturan
+> kerja lihat [../AGENTS.md](../AGENTS.md). Detail infrastruktur di sini sudah usang —
+> semua sumber daya kini di asia-southeast2 dengan database `kontrack`.
+
 Tanggal: 2026-07-21 · Basis audit: commit `a78b862` (main)
 
 ---

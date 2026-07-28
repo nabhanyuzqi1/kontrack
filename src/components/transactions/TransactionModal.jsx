@@ -236,6 +236,9 @@ const TransactionModal = ({
             </Select>
           </Field>
 
+          {/* step="any", BUKAN kelipatan tetap. Dengan step="1000" validasi HTML5
+              menolak nominal seperti 389500 dan peramban menyarankan pembulatan
+              ke 389000/390000. Nominal rupiah bisa bernilai berapa pun. */}
           <Field label="Nominal (Rp)" required error={errors.amount}>
             <Input
               type="number"
@@ -244,7 +247,7 @@ const TransactionModal = ({
               onChange={handleChange}
               error={errors.amount}
               min="0"
-              step="1000"
+              step="any"
               placeholder="0"
               disabled={loading}
             />

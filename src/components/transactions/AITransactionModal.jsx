@@ -294,7 +294,7 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
                         value={r.amount}
                         onChange={(e) => updateResult(idx, { amount: Number(e.target.value) })}
                         min="0"
-                        step="1000"
+                        step="any"
                       />
                     </Field>
                     <div className="sm:col-span-2">

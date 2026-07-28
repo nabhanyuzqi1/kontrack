@@ -172,15 +172,17 @@ firebase deploy --project sistem-keuangan-ptpeb
 
 | Berkas | Isi |
 |---|---|
-| [docs/PRD-kontrack-saas.md](docs/PRD-kontrack-saas.md) | Spesifikasi produk SaaS |
-| [docs/audit-saas-redesign.md](docs/audit-saas-redesign.md) | Audit & rencana redesign |
-| [docs/roadmap-invoice-pajak.md](docs/roadmap-invoice-pajak.md) | Roadmap invoice & pajak |
-| [docs/SETUP-ai-gemini.md](docs/SETUP-ai-gemini.md) | Setup AI |
-| [docs/SETUP-storage-cors.md](docs/SETUP-storage-cors.md) | Setup CORS Storage |
-| [docs/PLAN-next-session.md](docs/PLAN-next-session.md) | Pekerjaan berikutnya |
+| [AGENTS.md](AGENTS.md) | **Instruksi kerja untuk agen AI mana pun** — konteks, cara kerja, jebakan. Baca ini dulu. |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Status & rencana. Perbarui setiap menyelesaikan sesuatu. |
+| [docs/SETUP-ai-gemini.md](docs/SETUP-ai-gemini.md) | Jalur AI, kuota, hemat token |
+| [docs/PRD-kontrack-saas.md](docs/PRD-kontrack-saas.md) | Spesifikasi produk SaaS (historis) |
+| [docs/audit-saas-redesign.md](docs/audit-saas-redesign.md) | Audit & rencana redesign (historis) |
 
 ## Belum selesai
 
-- Portofolio publik
-- BOQ & database harga (`parseBoqWithAI` tersimpan di `functions-live/`, belum di-deploy karena belum ada yang memanggil)
-- Multi-tenant penuh — `firestore.rules` masih punya catch-all "semua pengguna login dianggap tim internal"
+Ringkasnya: portofolio publik, BOQ & database harga, multi-tenant penuh.
+Daftar lengkap beserta urutan dan alasannya di [docs/ROADMAP.md](docs/ROADMAP.md).
+
+---
+
+Mengerjakan repo ini dengan agen AI? Baca **[AGENTS.md](AGENTS.md)** lebih dulu.
