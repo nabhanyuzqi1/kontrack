@@ -14,7 +14,7 @@ Live: https://kontrack.web.app
 |---|---|
 | Build | Vite 5 |
 | UI | React 18, Tailwind 3, lucide-react |
-| Grafik | Recharts |
+| Grafik | Chart.js + react-chartjs-2 |
 | PDF | jsPDF + jspdf-autotable |
 | Backend | Firebase Auth, Firestore, Storage, Cloud Functions v2 (Node 22) |
 | AI | Gemini 2.5 Flash lewat Vertex AI |
