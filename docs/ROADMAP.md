@@ -101,10 +101,14 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
 
 ## Belum terverifikasi
 
-- [ ] Dashboard & Laporan dengan **data Firestore sungguhan**. Tata letak dan
-      perhitungan Laporan sudah diperiksa lewat `.preview/` (data contoh, tanpa
-      login), tapi jalur Firestore + cache + auth belum — verifikasi terhenti di
-      halaman login karena agen tidak memasukkan password.
+- [ ] Dashboard & Laporan **dirender dengan data Firestore sungguhan**. Jalur data
+      sudah diperiksa read-only langsung ke Firestore `kontrack` (REST, sesi CLI):
+      261 transaksi, 21 invoice, 5 proyek, 2 klien, 3 pengguna. Temuan bentuk data:
+      `transactions.date` seluruhnya string; `invoices.issueDate` dan `taxPaidAt`
+      **campuran** Timestamp dan string (inilah alasan `toDate` dipusatkan);
+      tidak ada `totals` maupun `taxPaymentAmount` di invoice; `projects` tidak
+      punya `retentionPct`. Yang belum: render UI-nya sendiri, karena perlu login —
+      agen tidak memasukkan password.
 - [ ] Kuota AI harian saat benar-benar tercapai.
 
 ---
