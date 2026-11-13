@@ -3,7 +3,7 @@
 Sumber tunggal status pekerjaan. **Perbarui setiap menyelesaikan sesuatu**, supaya
 agen/sesi berikutnya tidak mengulang yang sudah selesai.
 
-Diperbarui: 2026-07-28
+Diperbarui: 2026-11-14
 
 Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.md`
 (dua berkas itu sudah dihapus karena isinya mulai saling bertentangan).
@@ -56,6 +56,16 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 - Kompresi WebP sebelum unggah; mode `preserveAlpha` untuk tanda tangan & kop surat
 - App Check reCAPTCHA v3
 - Cache-aside berlapis dengan batas waktu
+- `firestore.indexes.json` ditulis dari database live, bukan lagi kosong: 1 indeks
+  composite `transactions` (projectId ASC + date DESC + `__name__` DESC).
+  Terverifikasi identik dengan keluaran `firebase firestore:indexes --database kontrack`
+  dan lolos validator `firebase-tools`. Belum di-`firebase deploy` (menunggu izin
+  pemilik) — selama isinya sama dengan server, deploy hanya melaporkan tidak ada
+  perubahan.
+  Satu-satunya kueri di kode yang **tidak** tercakup indeks: `getProjectsByStatus`
+  (`status` == + `startDate` desc). Saat ini mati — `hooks/useProjects.js`, satu-satunya
+  pemanggilnya, tidak diimpor komponen mana pun. Kalau hook itu dihidupkan lagi,
+  indeksnya harus dibuat lebih dulu atau kueri akan gagal di runtime.
 
 ---
 
@@ -85,29 +95,26 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
    Analisis Tahunan.
 2. **Kartu proyek** — pemilik masih belum puas. Referensi: Pinterest/Dribbble.
    Konsepnya *detailed, solution, tidak ribet*.
-3. **Deploy `firestore.indexes.json`** — saat ini kosong walau indeks composite
-   sudah ada di database (dibuat manual). Kalau tidak dituliskan, indeks itu tidak
-   bisa direproduksi ke environment lain.
 
 ### Prioritas 2 — fitur yang sudah dijanjikan
 
-4. **Portofolio publik** — halaman profil kontraktor yang bisa dibagikan.
+3. **Portofolio publik** — halaman profil kontraktor yang bisa dibagikan.
    Butuh share-token; jangan pakai `allow read: if true` seperti `projects` sekarang.
-5. **BOQ & database harga** — 14 berkas RAB/BOQ ada di `~/Downloads`.
+4. **BOQ & database harga** — 14 berkas RAB/BOQ ada di `~/Downloads`.
    `parseBoqWithAI` tersimpan di `functions-live/`, belum di-deploy karena belum
    ada yang memanggil. Deploy bersamaan dengan fiturnya, bukan sebelumnya.
-6. **Webhook WhatsApp** — teks share sudah rapi; sisanya kirim gambar/diagram
+5. **Webhook WhatsApp** — teks share sudah rapi; sisanya kirim gambar/diagram
    otomatis + `settings.notifications.whatsappWebhookUrl`.
 
 ### Prioritas 3 — utang arsitektur
 
-7. **Multi-tenant penuh.** `firestore.rules` masih punya catch-all "semua pengguna
+6. **Multi-tenant penuh.** `firestore.rules` masih punya catch-all "semua pengguna
    login dianggap tim internal". Akarnya: koleksi `users` memakai ID acak dengan
    field `email`, sehingga rules tidak bisa mengecek peran.
    Urutan yang benar: pindahkan `users` ke `users/{uid}` → pasang custom claims →
    baru hapus catch-all.
-8. **`projects` masih public-read** demi share-link mitra. Ganti dengan share-token.
-9. **Pisahkan `functions/index.js`** kalau sudah melewati ~800 baris.
+7. **`projects` masih public-read** demi share-link mitra. Ganti dengan share-token.
+8. **Pisahkan `functions/index.js`** kalau sudah melewati ~800 baris.
 
 ---
 
