@@ -1,0 +1,94 @@
+// Mock data & layanan untuk pratinjau lokal halaman Laporan (tanpa login).
+// Folder .preview hanya dipakai saat memeriksa tampilan, tidak ikut di-commit.
+
+export const projects = [
+  {
+    id: 'p1',
+    name: 'Rehabilitasi Jalan Poros Kasongan',
+    partner: 'Dinas PUPR Katingan',
+    status: 'ongoing',
+    value: 4850000000,
+    paidAmount: 2182500000,
+    taxRate: 11,
+    startDate: '2026-03-04',
+    endDate: '2026-12-20'
+  },
+  {
+    id: 'p2',
+    name: 'Pembangunan Gedung Serbaguna Desa Baun Bango',
+    partner: 'Pemerintah Desa Baun Bango',
+    status: 'retensi',
+    value: 1275000000,
+    paidAmount: 1180000000,
+    taxRate: 11,
+    startDate: '2025-09-01',
+    endDate: '2026-06-30'
+  },
+  {
+    id: 'p3',
+    name: 'Peningkatan Drainase Ruas Jalan Tumbang Samba',
+    partner: 'Dinas PUPR Katingan',
+    status: 'selesai',
+    value: 780000000,
+    paidAmount: 780000000,
+    taxRate: 11,
+    startDate: '2026-01-12',
+    endDate: '2026-05-28'
+  },
+  {
+    id: 'p4',
+    name: 'Pekerjaan Cut and Fill Lahan Gudang',
+    partner: 'CV Mitra Borneo',
+    status: 'akan-datang',
+    value: 320000000,
+    paidAmount: 0,
+    taxRate: 0,
+    startDate: '2026-12-01',
+    endDate: '2027-02-15'
+  }
+];
+
+const ts = (iso) => ({ seconds: Math.floor(new Date(iso).getTime() / 1000), nanoseconds: 0 });
+
+export const transactions = [
+  { id: 't1', projectId: 'p1', type: 'income', amount: 1455000000, date: '2026-03-20', category: 'Pembayaran' },
+  { id: 't2', projectId: 'p1', type: 'expense', amount: 612000000, date: '2026-03-24', category: 'Material', imageUrl: 'x' },
+  { id: 't3', projectId: 'p1', type: 'expense', amount: 148000000, date: '2026-04-02', category: 'Upah Karyawan/Tukang' },
+  { id: 't4', projectId: 'p1', type: 'income', amount: 727500000, date: '2026-06-15', category: 'Pembayaran' },
+  { id: 't5', projectId: 'p2', type: 'income', amount: 600000000, date: '2026-01-08', category: 'Pembayaran' },
+  { id: 't6', projectId: 'p2', type: 'expense', amount: 335000000, date: '2026-01-19', category: 'Material', imageUrl: 'x' },
+  { id: 't7', projectId: 'p2', type: 'expense', amount: 92400000, date: '2026-02-11', category: 'Operasional' },
+  { id: 't8', projectId: 'p3', type: 'income', amount: 780000000, date: ts('2026-05-30T10:15:00+07:00'), category: 'Pembayaran' },
+  { id: 't9', projectId: 'p3', type: 'expense', amount: 214500000, date: '2026-02-02', category: 'Material', imageUrl: 'x' },
+  { id: 't10', projectId: 'p3', type: 'expense', amount: 58600000, date: '2026-03-11', category: 'Upah Karyawan/Tukang' },
+  { id: 't11', projectId: 'p1', type: 'expense', amount: 37750000, date: '2026-10-04', category: 'Pengeluaran Lain' },
+  { id: 't12', projectId: 'p2', type: 'income', amount: 580000000, date: '2026-11-03', category: 'Pembayaran' },
+  { id: 't13', projectId: 'p1', type: 'expense', amount: 96500000, date: '2026-11-09', category: 'Material', imageUrl: 'x' },
+  { id: 't14', projectId: 'p2', type: 'expense', amount: 42750000, date: '2026-11-12', category: 'Operasional' }
+];
+
+export const invoices = [
+  {
+    id: 'i1', status: 'paid', number: '001/INV/PEB/III/2026',
+    issueDate: '2026-03-15', dppNilaiLain: 1310810810, pajak11: 157297297,
+    taxPaidAt: '2026-04-22', taxPaymentAmount: 157297297,
+    grandTotal: 1468108107, projectId: 'p1'
+  },
+  {
+    id: 'i2', status: 'paid', number: '002/INV/PEB/VI/2026',
+    issueDate: '2026-06-10', dppNilaiLain: 655405405, pajak11: 78648648,
+    taxPaidAt: '2026-07-18', taxPaymentAmount: 78648648,
+    grandTotal: 734054053, projectId: 'p1'
+  },
+  {
+    id: 'i3', status: 'paid', number: '003/INV/PEB/X/2026',
+    issueDate: '2026-10-12', dppNilaiLain: 522522522, pajak11: 62702702,
+    grandTotal: 585225224, projectId: 'p2'
+  },
+  {
+    id: 'i4', status: 'sent', number: '004/INV/PEB/XI/2026',
+    issueDate: { seconds: Math.floor(new Date('2026-11-06T09:00:00+07:00').getTime() / 1000) },
+    dppNilaiLain: 261261261, pajak11: 31351351,
+    grandTotal: 292612612, projectId: 'p1'
+  }
+];

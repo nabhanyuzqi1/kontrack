@@ -61,6 +61,13 @@ Ini pernah menyelamatkan dua bug: `finishReason: MAX_TOKENS` dengan jawaban koso
 dan Vertex menolak `contents` tanpa `role`. Keduanya hanya ketahuan karena
 endpoint benar-benar dipanggil.
 
+Untuk **tampilan** yang ada di balik login, build hijau juga bukan bukti. Pakai
+`.preview/` — harness Vite yang merender komponen asli dengan data contoh, tanpa
+kredensial (`./node_modules/.bin/vite --config .preview/vite.config.mjs`, port
+5199). Perhatikan layar 390px: di lebar itu tab panjang dan tabel lebar paling
+sering terpotong. Data contoh tidak membuktikan jalur Firestore; katakan terus
+terang bahwa bagian itu belum terverifikasi.
+
 ### Komentar menjelaskan SEBAB, bukan isi kode
 
 Tulis komentar untuk hal yang tidak terbaca dari kodenya: kenapa ada batas waktu,

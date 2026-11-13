@@ -1,11 +1,14 @@
 // src/components/reports/TaxMonthlyReport.jsx
-// Ringkasan pajak per bulan: PPN terhutang vs disetor, PPh dipotong.
+// Ringkasan pajak per bulan: PPN terhutang vs disetor, PPh dipotong, tenggat setor.
 import React, { useMemo } from 'react';
-import { TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { TriangleAlert, CheckCircle2, Landmark } from 'lucide-react';
 import { Card, CardHeader } from '../ui/Card';
 import StatCard from '../ui/StatCard';
-import { formatCurrency } from '../../utils/formatters';
-import { monthlyTaxReport } from '../../utils/reportCalc';
+import { Badge } from '../ui/Badge';
+import EmptyState from '../ui/EmptyState';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import { monthlyTaxReport, taxDueStatus } from '../../utils/reportCalc';
+import TaxMonthlyChart from './TaxMonthlyChart';
 
 const Th = ({ children, className = '' }) => (
   <th
@@ -15,8 +18,23 @@ const Th = ({ children, className = '' }) => (
   </th>
 );
 
+// Warna tenggat: hanya bulan yang punya aktivitas pajak yang diberi status.
+const DUE_TONE = { telat: 'red', jalan: 'amber', lunas: 'emerald', lebih: 'violet' };
+
 const TaxMonthlyReport = ({ invoices, year }) => {
   const { rows, total, selisih } = useMemo(() => monthlyTaxReport(invoices, year), [invoices, year]);
+
+  const hasData = total.invoiceCount > 0 || total.ppnDisetor > 0;
+
+  if (!hasData) {
+    return (
+      <EmptyState
+        icon={Landmark}
+        title={`Belum ada catatan pajak untuk ${year}`}
+        description="Rekap terbentuk dari invoice yang terbit pada tahun ini dan setoran PPN yang dicatat di Dokumen Pajak."
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -66,6 +84,13 @@ const TaxMonthlyReport = ({ invoices, year }) => {
       )}
 
       <Card>
+        <CardHeader title={`PPN Terhutang vs Disetor ${year}`} />
+        <div className="p-4 sm:p-5">
+          <TaxMonthlyChart rows={rows} />
+        </div>
+      </Card>
+
+      <Card>
         <CardHeader title={`Rekap Pajak Bulanan ${year}`} />
         <div className="custom-scrollbar overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100">
@@ -78,12 +103,16 @@ const TaxMonthlyReport = ({ invoices, year }) => {
                 <Th className="text-right">PPN Disetor</Th>
                 <Th className="text-right">PPh Dipotong</Th>
                 <Th className="text-right">Selisih</Th>
+                <Th>Status Setor</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 bg-white">
               {rows.map((r) => {
                 const diff = r.ppnTerhutang - r.ppnDisetor;
                 const empty = r.invoiceCount === 0 && r.ppnDisetor === 0;
+                // Bulan tanpa aktivitas tidak diberi status tenggat: "Lunas" untuk
+                // bulan yang belum terjadi akan menyesatkan.
+                const due = empty ? null : taxDueStatus(year, r.month, diff);
                 return (
                   <tr key={r.month} className={empty ? 'text-slate-300' : 'hover:bg-slate-50/60'}>
                     <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-700">
@@ -111,6 +140,22 @@ const TaxMonthlyReport = ({ invoices, year }) => {
                     >
                       {diff !== 0 ? formatCurrency(diff) : '—'}
                     </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm">
+                      {due ? (
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge tone={DUE_TONE[due.state]}>{due.label}</Badge>
+                          {/* Tanggal tenggat ditulis apa adanya: badge "3 hari lagi"
+                              tidak menjawab "kapan tepatnya" saat rapat dengan pemilik. */}
+                          {due.state !== 'lunas' && (
+                            <span className="text-[11px] text-slate-400">
+                              {formatDate(due.due)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -134,10 +179,21 @@ const TaxMonthlyReport = ({ invoices, year }) => {
                 >
                   {formatCurrency(selisih)}
                 </td>
+                <td className="px-4 py-3" />
               </tr>
             </tfoot>
           </table>
         </div>
+        <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
+          Tenggat setor PPN masa adalah akhir bulan berikutnya. Lewat tanggal itu, selisih yang
+          belum disetor dikenakan sanksi bunga — karena itu bulannya ditandai, bukan hanya
+          nominalnya.
+        </p>
+        {/* Tabel lebih lebar dari layar ponsel; tanpa petunjuk, kolom terakhir
+            terbaca seolah hilang, bukan bisa digeser. */}
+        <p className="px-4 pb-3 text-xs text-slate-400 sm:hidden">
+          Geser tabel ke samping untuk melihat kolom lainnya.
+        </p>
       </Card>
     </div>
   );

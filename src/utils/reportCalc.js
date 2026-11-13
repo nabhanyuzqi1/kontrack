@@ -305,3 +305,47 @@ export const availableYears = (...datasets) => {
   const list = [...years].sort((a, b) => b - a);
   return list.length ? list : [new Date().getFullYear()];
 };
+
+/**
+ * Tanggal dari Firestore bisa berbentuk Timestamp (data lama/impor), ISO string,
+ * atau Date. `new Date(t.date)` menghasilkan Invalid Date untuk Timestamp, dan
+ * satu-satunya gejalanya adalah laporan yang kosong tanpa error — jadi
+ * normalisasinya dipusatkan di sini dan dipakai semua pemanggil.
+ */
+export const toDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'object' && typeof value.seconds === 'number') {
+    return new Date(value.seconds * 1000);
+  }
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+/** Rentang tanggal inklusif; batas akhir dihitung sampai 23:59:59 hari itu. */
+export const withinRange = (value, startDate, endDate) => {
+  const d = toDate(value);
+  if (!d) return false;
+  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const end = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
+  if (start && d < start) return false;
+  if (end && d > end) return false;
+  return true;
+};
+
+/**
+ * Jatuh tempo penyetoran PPN masa: paling lambat akhir bulan berikutnya.
+ * Ditampilkan di rekap pajak karena sanksi bunga dihitung sejak tanggal ini —
+ * selisih yang masih terbuka setelah tenggat bukan sekadar angka.
+ */
+export const taxDueDate = (year, month) => new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+/** Status tenggat satu baris rekap pajak bulanan. */
+export const taxDueStatus = (year, month, selisih, now = new Date()) => {
+  const due = taxDueDate(year, month);
+  const daysLeft = Math.ceil((due - now) / 86400000);
+  if (selisih < 0) return { due, daysLeft, state: 'lebih', label: 'Lebih setor' };
+  if (selisih === 0) return { due, daysLeft, state: 'lunas', label: 'Lunas' };
+  if (now > due) return { due, daysLeft, state: 'telat', label: 'Lewat tenggat' };
+  return { due, daysLeft, state: 'jalan', label: `${daysLeft} hari lagi` };
+};

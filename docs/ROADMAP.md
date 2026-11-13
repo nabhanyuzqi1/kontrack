@@ -19,6 +19,9 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 - `scripts/check-imports.mjs` masuk ke `npm run build` — menangkap komponen JSX yang
   dipakai tapi belum di-impor (esbuild membiarkannya lolos, halamannya jadi putih)
 - `ErrorBoundary`, skeleton shimmer
+- `.preview/` — harness Vite untuk memeriksa tampilan halaman tanpa login: layanan
+  Firestore diganti shim berisi data contoh lewat alias, jadi tidak butuh
+  kredensial. Baru mencakup Laporan. `vite --config .preview/vite.config.mjs`
 
 ### Proyek, transaksi, klien
 - Daftar & kartu proyek, modal tambah/ubah, halaman detail
@@ -41,6 +44,23 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 - Grafik dipindah ke Dashboard; Dashboard fokus ke transaksi terbaru + daftar proyek
 - Ekspor PDF transaksi: teks tidak lagi terpotong, header berulang, baris tidak
   terbelah antar-halaman, footer TOTAL
+- **Ringkasan dipoles**: kartu dipisah jadi dua kelompok yang jujur — "Posisi
+  Kontrak" (seluruh waktu) dan "Arus Kas" (mengikuti periode). Sebelumnya empat
+  kartu mencampur angka sepanjang waktu dengan angka terfilter tanpa keterangan.
+  Ditambah kartu Piutang Termin & Retensi Tertahan (dua penyebab utama jeda arus
+  kas), preset periode (Semua/Bulan/Kuartal/Tahun), dan peringatan bila rentang
+  tanggal terbalik — dulu rentang terbalik menghasilkan laporan kosong tanpa
+  penjelasan.
+- **Tanggal transaksi dinormalkan sekali** (`reportCalc.toDate`): data lama
+  menyimpan Timestamp, bukan ISO string, dan `new Date(t.date)` membuat laporan
+  kosong tanpa error. Pengelompokan bulan juga tidak lagi memakai `toISOString()`
+  (UTC) — transaksi 1 Januari 00:30 WIB dulu jatuh ke Desember.
+- **Pajak Bulanan dipoles**: grafik PPN terhutang vs disetor per bulan, kolom
+  "Status Setor" berisi tenggat (akhir bulan berikutnya) beserta tanggalnya, dan
+  empty state saat tahun belum punya catatan. Bulan tanpa aktivitas tidak diberi
+  status "Lunas" — itu menyesatkan untuk bulan yang belum terjadi.
+- Label tab dipendekkan di mobile dan tabel lebar diberi petunjuk geser: tab
+  ketiga dulu terpotong di layar 390px.
 
 ### AI
 - Ekstraksi transaksi dari bukti transfer, banyak gambar dalam satu panggilan
@@ -81,8 +101,10 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
 
 ## Belum terverifikasi
 
-- [ ] Dashboard & Laporan setelah perbaikan long-polling + batas waktu cache.
-      Verifikasi terhenti di halaman login — agen tidak memasukkan password.
+- [ ] Dashboard & Laporan dengan **data Firestore sungguhan**. Tata letak dan
+      perhitungan Laporan sudah diperiksa lewat `.preview/` (data contoh, tanpa
+      login), tapi jalur Firestore + cache + auth belum — verifikasi terhenti di
+      halaman login karena agen tidak memasukkan password.
 - [ ] Kuota AI harian saat benar-benar tercapai.
 
 ---
@@ -91,9 +113,7 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
 
 ### Prioritas 1 — menutup lubang yang sudah diketahui
 
-1. **Poles Laporan** — tab Ringkasan & Pajak Bulanan masih paling lemah dibanding
-   Analisis Tahunan.
-2. **Kartu proyek** — pemilik masih belum puas. Referensi: Pinterest/Dribbble.
+1. **Kartu proyek** — pemilik masih belum puas. Referensi: Pinterest/Dribbble.
    Konsepnya *detailed, solution, tidak ribet*.
 
 ### Prioritas 2 — fitur yang sudah dijanjikan
