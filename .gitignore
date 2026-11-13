@@ -30,7 +30,9 @@ yarn-error.log*
 
 # firebase
 .firebase/
-.firebaserc
+# `.firebaserc` sengaja TIDAK diabaikan: hanya berisi alias project (bukan secret),
+# dan tanpanya setiap perintah firebase wajib `--project sistem-keuangan-ptpeb`
+# manual — satu lupa, perintahnya nyasar ke project lain.
 firebase-debug.log
 firestore-debug.log
 
