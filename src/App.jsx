@@ -15,10 +15,14 @@ import ClientsPage from './components/clients/ClientsPage';
 import { LogoMark } from './components/brand/Logo';
 import { applyTheme, getCachedTheme } from './utils/themes';
 import { getCompanySettings, getThemeFromSettings } from './services/settings';
+import { resolveMode, applyMode } from './utils/colorMode';
 import './styles/globals.css';
 
 // Tema dari cache lokal terpasang sebelum render pertama (hindari flash warna default)
 applyTheme(getCachedTheme());
+// Mode terang/gelap juga dipasang sebelum render: bila menunggu efek React, satu
+// frame pertama akan tampil dengan latar mode yang salah (kedipan putih).
+applyMode(resolveMode());
 
 const SplashScreen = () => (
   <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-navy-950">

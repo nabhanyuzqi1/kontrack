@@ -64,7 +64,7 @@ const Lightbox = ({ items = [], index = 0, onClose, onNavigate }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-slate-950/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex flex-col bg-scrim/90 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={item.name || 'Pratinjau berkas'}

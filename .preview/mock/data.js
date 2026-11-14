@@ -10,6 +10,7 @@ export const projects = [
     value: 4850000000,
     paidAmount: 2182500000,
     taxRate: 11,
+    contractNumber: '602/SPK/DPUPR/2026',
     startDate: '2026-03-04',
     endDate: '2026-12-20'
   },
@@ -21,6 +22,7 @@ export const projects = [
     value: 1275000000,
     paidAmount: 1180000000,
     taxRate: 11,
+    contractNumber: '11/SPK/DS-BB/2025',
     startDate: '2025-09-01',
     endDate: '2026-06-30'
   },
@@ -32,6 +34,7 @@ export const projects = [
     value: 780000000,
     paidAmount: 780000000,
     taxRate: 11,
+    contractNumber: '337/SPK/DPUPR/2025',
     startDate: '2026-01-12',
     endDate: '2026-05-28'
   },
@@ -45,6 +48,30 @@ export const projects = [
     taxRate: 0,
     startDate: '2026-12-01',
     endDate: '2027-02-15'
+  },
+  {
+    id: 'p5',
+    name: 'Perbaikan Jembatan Gantung Desa Tewang Kadamba',
+    partner: 'Dinas PUPR Katingan',
+    status: 'ongoing',
+    value: 2140000000,
+    paidAmount: 642000000,
+    taxRate: 11,
+    contractNumber: '418/SPK/DPUPR/2026',
+    startDate: '2026-07-14',
+    endDate: '2026-11-30'
+  },
+  {
+    id: 'p6',
+    name: 'Penataan Kawasan Pasar Sampit Tahap II',
+    partner: 'Pemerintah Kabupaten Kotim',
+    status: 'retensi',
+    value: 3960000000,
+    paidAmount: 3762000000,
+    taxRate: 11,
+    contractNumber: '77/SPK/PUPR-KOTIM/2025',
+    startDate: '2025-04-02',
+    endDate: '2026-02-20'
   }
 ];
 

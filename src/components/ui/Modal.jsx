@@ -24,15 +24,15 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', children, footer
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 p-4 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/45 p-4 backdrop-blur-sm animate-fade-in"
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
     >
       <div
-        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-scale-in ${sizes[size]}`}
+        className={`glass-1 flex max-h-[92vh] w-full flex-col overflow-hidden shadow-2xl animate-scale-in ${sizes[size]}`}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+        <div className="flex items-start justify-between border-b border-slate-200/70 px-6 py-4">
           <div>
             <h2 className="font-display text-lg font-semibold text-slate-900">{title}</h2>
             {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
@@ -49,7 +49,7 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', children, footer
         <div className="custom-scrollbar flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
         {footer && (
-          <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
+          <div className="flex justify-end gap-3 border-t border-slate-200/70 bg-slate-100/60 px-6 py-4">
             {footer}
           </div>
         )}

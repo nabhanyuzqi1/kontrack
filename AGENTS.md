@@ -167,6 +167,33 @@ jawabannya kosong (`finishReason: MAX_TOKENS`, `parts` kosong). Ekstraksi berpan
 Skema CoreTax menuliskannya begitu. **Jangan diperbaiki** — XML akan ditolak.
 Lihat `utils/coretaxXml.js`.
 
+### Tampilan: dua lapisan token yang jangan dicampur
+
+`globals.css` memisahkan **(a) preset brand** (`--brand-*`, `--accent-*`, diganti
+runtime dari Pengaturan lewat `utils/themes.js`) dari **(b) material & mode**
+(`--glass-*`, `--line-*`, `--slate-*`, berubah menurut `[data-theme]`).
+
+Skala `slate` di-remap ke variabel, jadi `text-slate-400` berarti "metadata redup"
+dan `bg-slate-100` berarti "isian lembut" — nilainya ikut mode otomatis. Karena itu:
+
+- **Jangan** menulis `bg-white`, `bg-slate-50`, atau `text-slate-900` sebagai warna
+  literal di komponen baru: pakai kelas `glass-1/2/3`, `field-surface`, atau token
+  `slate` yang sudah di-remap.
+- **Scrim** (lapisan gelap modal/drawer/lightbox) memakai `navy-*` atau `scrim`,
+  yang sengaja TIDAK ikut mode. Memakai `bg-slate-950/45` untuk scrim akan
+  menghasilkan lapisan putih di mode gelap.
+- Kelas `dark:` menempel pada `[data-theme="dark"]` (sudah diatur di
+  `tailwind.config.js`), bukan `prefers-color-scheme` — mode dikendalikan pengguna.
+
+### Data tanggal Firestore bercampur bentuk
+
+`transactions.date` seluruhnya string, tetapi `invoices.issueDate` dan `taxPaidAt`
+**campuran** Timestamp dan string. `new Date(t.date)` menghasilkan Invalid Date
+untuk Timestamp, dan gejalanya cuma satu: laporan kosong tanpa error. Selalu lewat
+`toDate()`/`withinRange()` di `utils/reportCalc.js`. Jangan mengelompokkan bulan
+dengan `toISOString()` — itu UTC, sehingga transaksi 1 Januari 00:30 WIB jatuh ke
+Desember tahun sebelumnya.
+
 ### `check-imports.mjs` bukan basa-basi
 
 esbuild **tidak** menggagalkan build untuk komponen JSX yang dipakai tapi belum
@@ -218,6 +245,13 @@ Berkas yang paling sering jadi akar masalah:
 
 Aturan: `utils/` tidak boleh mengimpor Firebase. Mutasi di `services/` wajib
 memanggil `invalidate(CACHE_KEYS.…)`.
+
+Tampilan diperiksa lewat `.preview/` (harness Vite, data contoh, tanpa kredensial):
+`./node_modules/.bin/vite --config .preview/vite.config.mjs` → port 5199. Setiap
+modul yang menarik Firebase harus dialihkan ke shim di
+`.preview/vite.config.mjs`; kalau satu terlewat, `initializeApp` jalan tanpa API
+key dan halaman tampil **kosong tanpa pesan**. Daftar ekspor yang dibutuhkan shim
+dihasilkan dengan `node scripts/list-service-imports.mjs`, jangan ditebak.
 
 ---
 

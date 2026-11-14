@@ -15,7 +15,15 @@ export default defineConfig({
       { find: '../../services/transactions', replacement: shim },
       { find: '../../services/invoices', replacement: shim },
       { find: '../../utils/pdfGenerator', replacement: shim },
-      { find: '../../services/aiInsights', replacement: shim }
+      { find: '../../services/aiInsights', replacement: shim },
+      { find: '../../services/settings', replacement: shim },
+      { find: '../../services/auth', replacement: shim },
+      // Modul berikut juga menarik Firebase saat diimpor; tanpa dialihkan,
+      // initializeApp dijalankan tanpa API key dan seluruh halaman gagal render.
+      { find: '../../services/clients', replacement: shim },
+      { find: '../../services/users', replacement: shim },
+      { find: '../../services/ai', replacement: shim },
+      { find: '../../services/firebase', replacement: shim }
     ]
   },
   server: { port: 5199, strictPort: true }

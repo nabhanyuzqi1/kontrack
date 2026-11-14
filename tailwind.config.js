@@ -2,6 +2,9 @@ import tailgridsPlugin from 'tailgrids/plugin';
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Varian `dark:` menempel pada atribut data-theme, bukan prefers-color-scheme:
+  // mode dikendalikan pengguna dari Pengaturan, bukan setelan sistem operasi.
+  darkMode: ['class', '[data-theme="dark"]'],
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
@@ -31,18 +34,45 @@ export default {
           500: 'rgb(var(--accent-500) / <alpha-value>)',
           600: 'rgb(var(--accent-600) / <alpha-value>)'
         },
-        // Navy gelap untuk sidebar & halaman auth (statis, tak ikut tema)
+        // Navy — permukaan yang SELALU gelap (scrim modal, splash, halaman auth).
+        // Sengaja tidak ikut mode: scrim harus tetap gelap walau mode terang,
+        // dan halaman auth memang dirancang teks terang di atas latar gelap.
         navy: {
           700: '#1a2340',
           800: '#111a33',
           900: '#0b1220',
           950: '#070c18'
+        },
+        // Scrim — lapisan gelap di belakang modal/drawer/lightbox. Nilainya tetap
+        // gelap di kedua mode: scrim putih di mode gelap membuat dialog terbaca
+        // seolah tanpa pemisah dari latar.
+        scrim: 'rgb(7 12 24 / <alpha-value>)',
+        // Emas institusional (Sovereign Gold) — penanda status Retensi
+        gold: {
+          DEFAULT: 'rgb(var(--gold) / <alpha-value>)',
+          deep: 'rgb(var(--gold-deep) / <alpha-value>)',
+          soft: 'rgb(var(--gold-soft) / <alpha-value>)'
+        },
+        // Slate di-remap ke variabel: satu definisi menyesuaikan mode untuk
+        // seluruh halaman, sehingga komponen tidak perlu tahu mode aktif.
+        slate: {
+          50: 'rgb(var(--slate-50) / <alpha-value>)',
+          100: 'rgb(var(--slate-100) / <alpha-value>)',
+          200: 'rgb(var(--slate-200) / <alpha-value>)',
+          300: 'rgb(var(--slate-300) / <alpha-value>)',
+          400: 'rgb(var(--slate-400) / <alpha-value>)',
+          500: 'rgb(var(--slate-500) / <alpha-value>)',
+          600: 'rgb(var(--slate-600) / <alpha-value>)',
+          700: 'rgb(var(--slate-700) / <alpha-value>)',
+          800: 'rgb(var(--slate-800) / <alpha-value>)',
+          900: 'rgb(var(--slate-900) / <alpha-value>)',
+          950: 'rgb(var(--slate-950) / <alpha-value>)'
         }
       },
       boxShadow: {
-        // Depth halus ala Linear/Vercel — nyaris flat, mengandalkan border tipis
-        card: '0 1px 2px 0 rgb(15 23 42 / 0.04)',
-        'card-hover': '0 2px 4px -1px rgb(15 23 42 / 0.06), 0 8px 16px -6px rgb(15 23 42 / 0.08)',
+        // Bayangan kaca bertingkat (nilainya di globals.css per mode)
+        card: 'var(--shadow-glass)',
+        'card-hover': 'var(--shadow-glass-lg)',
         glow: '0 0 24px 0 rgb(var(--brand-600) / 0.28)',
         'glow-cyan': '0 0 32px 0 rgb(var(--accent-500) / 0.25)'
       },

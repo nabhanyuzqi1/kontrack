@@ -1,13 +1,12 @@
 // src/components/projects/ProjectList.jsx
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, FolderKanban, RotateCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Plus, FolderKanban, RotateCw } from 'lucide-react';
 import { getAllProjects, deleteProject } from '../../services/projects';
 import ProjectModal from './ProjectModal';
 import ProjectCard from './ProjectCard';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
-import { Card } from '../ui/Card';
-import { Input } from '../ui/Field';
 import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import { getStatusLabel } from '../../utils/formatters';
@@ -21,11 +20,19 @@ const ProjectList = ({ currentUser }) => {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') || '');
 
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // Pencarian dikendalikan satu tempat saja: kotak di header mengirim ?q=…, dan
+  // halaman ini mengikutinya. Tidak ada kotak pencarian kedua di sini supaya tidak
+  // ada dua sumber kebenaran untuk hal yang sama.
+  useEffect(() => {
+    setSearchTerm(searchParams.get('q') || '');
+  }, [searchParams]);
 
   const loadProjects = async () => {
     setLoading(true);
@@ -136,18 +143,9 @@ const ProjectList = ({ currentUser }) => {
         }
       />
 
-      {/* Pencarian + filter status */}
-      <div className="mb-4 space-y-3 sm:mb-6">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cari proyek, mitra, atau no. SPK…"
-            className="pl-9"
-          />
-        </div>
+      {/* Filter status. Pencarian tidak diulang di sini — header sudah punya satu,
+          dan dua kotak pencarian untuk hal yang sama membingungkan. */}
+      <div className="mb-4 sm:mb-6">
         <div className="custom-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {STATUS_FILTERS.map((status) => (
             <button
@@ -156,7 +154,7 @@ const ProjectList = ({ currentUser }) => {
               className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                 filter === status
                   ? 'bg-brand-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'glass-3 text-slate-600 hover:text-slate-900'
               }`}
             >
               {status === 'all' ? 'Semua' : getStatusLabel(status)}

@@ -15,10 +15,30 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 ### Fondasi
 - Migrasi CRA → Vite 5
 - Design system: CSS variables, 5 preset tema, Space Grotesk + Inter, angka tabular
+- **Material kaca dua mode (terang/gelap)**: token `--glass-*`, `--line-*`, dan skala
+  `slate` yang di-remap ke variabel, sehingga ~350 pemakaian `slate`/`white` di
+  seluruh komponen ikut menyesuaikan mode tanpa ditambal satu per satu. Tombol
+  Terang/Gelap ada di header; pilihan disimpan per-perangkat (`utils/colorMode.js`),
+  nilai awalnya mengikuti preferensi sistem. **Terpisah dari 5 preset brand** yang
+  tetap diganti per-tenant dari Pengaturan — keduanya tidak saling menimpa.
+- Tidak ada scrim putih di mode gelap: token `--scrim`/`scrim` khusus supaya modal,
+  drawer, dan lightbox selalu memakai lapisan gelap.
+- Shell baru: **header kaca dua tingkat** (baris utilitas + rail modul horizontal),
+  rail sidebar vertikal dihapus sesuai spesifikasi. Drawer geser untuk ponsel,
+  rail bawah dipertahankan.
+- `.preview/` — harness Vite yang merender komponen asli dengan data contoh, tanpa
+  kredensial. Alias me-remap SEMUA modul yang menarik Firebase (`projects`,
+  `transactions`, `invoices`, `settings`, `auth`, `clients`, `users`, `ai`,
+  `firebase`, `aiInsights`, `pdfGenerator`). Daftar ekspor shim dihasilkan dari
+  impor nyata lewat `scripts/list-service-imports.mjs` — bukan ditebak; satu nama
+  kurang saja membuat halaman tampil kosong tanpa pesan.
 - App shell: sidebar bisa disembunyikan, navigasi bawah ala aplikasi native di mobile
 - `scripts/check-imports.mjs` masuk ke `npm run build` — menangkap komponen JSX yang
   dipakai tapi belum di-impor (esbuild membiarkannya lolos, halamannya jadi putih)
 - `ErrorBoundary`, skeleton shimmer
+- **Kartu proyek didesain ulang**: panel angka jadi satu blok inset (Nilai Kontrak /
+  Terbayar / progres / sisa tagihan), referensi SPK di kaki kartu, dan strip warna
+  tebal di sisi kiri dihapus — status dibawa pil status + panel angka.
 - `.preview/` — harness Vite untuk memeriksa tampilan halaman tanpa login: layanan
   Firestore diganti shim berisi data contoh lewat alias, jadi tidak butuh
   kredensial. Baru mencakup Laporan. `vite --config .preview/vite.config.mjs`
@@ -101,6 +121,12 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
 
 ## Belum terverifikasi
 
+- [ ] **Halaman dalam baru dipoles di lapisan material, belum didesain ulang
+      menyeluruh.** Yang sudah ikut mode terang/gelap: Laporan, Dashboard, Invoice,
+      Pengaturan (judul, kartu, tabel, input). Yang BELUM dikerjakan dari spesifikasi
+      "Sovereign Enterprise": strip metrik 4 kolom menyatu (masih 4 kartu terpisah),
+      panel sorotan 42/58, footer institusional, drawer glass sudah ada tapi belum
+      ada focus trap, dan view Grid/Table di halaman Proyek.
 - [ ] Dashboard & Laporan **dirender dengan data Firestore sungguhan**. Jalur data
       sudah diperiksa read-only langsung ke Firestore `kontrack` (REST, sesi CLI):
       261 transaksi, 21 invoice, 5 proyek, 2 klien, 3 pengguna. Temuan bentuk data:
@@ -109,6 +135,10 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
       tidak ada `totals` maupun `taxPaymentAmount` di invoice; `projects` tidak
       punya `retentionPct`. Yang belum: render UI-nya sendiri, karena perlu login —
       agen tidak memasukkan password.
+- [ ] **Lonceng notifikasi di header hanya penanda visual.** Tidak ada sumber
+      notifikasi di dalam aplikasi; ikonnya sengaja diberi tanda titik emas supaya
+      tidak terbaca sebagai fitur yang sudah jalan. Jangan diklaim berfungsi
+      sebelum ada pengirimnya.
 - [ ] Kuota AI harian saat benar-benar tercapai.
 
 ---
@@ -122,23 +152,27 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
 
 ### Prioritas 2 — fitur yang sudah dijanjikan
 
-3. **Portofolio publik** — halaman profil kontraktor yang bisa dibagikan.
+3. **Lanjutkan spesifikasi Sovereign Enterprise** yang belum dikerjakan:
+   strip metrik 4 kolom menyatu dengan pembatas hairline, panel sorotan 42/58 di
+   Dashboard, footer institusional, focus trap pada drawer, dan sakelar
+   Grid/Table di halaman Proyek.
+4. **Portofolio publik** — halaman profil kontraktor yang bisa dibagikan.
    Butuh share-token; jangan pakai `allow read: if true` seperti `projects` sekarang.
-4. **BOQ & database harga** — 14 berkas RAB/BOQ ada di `~/Downloads`.
+5. **BOQ & database harga** — 14 berkas RAB/BOQ ada di `~/Downloads`.
    `parseBoqWithAI` tersimpan di `functions-live/`, belum di-deploy karena belum
    ada yang memanggil. Deploy bersamaan dengan fiturnya, bukan sebelumnya.
-5. **Webhook WhatsApp** — teks share sudah rapi; sisanya kirim gambar/diagram
+6. **Webhook WhatsApp** — teks share sudah rapi; sisanya kirim gambar/diagram
    otomatis + `settings.notifications.whatsappWebhookUrl`.
 
 ### Prioritas 3 — utang arsitektur
 
-6. **Multi-tenant penuh.** `firestore.rules` masih punya catch-all "semua pengguna
+7. **Multi-tenant penuh.** `firestore.rules` masih punya catch-all "semua pengguna
    login dianggap tim internal". Akarnya: koleksi `users` memakai ID acak dengan
    field `email`, sehingga rules tidak bisa mengecek peran.
    Urutan yang benar: pindahkan `users` ke `users/{uid}` → pasang custom claims →
    baru hapus catch-all.
-7. **`projects` masih public-read** demi share-link mitra. Ganti dengan share-token.
-8. **Pisahkan `functions/index.js`** kalau sudah melewati ~800 baris.
+8. **`projects` masih public-read** demi share-link mitra. Ganti dengan share-token.
+9. **Pisahkan `functions/index.js`** kalau sudah melewati ~800 baris.
 
 ---
 
