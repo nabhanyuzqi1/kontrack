@@ -53,10 +53,14 @@ const Dashboard = ({ currentUser }) => {
 
   useEffect(() => {
     loadDashboardData();
+    // SWR: perbarui diam-diam saat cache disegarkan di belakang layar.
+    const keys = [CACHE_KEYS.PROJECTS, CACHE_KEYS.TRANSACTIONS, CACHE_KEYS.INVOICES];
+    const unsubs = keys.map((k) => subscribe(k, () => loadDashboardData({ silent: true })));
+    return () => unsubs.forEach((u) => u());
   }, []);
 
-  const loadDashboardData = async () => {
-    setLoading(true);
+  const loadDashboardData = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       // Sebelumnya halaman ini memanggil getDocs mentah lima kali secara
       // BERURUTAN, tanpa cache dan tanpa batas waktu. Dua di antaranya (5 proyek

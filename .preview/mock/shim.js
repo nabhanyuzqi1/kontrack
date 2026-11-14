@@ -66,6 +66,19 @@ export const taxDocsProgress = (inv = {}) => [
 export const isPpnCair = (inv = {}) => inv.coreTaxStatus === 'cleared';
 
 // --- Klien ---
+export const getNextInvoiceNumber = async () => {
+  const list = await getAllInvoices().catch(() => []);
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const re = new RegExp('^INV-(\d+)/PEB/' + mm + '/' + now.getFullYear() + '$', 'i');
+  const max = list.reduce((acc, inv) => {
+    const m = re.exec(String(inv.invoiceNumber || '').trim());
+    return m ? Math.max(acc, Number(m[1])) : acc;
+  }, 0);
+  return `INV-${String(max + 1).padStart(3, '0')}/PEB/${mm}/${now.getFullYear()}`;
+};
+
+export const updateInvoice = noop;
 export const getAllClients = async () => [];
 export const getClientMap = async () => ({});
 export const clientDisplayName = (c) => c?.client_name || c?.name || 'Tanpa nama';
@@ -110,7 +123,21 @@ export const AI_REGION = REGION;
 export const LEGACY_REGION = REGION;
 export const kontrackFunctions = () => ({});
 export const aiFunctions = kontrackFunctions;
-export const CACHE_KEYS = {};
+// Cache in-memory sederhana: kunci harus sama dengan services/cache.js asli
+// supaya langganan SWR di halaman tetap bekerja di harness pratinjau.
+export const CACHE_KEYS = {
+  PROJECTS: 'projects:all',
+  CLIENTS: 'clients:all',
+  INVOICES: 'invoices:all',
+  TRANSACTIONS: 'transactions:all',
+  SETTINGS: 'settings:company'
+};
+const __subs = new Map();
+export const subscribe = (key, cb) => {
+  if (!__subs.has(key)) __subs.set(key, new Set());
+  __subs.get(key).add(cb);
+  return () => __subs.get(key).delete(cb);
+};
 export const cached = async (_k, fn) => fn();
 export const invalidate = () => {};
 export const withTimeout = (p) => p;

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, FolderKanban, RotateCw } from 'lucide-react';
 import { getAllProjects, deleteProject } from '../../services/projects';
+import { subscribe, CACHE_KEYS } from '../../services/cache';
 import ProjectModal from './ProjectModal';
 import ProjectCard from './ProjectCard';
 import PageHeader from '../ui/PageHeader';
@@ -25,6 +26,9 @@ const ProjectList = ({ currentUser }) => {
 
   useEffect(() => {
     loadProjects();
+    // SWR: perbarui diam-diam saat cache disegarkan di belakang layar.
+    const un = subscribe(CACHE_KEYS.PROJECTS, () => loadProjects({ silent: true }));
+    return () => un();
   }, []);
 
   // Pencarian dikendalikan satu tempat saja: kotak di header mengirim ?q=…, dan
@@ -34,8 +38,8 @@ const ProjectList = ({ currentUser }) => {
     setSearchTerm(searchParams.get('q') || '');
   }, [searchParams]);
 
-  const loadProjects = async () => {
-    setLoading(true);
+  const loadProjects = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const projectList = await getAllProjects();

@@ -139,11 +139,12 @@ const ProjectCard = ({ project, onEdit, onDelete, currentUser }) => {
               <span className="truncate">{project.contractNumber}</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 opacity-0 transition-opacity group-hover:opacity-100 dark:text-brand-300">
-              Lihat detail
-              <ArrowRight className="h-3.5 w-3.5" />
-            </span>
+            <span className="text-[11px] text-slate-400">Tanpa no. SPK</span>
           )}
+          <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand-700 transition-colors group-hover:text-brand-800 dark:text-brand-300">
+            Lihat detail
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+          </span>
 
           <div className="flex shrink-0 items-center gap-0.5">
             <button

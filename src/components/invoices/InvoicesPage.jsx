@@ -1,8 +1,10 @@
 // src/components/invoices/InvoicesPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2 } from 'lucide-react';
+import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight } from 'lucide-react';
 import TaxDocsModal from './TaxDocsModal';
 import CoretaxExportModal from './CoretaxExportModal';
+import InvoiceDetailModal from './InvoiceDetailModal';
+import InvoiceModal from './InvoiceModal';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -12,6 +14,7 @@ import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { subscribe, CACHE_KEYS } from '../../services/cache';
 import {
   getAllInvoices,
   setInvoiceStatus,
@@ -44,6 +47,8 @@ const InvoicesPage = () => {
   const [taxDocsInvoice, setTaxDocsInvoice] = useState(null);
   const [showCoretax, setShowCoretax] = useState(false);
   const [company, setCompany] = useState(null);
+  const [detailInvoice, setDetailInvoice] = useState(null);
+  const [editInvoice, setEditInvoice] = useState(null);
 
   useEffect(() => {
     getCompanySettings()
@@ -51,8 +56,8 @@ const InvoicesPage = () => {
       .catch(() => setCompany(null));
   }, []);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [invs, clients, projects] = await Promise.all([
         getAllInvoices(),
@@ -63,14 +68,19 @@ const InvoicesPage = () => {
       setClientMap(clients);
       setProjectMap(projects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}));
     } catch (err) {
-      console.error('Error loading invoices:', err);
+ console.error('Error loading invoices:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     load();
+    // Revalidasi SWR: data basi tampil seketika lalu diperbarui diam-diam
+    // tanpa menampilkan skeleton lagi.
+    const keys = [CACHE_KEYS.INVOICES, CACHE_KEYS.CLIENTS, CACHE_KEYS.PROJECTS];
+    const unsubs = keys.map((k) => subscribe(k, () => load({ silent: true })));
+    return () => unsubs.forEach((u) => u());
   }, []);
 
   // Nama client & proyek di-join dari koleksi masing-masing (invoice hanya simpan id).
@@ -111,10 +121,10 @@ const InvoicesPage = () => {
     ...inv,
     projectName: projectNameOf(inv),
     clientName: clientNameOf(inv),
-    client: clientMap[inv.clientId] || null
+    client: clientMap[inv.clientId] || inv.client || null
   });
 
-  const handleDownload = async (inv) => {
+  const handleDownloadQuick = async (inv) => {
     setBusyId(inv.id);
     try {
       const settings = await getCompanySettings();
@@ -131,10 +141,10 @@ const InvoicesPage = () => {
     setBusyId(inv.id);
     try {
       await setInvoiceStatus(inv.id, status);
-      await load();
+      await load({ silent: true });
     } catch (err) {
       console.error('Gagal ubah status:', err);
-      alert('Gagal mengubah status invoice.');
+      alert(err?.message || 'Gagal mengubah status invoice.');
     } finally {
       setBusyId(null);
     }
@@ -144,13 +154,14 @@ const InvoicesPage = () => {
     const received = inv.netProceeds ?? inv.grandTotal ?? 0;
     const ppn = inv.pajak11 ?? 0;
     const confirmed = window.confirm(
-      `Tandai ${inv.invoiceNumber} terbayar?\n\nTransaksi otomatis akan dicatat:\n• Pemasukan "Pembayaran ${inv.invoiceNumber}" ${formatCurrency(received)}\n${ppn > 0 ? `• Pengeluaran "PPN Otomatis" ${formatCurrency(ppn)}\n` : ''}\nTerbayar proyek juga akan diperbarui.`
+      `Tandai ${inv.invoiceNumber} terbayar?\n\nTransaksi otomatis akan dicatat:\n\u2022 Pemasukan "Pembayaran ${inv.invoiceNumber}" ${formatCurrency(received)}\n${ppn > 0 ? `\u2022 Pengeluaran "PPN Otomatis" ${formatCurrency(ppn)}\n` : ''}\nTerbayar proyek juga akan diperbarui.`
     );
     if (!confirmed) return;
     setBusyId(inv.id);
     try {
       await markInvoicePaid(withDisplayNames(inv));
-      await load();
+      setDetailInvoice(null);
+      await load({ silent: true });
     } catch (err) {
       console.error('Gagal tandai terbayar:', err);
       alert('Gagal menandai terbayar. Coba lagi.');
@@ -164,10 +175,11 @@ const InvoicesPage = () => {
     setBusyId(inv.id);
     try {
       await deleteInvoice(inv.id);
-      await load();
+      setDetailInvoice(null);
+      await load({ silent: true });
     } catch (err) {
       console.error('Gagal hapus invoice:', err);
-      alert('Gagal menghapus invoice.');
+      alert(err?.message || 'Gagal menghapus invoice.');
     } finally {
       setBusyId(null);
     }
@@ -191,10 +203,10 @@ const InvoicesPage = () => {
       />
 
       <div className="mb-5 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-        <StatCard icon={ReceiptText} tone="brand" label="Total Invoice" value={stats.count} sub="Semua termin & status" />
-        <StatCard tone="cyan" label="Nilai Tagihan" value={formatCurrency(stats.totalValue)} sub="Grand total seluruh invoice" />
-        <StatCard tone="violet" label="Total PPN 11%" value={formatCurrency(stats.totalPpn)} sub="Pajak tercatat" />
-        <StatCard tone="amber" label="PPN Menunggu" value={formatCurrency(stats.unpaidPpn)} sub="Belum dicairkan" subTone="text-amber-600" />
+          <StatCard icon={ReceiptText} tone="brand" label="Total Invoice" value={stats.count} sub="Semua termin & status" />
+          <StatCard tone="cyan" label="Nilai Tagihan" value={formatCurrency(stats.totalValue)} sub="Grand total seluruh invoice" />
+          <StatCard tone="violet" label="Total PPN 11%" value={formatCurrency(stats.totalPpn)} sub="Pajak tercatat" />
+          <StatCard tone="amber" label="PPN Menunggu" value={formatCurrency(stats.unpaidPpn)} sub="Belum dicairkan" subTone="text-amber-600" />
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-3">
@@ -230,61 +242,80 @@ const InvoicesPage = () => {
         <div className="space-y-3">
           {filtered.map((inv) => {
             const busy = busyId === inv.id;
+            const isPaid = inv.status === INVOICE_STATUS.PAID;
+            const docsDone = taxDocsProgress(inv).filter((p) => p.done).length;
             return (
-              <Card key={inv.id} className="p-4 sm:p-5">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
+              <Card
+                key={inv.id}
+                className="group cursor-pointer p-4 transition-colors hover:border-brand-300 sm:p-5"
+                onClick={() => setDetailInvoice(withDisplayNames(inv))}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  {/* Kolom identitas */}
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-display text-sm font-semibold text-slate-900">{inv.invoiceNumber}</h3>
+                      <h3 className="tnum font-display text-sm font-bold text-slate-900 group-hover:text-brand-700">
+                        {inv.invoiceNumber}
+                      </h3>
+                      <Badge tone={statusTone[inv.status] || 'slate'}>
+                        {INVOICE_STATUS_LABEL[inv.status] || inv.status || 'Draft'}
+                      </Badge>
                       {inv.billingStage && (
                         <Badge tone="violet">
                           {billingStageLabel(inv.billingStage)}
                           {inv.quantity ? ` · ${inv.quantity}` : ''}
                         </Badge>
                       )}
+                      {isPpnCair(inv) && <Badge tone="cyan">PPN Cair</Badge>}
                     </div>
-                    <p className="mt-0.5 truncate text-sm text-slate-600">{projectNameOf(inv)}</p>
+                    <p className="mt-1 truncate text-sm font-medium text-slate-600">{projectNameOf(inv)}</p>
                     <p className="truncate text-xs text-slate-400">
                       {clientNameOf(inv)} · Terbit {formatDate(inv.issueDate)} · Jatuh tempo {formatDate(inv.dueDate)}
                     </p>
+
+                    {/* Meta: pajak + dokumen */}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                      <span className="text-slate-500">
+                        PPN <span className="tnum font-semibold text-slate-700">{formatCurrency(inv.pajak11 || 0)}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1.5" title={`Dokumen pajak ${docsDone}/4`}>
+                        <span className="text-slate-500">Dokumen</span>
+                        <span className="flex items-center gap-0.5">
+                          {taxDocsProgress(inv).map((p) => (
+                            <span
+                              key={p.key}
+                              title={p.label}
+                              className={`h-1.5 w-4 rounded-full ${p.done ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-600'}`}
+                            />
+                          ))}
+                        </span>
+                        <span className="tnum font-semibold text-slate-700">{docsDone}/4</span>
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge tone={statusTone[inv.status] || 'slate'}>
-                      {INVOICE_STATUS_LABEL[inv.status] || inv.status || 'Draft'}
-                    </Badge>
-                    {isPpnCair(inv) && <Badge tone="cyan">PPN Cair</Badge>}
+
+                  {/* Kolom angka */}
+                  <div className="flex shrink-0 items-center gap-3 text-right">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Grand Total</p>
+                      <p className="tnum font-display text-lg font-bold tracking-tight text-slate-900">
+                        {formatCurrency(inv.grandTotal || 0)}
+                      </p>
+                      {inv.taxDeductedAmount > 0 && (
+                        <p className="text-[11px] text-slate-400">
+                          diterima <span className="tnum">{formatCurrency(inv.netProceeds)}</span>
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 dark:text-slate-600" />
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-end justify-between gap-3 rounded-lg glass-3 p-3">
-                  <div>
-                    <p className="text-xs text-slate-400">Grand Total</p>
-                    <p className="font-display text-lg font-bold text-slate-900">{formatCurrency(inv.grandTotal || 0)}</p>
-                  </div>
-                  <div className="text-right text-xs text-slate-500">
-                    {inv.dppNilaiLain > 0 && (
-                      <p>DPP Nilai Lain <span className="tnum font-medium text-slate-700">{formatCurrency(inv.dppNilaiLain)}</span></p>
-                    )}
-                    <p>PPN 11% <span className="tnum font-medium text-slate-700">{formatCurrency(inv.pajak11 || 0)}</span></p>
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <div className="mb-1 flex items-center justify-between">
-                    <p className="text-xs font-medium text-slate-400">Progress Dokumen Pajak</p>
-                    <p className="text-xs text-slate-400">{taxDocsProgress(inv).filter((p) => p.done).length}/4</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {taxDocsProgress(inv).map((p) => (
-                      <div key={p.key} title={p.label} className={`h-1.5 flex-1 rounded-full ${p.done ? 'bg-emerald-500' : 'bg-slate-200'}`} />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => handleDownload(inv)} disabled={busy}>
+                {/* Aksi cepat — stopPropagation agar klik tidak membuka detail */}
+                <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="secondary" size="sm" onClick={() => handleDownloadQuick(inv)} disabled={busy}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                    Unduh PDF
+                    PDF
                   </Button>
                   <Button variant="secondary" size="sm" onClick={() => setTaxDocsInvoice(withDisplayNames(inv))} disabled={busy}>
                     <Landmark className="h-4 w-4" />
@@ -296,16 +327,16 @@ const InvoicesPage = () => {
                       Tandai Terkirim
                     </Button>
                   )}
-                  {inv.status !== INVOICE_STATUS.PAID && inv.status !== INVOICE_STATUS.VOID && (
-                    <Button variant="success" size="sm" onClick={() => handleMarkPaid(inv)} disabled={busy}>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Tandai Terbayar
+                  {isPaid ? (
+                    <span className="inline-flex items-center px-2 py-1.5 text-xs text-slate-400" title="Invoice terbayar terkunci — hanya dokumen pajak yang bisa diperbarui">
+                      Terkunci
+                    </span>
+                  ) : (
+                    <Button variant="danger-ghost" size="sm" onClick={() => handleDelete(inv)} disabled={busy}>
+                      <Trash2 className="h-4 w-4" />
+                      Hapus
                     </Button>
                   )}
-                  <Button variant="danger-ghost" size="sm" onClick={() => handleDelete(inv)} disabled={busy}>
-                    <Trash2 className="h-4 w-4" />
-                    Hapus
-                  </Button>
                 </div>
               </Card>
             );
@@ -327,7 +358,38 @@ const InvoicesPage = () => {
           isOpen={Boolean(taxDocsInvoice)}
           invoice={taxDocsInvoice}
           onClose={() => setTaxDocsInvoice(null)}
-          onSaved={load}
+          onSaved={() => load({ silent: true })}
+        />
+      )}
+
+      {detailInvoice && (
+        <InvoiceDetailModal
+          invoice={detailInvoice}
+          onClose={() => setDetailInvoice(null)}
+          onEdit={(inv) => {
+            setDetailInvoice(null);
+            setEditInvoice(inv);
+          }}
+          onTaxDocs={(inv) => {
+            setDetailInvoice(null);
+            setTaxDocsInvoice(inv);
+          }}
+          onMarkPaid={handleMarkPaid}
+          onMarkSent={(inv) => handleStatus(inv, INVOICE_STATUS.SENT)}
+          busy={busyId === (detailInvoice?.id || null)}
+        />
+      )}
+
+      {editInvoice && (
+        <InvoiceModal
+          isOpen={Boolean(editInvoice)}
+          invoice={editInvoice}
+          project={projectMap[editInvoice.projectId]}
+          onClose={() => setEditInvoice(null)}
+          onSuccess={() => {
+            setEditInvoice(null);
+            load({ silent: true });
+          }}
         />
       )}
     </div>

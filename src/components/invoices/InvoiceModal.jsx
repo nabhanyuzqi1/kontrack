@@ -9,7 +9,14 @@ import { terbilang } from '../../utils/terbilang';
 import { generateInvoicePDF, buildInvoiceNumber } from '../../utils/invoiceGenerator';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from '../../utils/companyConfig';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
-import { addInvoice, calcInvoiceTotals, BILLING_STAGES, billingStageLabel } from '../../services/invoices';
+import {
+  addInvoice,
+  updateInvoice,
+  getNextInvoiceNumber,
+  calcInvoiceTotals,
+  BILLING_STAGES,
+  billingStageLabel
+} from '../../services/invoices';
 import { getAllClients, clientDisplayName } from '../../services/clients';
 import { Select } from '../ui/Field';
 
@@ -29,8 +36,11 @@ const rowAmount = (it) => {
 };
 
 // Builder invoice — meniru struktur template resmi PT PEB.
-const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
-  const [number, setNumber] = useState(() => buildInvoiceNumber());
+// Mode edit: oper prop `invoice` (record Firestore). Tanpa prop itu, mode buat baru;
+// nomor invoice diisi otomatis dari urutan bulan berjalan.
+const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
+  const editing = Boolean(invoice);
+  const [number, setNumber] = useState(() => invoice?.invoiceNumber || buildInvoiceNumber());
   const [dueDate, setDueDate] = useState(addDaysISO(14));
   const [cityDate, setCityDate] = useState(todayISO());
   const [billingStage, setBillingStage] = useState('termin-1');
@@ -42,6 +52,43 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
   const [billToName, setBillToName] = useState('');
   const [billToAddress, setBillToAddress] = useState('');
   const [clientNpwp, setClientNpwp] = useState('');
+
+  // Nomor invoice otomatis: urutan bulan berjalan (INV-XXX/PEB/<mm>/<yyyy>).
+  useEffect(() => {
+    if (!isOpen || editing) return;
+    let alive = true;
+    getNextInvoiceNumber()
+      .then((n) => alive && setNumber(n))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isOpen, editing]);
+
+  // Mode edit: isi seluruh field dari invoice yang ada.
+  useEffect(() => {
+    if (!isOpen || !editing) return;
+    const inv = invoice || {};
+    setNumber(inv.invoiceNumber || '');
+    setDueDate(inv.dueDate ? String(inv.dueDate).slice(0, 10) : addDaysISO(14));
+    setCityDate(inv.issueDate ? String(inv.issueDate).slice(0, 10) : todayISO());
+    setBillingStage(inv.billingStage || 'termin-1');
+    setProgressPct(inv.quantity ? String(inv.quantity).replace('%', '') : '');
+    setClientId(inv.clientId || '');
+    setBillToName(inv.clientName || '');
+    setClientNpwp(inv.client?.npwp || '');
+    setPoNumber(inv.poNumber || '');
+    setPkNumber(inv.pkNumber || '');
+    setWphoNumber(inv.wphoNumber || '');
+    setTaxInvoiceNumber(inv.taxInvoiceNumber || '');
+    setFranco(inv.franco || '-');
+    setShippedVia(inv.shippedVia || '-');
+    setPaymentTerm(inv.paymentTerm || INVOICE_DEFAULTS.paymentTerm);
+    if (Array.isArray(inv.invoiceItems) && inv.invoiceItems.length) setItems(inv.invoiceItems);
+    setPphRate(inv.pphRate != null ? inv.pphRate : INVOICE_DEFAULTS.pphRate);
+    setUseDppNilaiLain(inv.useDppNilaiLain !== false);
+    if (inv.paymentNote) setPaymentNote(inv.paymentNote);
+  }, [isOpen, editing, invoice]);
 
   // Muat daftar klien; auto-pilih bila nama proyek.partner cocok satu klien.
   useEffect(() => {
@@ -177,12 +224,17 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
         taxDeductedAmount: totals.taxDeductedAmount,
         paymentNote,
         signatory: { name: signName, title: signTitle },
-        status: 'draft'
+        // Edit: jangan set status — invoice terkirim harus tetap terkirim.
+        ...(editing ? {} : { status: 'draft' })
       };
 
       // Simpan record dulu (agar muncul di daftar Invoice), lalu generate PDF
-      await addInvoice(payload);
-      await generateInvoicePDF(payload, company);
+      if (editing) {
+        await updateInvoice(invoice.id, payload);
+      } else {
+        await addInvoice(payload);
+        await generateInvoicePDF(payload, company);
+      }
       onSuccess?.();
       onClose?.();
     } catch (err) {
@@ -202,8 +254,8 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Buat Invoice"
-      subtitle={project?.name}
+      title={editing ? "Edit Invoice" : "Buat Invoice"}
+      subtitle={project?.name || invoice?.projectName}
       size="xl"
       footer={
         <>
@@ -212,7 +264,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
           </Button>
           <Button onClick={handleGenerate} loading={generating}>
             <FileDown className="h-4 w-4" />
-            {generating ? 'Membuat…' : 'Generate PDF'}
+            {generating ? 'Menyimpan…' : editing ? 'Simpan Perubahan' : 'Generate PDF'}
           </Button>
         </>
       }

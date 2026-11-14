@@ -6,47 +6,46 @@
 // memicu query sama sekali selama data masih segar (TTL), sehingga daftar
 // tampil seketika dan jumlah read jauh berkurang.
 //
-// Pola: Cache-Aside — cek cache dulu; bila kosong/kedaluwarsa, ambil dari
-// sumber lalu simpan. Mutasi (tambah/ubah/hapus) meng-invalidasi kuncinya.
+// Pola: Cache-Aside + Stale-While-Revalidate.
+// - Data segar (< TTL): dipakai tanpa menyentuh jaringan.
+// - Data basi (> TTL): data lama dikembalikan seketika, lalu fetcher dijalankan
+//   di belakang layar. Hasilnya masuk cache dan memberi tahu semua pelanggan
+//   `subscribe` — halaman memperbarui diri tanpa loading spinner.
+// - Mutasi (tambah/ubah/hapus) tetap meng-invalidasi kuncinya.
 
 import { withTimeout } from '../utils/async';
 
-const store = new Map(); // key → { data, at }
-const inflight = new Map(); // key → Promise (mencegah query ganda bersamaan)
+const store = new Map(); // key -> { data, at }
+const inflight = new Map(); // key -> Promise (mencegah query ganda bersamaan)
+const subscribers = new Map(); // key -> Set<(data) => void>
 
-const DEFAULT_TTL = 60_000; // 1 menit — cukup untuk berpindah menu
+// 5 menit: cukup untuk berpindah-pindah menu. Di luar jendela ini data lama
+// tetap langsung tampil (SWR) dan disegarkan diam-diam — biaya read hanya
+// satu per jendela, bukan setiap navigasi.
+const DEFAULT_TTL = 300_000;
 
-// Firestore TIDAK selalu me-reject saat koneksi tersendat: getDocs bisa
+// Firestore TIDAK selalu me-reject saat koneksi tersendat; getDocs bisa
 // menggantung tanpa batas. Tanpa batas waktu di sini, satu permintaan macet
 // membuat halaman "loading" selamanya — dan karena ada dedup in-flight,
 // SETIAP kunjungan berikutnya ikut menunggu promise macet yang sama.
 const FETCH_TIMEOUT = 10_000;
 
-/**
- * Ambil dari cache, atau jalankan fetcher lalu simpan.
- *
- * Bila fetcher melewati batas waktu, data lama (walau kedaluwarsa) dipakai
- * sebagai penyelamat — halaman tetap terisi, hanya sedikit basi. Bila belum
- * pernah ada data sama sekali, barulah error dilempar supaya pemanggil bisa
- * menampilkan pesan, bukan berputar selamanya.
- *
- * @param {string} key
- * @param {Function} fetcher - () => Promise<data>
- * @param {number} ttl - masa berlaku (ms)
- */
-export const cached = async (key, fetcher, ttl = DEFAULT_TTL) => {
-  const hit = store.get(key);
-  if (hit && Date.now() - hit.at < ttl) {
-    return hit.data;
-  }
+const notify = (key, data) => {
+  (subscribers.get(key) || []).forEach((cb) => {
+    try {
+      cb(data);
+    } catch (e) {
+      console.warn(`[cache] subscriber ${key} error`, e);
+    }
+  });
+};
 
-  // Bila permintaan yang sama sedang berjalan, ikut menunggu — jangan query dua kali.
-  if (inflight.has(key)) return inflight.get(key);
-
+const runFetcher = async (key, fetcher) => {
   const p = (async () => {
     try {
       const data = await withTimeout(fetcher(), FETCH_TIMEOUT);
       store.set(key, { data, at: Date.now() });
+      notify(key, data);
       return data;
     } catch (e) {
       const stale = store.get(key);
@@ -61,9 +60,51 @@ export const cached = async (key, fetcher, ttl = DEFAULT_TTL) => {
       inflight.delete(key);
     }
   })();
-
   inflight.set(key, p);
   return p;
+};
+
+/**
+ * Ambil dari cache, atau jalankan fetcher lalu simpan.
+ *
+ * Bila fetcher melewati batas waktu, data lama (walau kedaluwarsa) dipakai
+ * sebagai penyelamat — halaman tetap terisi, hanya sedikit basi. Bila belum
+ * pernah ada data sama sekali, barulah error dilempar supaya pemanggil bisa
+ * menampilkan pesan, bukan berputar selamanya.
+ *
+ * @param {string} key
+ * @param {Function} fetcher - () => Promise<data>
+ * @param {number} ttl - masa hidup data (ms); setelah itu revalidate di belakang layar
+ */
+export const cached = async (key, fetcher, ttl = DEFAULT_TTL) => {
+  const hit = store.get(key);
+  if (hit && Date.now() - hit.at < ttl) {
+    return hit.data;
+  }
+
+  // Bila permintaan yang sama sedang berjalan, ikut menunggu — jangan query dua kali.
+  if (inflight.has(key)) {
+    return hit ? hit.data : inflight.get(key);
+  }
+
+  // SWR: data basi tetap dipakai seketika; penyegaran berjalan di belakang.
+  // Pelanggan subscribe() akan menerima data baru begitu selesai.
+  if (hit) {
+    runFetcher(key, fetcher); // sengaja tidak ditunggu
+    return hit.data;
+  }
+
+  return runFetcher(key, fetcher);
+};
+
+/**
+ * Berlangganan pembaruan sebuah kunci (mis. hasil revalidasi SWR).
+ * Mengembalikan fungsi berhenti langganan.
+ */
+export const subscribe = (key, cb) => {
+  if (!subscribers.has(key)) subscribers.set(key, new Set());
+  subscribers.get(key).add(cb);
+  return () => subscribers.get(key).delete(cb);
 };
 
 /** Hapus satu kunci atau semua kunci berawalan tertentu. */

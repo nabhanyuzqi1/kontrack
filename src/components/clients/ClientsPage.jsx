@@ -10,6 +10,7 @@ import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import ClientModal from './ClientModal';
 import { getAllClients, deleteClient, clientDisplayName } from '../../services/clients';
+import { subscribe, CACHE_KEYS } from '../../services/cache';
 
 const ClientsPage = () => {
   const [clients, setClients] = useState([]);
@@ -18,8 +19,8 @@ const ClientsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const list = await getAllClients();
       list.sort((a, b) => clientDisplayName(a).localeCompare(clientDisplayName(b)));
@@ -33,6 +34,9 @@ const ClientsPage = () => {
 
   useEffect(() => {
     load();
+    // SWR: perbarui diam-diam saat cache disegarkan di belakang layar.
+    const un = subscribe(CACHE_KEYS.CLIENTS, () => load({ silent: true }));
+    return () => un();
   }, []);
 
   const filtered = useMemo(() => {

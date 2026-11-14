@@ -15,6 +15,7 @@ import {
   doc,
   addDoc,
   getDocs,
+  getDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -89,6 +90,26 @@ export const taxDocsProgress = (inv = {}) => [
 
 export const isPpnCair = (inv = {}) => inv.coreTaxStatus === CORETAX_STATUS.CLEARED;
 
+// Nomor urut berikutnya: scan nomor invoice berjalan "INV-<seq>/PEB/<mm>/<yyyy>".
+// Mengambil seq terbesar bulan berjalan + 1; bila belum ada di bulan ini, mulai 001.
+// Format mengikuti nomor live PT PEB.
+export const getNextInvoiceNumber = async () => {
+  try {
+    const list = await getAllInvoices();
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const re = new RegExp(`^INV-(\\d+)/PEB/${mm}/${now.getFullYear()}$`, 'i');
+    const max = list.reduce((acc, inv) => {
+      const m = re.exec(String(inv.invoiceNumber || '').trim());
+      return m ? Math.max(acc, Number(m[1])) : acc;
+    }, 0);
+    return `INV-${String(max + 1).padStart(3, '0')}/PEB/${mm}/${now.getFullYear()}`;
+  } catch (e) {
+    console.warn('[invoices] gagal hitung nomor otomatis', e?.message || e);
+    return buildInvoiceNumber();
+  }
+};
+
 export const addInvoice = async (data) => {
   const now = new Date().toISOString();
   const docRef = await addDoc(collection(db, COLLECTION), {
@@ -118,7 +139,18 @@ export const getAllInvoices = async () =>
     return list;
   });
 
+// Invoice terbayar terkunci: tidak boleh diedit/dihapus (rekam jejak audit),
+// hanya dokumen pajaknya (updateTaxDocs) yang masih bisa dimutakhirkan.
+const assertMutable = async (invoiceId) => {
+  const snap = await getDoc(doc(db, COLLECTION, invoiceId));
+  const status = snap.exists() ? snap.data().status : null;
+  if (status === INVOICE_STATUS.PAID) {
+    throw new Error('Invoice terbayar tidak dapat diubah atau dihapus. Hanya dokumen pajak yang boleh diperbarui.');
+  }
+};
+
 export const updateInvoice = async (invoiceId, data) => {
+  await assertMutable(invoiceId);
   await updateDoc(doc(db, COLLECTION, invoiceId), { ...data, updatedAt: new Date().toISOString() });
   invalidate(CACHE_KEYS.INVOICES);
 };
@@ -127,6 +159,7 @@ export const setInvoiceStatus = (invoiceId, status) =>
   updateInvoice(invoiceId, { status, statusUpdatedAt: new Date().toISOString() });
 
 export const deleteInvoice = async (invoiceId) => {
+  await assertMutable(invoiceId);
   await deleteDoc(doc(db, COLLECTION, invoiceId));
   invalidate(CACHE_KEYS.INVOICES);
 };

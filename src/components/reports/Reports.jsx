@@ -20,6 +20,7 @@ import {
 import TaxMonthlyReport from './TaxMonthlyReport';
 import AnnualReport from './AnnualReport';
 import { getAllInvoices } from '../../services/invoices';
+import { subscribe, CACHE_KEYS } from '../../services/cache';
 import { availableYears, toDate, withinRange } from '../../utils/reportCalc';
 import { getAllProjects } from '../../services/projects';
 import { getAllTransactions } from '../../services/transactions';
@@ -88,10 +89,14 @@ const Reports = ({ currentUser }) => {
 
   useEffect(() => {
     loadReportData();
+    // SWR: perbarui diam-diam saat cache disegarkan di belakang layar.
+    const keys = [CACHE_KEYS.PROJECTS, CACHE_KEYS.TRANSACTIONS, CACHE_KEYS.INVOICES];
+    const unsubs = keys.map((k) => subscribe(k, () => loadReportData({ silent: true })));
+    return () => unsubs.forEach((u) => u());
   }, []);
 
-  const loadReportData = async () => {
-    setLoading(true);
+  const loadReportData = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [projectList, transactionList, invoiceList] = await Promise.all([
         getAllProjects(),
