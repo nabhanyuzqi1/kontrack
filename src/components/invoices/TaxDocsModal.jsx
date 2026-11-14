@@ -6,6 +6,13 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Field, Input } from '../ui/Field';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { toDate } from '../../utils/reportCalc';
+
+// Field tanggal live campuran Timestamp dan string — selalu lewat toDate().
+const isoDate = (v) => {
+  const d = toDate(v);
+  return d ? d.toLocaleDateString('sv') : '';
+};
 import { updateTaxDocs, taxDocsProgress } from '../../services/invoices';
 
 const Section = ({ step, title, done, children }) => (
@@ -22,13 +29,13 @@ const TaxDocsModal = ({ isOpen, onClose, invoice, onSaved }) => {
   // Prisi dari field live yang sudah ada di dokumen invoice.
   const [f, setF] = useState(() => ({
     taxInvoiceNumber: invoice?.taxInvoiceNumber || '',
-    taxInvoiceRecordedAt: (invoice?.taxInvoiceRecordedAt || '').slice(0, 10),
+    taxInvoiceRecordedAt: isoDate(invoice?.taxInvoiceRecordedAt),
     billingCode: invoice?.billingCode || '',
-    billingDocumentUploadedAt: (invoice?.billingDocumentUploadedAt || '').slice(0, 10),
+    billingDocumentUploadedAt: isoDate(invoice?.billingDocumentUploadedAt),
     taxPaymentAmount: invoice?.pajak11 || '',
-    taxPaidAt: (invoice?.taxPaidAt || '').slice(0, 10),
+    taxPaidAt: isoDate(invoice?.taxPaidAt),
     ntpnNumber: invoice?.ntpnNumber || '',
-    ntpnRecordedAt: (invoice?.ntpnRecordedAt || '').slice(0, 10)
+    ntpnRecordedAt: isoDate(invoice?.ntpnRecordedAt)
   }));
   const [saving, setSaving] = useState(false);
 

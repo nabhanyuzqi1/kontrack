@@ -1,11 +1,12 @@
 // src/components/projects/ProjectList.jsx
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, FolderKanban, RotateCw } from 'lucide-react';
+import { Plus, FolderKanban, RotateCw, LayoutGrid, Rows3 } from 'lucide-react';
 import { getAllProjects, deleteProject } from '../../services/projects';
 import { subscribe, CACHE_KEYS } from '../../services/cache';
 import ProjectModal from './ProjectModal';
 import ProjectCard from './ProjectCard';
+import ProjectTableList from './ProjectTable';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { SkeletonListPage } from '../ui/Skeleton';
@@ -21,6 +22,12 @@ const ProjectList = ({ currentUser }) => {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [filter, setFilter] = useState('all');
+  // Tampilan daftar: tabel rapat (default, ala ERP) atau grid kartu.
+  const [view, setView] = useState(() => localStorage.getItem('kontrack-project-view') || 'table');
+  const setViewAndSave = (v) => {
+    setView(v);
+    localStorage.setItem('kontrack-project-view', v);
+  };
   const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') || '');
 
@@ -170,7 +177,25 @@ const ProjectList = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Grid proyek */}
+      {/* Daftar proyek */}
+      {filteredProjects.length > 0 && (
+        <div className="mb-3 flex justify-end gap-1">
+          <button
+            onClick={() => setViewAndSave('table')}
+            title="Tampilan tabel"
+            className={`rounded-lg p-2 transition-colors ${view === 'table' ? 'bg-brand-600 text-white' : 'glass-3 text-slate-500 hover:text-slate-900'}`}
+          >
+            <Rows3 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewAndSave('grid')}
+            title="Tampilan kartu"
+            className={`rounded-lg p-2 transition-colors ${view === 'grid' ? 'bg-brand-600 text-white' : 'glass-3 text-slate-500 hover:text-slate-900'}`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {filteredProjects.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
@@ -195,18 +220,26 @@ const ProjectList = ({ currentUser }) => {
             )
           }
         />
-      ) : (
+      ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {filteredProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onEdit={isAdmin ? handleEditProject : null}
-              onDelete={isAdmin ? handleDeleteProject : null}
-              currentUser={currentUser}
-            />
-          ))}
-        </div>
+            {filteredProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onEdit={isAdmin ? handleEditProject : null}
+                onDelete={isAdmin ? handleDeleteProject : null}
+                currentUser={currentUser}
+              />
+            ))}
+          </div>
+        ) : (
+          <ProjectTableList
+            projects={filteredProjects}
+            onEdit={isAdmin ? handleEditProject : null}
+            onDelete={isAdmin ? handleDeleteProject : null}
+            currentUser={currentUser}
+          />
+        )}
       )}
 
       {showProjectModal && isAdmin && (

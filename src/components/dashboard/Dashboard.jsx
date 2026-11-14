@@ -7,6 +7,7 @@ import AITransactionModal from '../transactions/AITransactionModal';
 import CashflowChart from './CashflowChart';
 import AIInsightCard from '../ai/AIInsightCard';
 import { getAllInvoices } from '../../services/invoices';
+import { subscribe, CACHE_KEYS } from '../../services/cache';
 import { getAllProjects } from '../../services/projects';
 import { getAllTransactions } from '../../services/transactions';
 import ProjectReminders from './ProjectReminders';

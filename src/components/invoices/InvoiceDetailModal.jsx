@@ -68,6 +68,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
       title={inv.invoiceNumber || 'Detail Invoice'}
       subtitle={inv.projectName}
       size="xl"
+      drawer
       footer={
         <>
           {isPaid ? (

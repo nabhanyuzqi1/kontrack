@@ -8,7 +8,14 @@ const sizes = {
   xl: 'max-w-4xl'
 };
 
-const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', children, footer }) => {
+/**
+ * Modal dengan dua varian.
+ * - default: dialog terpusat.
+ * - drawer: slide-over dari kanan (gaya ERP modern — konten di belakang tetap
+ *   terlihat, cepat dibuka-tutup untuk melihat detail sambil membandingkan
+ *   daftar di belakangnya).
+ */
+const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, children, footer }) => {
   useEffect(() => {
     if (!isOpen) return undefined;
     const onKey = (e) => e.key === 'Escape' && onClose?.();
@@ -24,11 +31,17 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', children, footer
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/45 p-4 backdrop-blur-sm animate-fade-in"
+      className={`fixed inset-0 z-50 bg-scrim/45 backdrop-blur-sm animate-fade-in ${
+        drawer ? 'flex justify-end' : 'flex items-center justify-center p-4'
+      }`}
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
     >
       <div
-        className={`glass-1 flex max-h-[92vh] w-full flex-col overflow-hidden shadow-2xl animate-scale-in ${sizes[size]}`}
+        className={
+          drawer
+            ? 'glass-1 flex h-full w-full max-w-2xl flex-col overflow-hidden shadow-2xl animate-slide-in-right'
+            : `glass-1 flex max-h-[92vh] w-full flex-col overflow-hidden shadow-2xl animate-scale-in ${sizes[size]}`
+        }
         role="dialog"
         aria-modal="true"
       >
