@@ -363,10 +363,10 @@ const ProjectDetail = ({ currentUser }) => {
           label="Total Pemasukan"
           value={formatCurrency(income)}
           tone={{
-            wrap: 'border-emerald-100 bg-emerald-50/60',
-            icon: 'bg-emerald-100 text-emerald-600',
-            label: 'text-emerald-700',
-            value: 'text-emerald-800'
+            wrap: 'border-emerald-100 bg-emerald-50/60 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]',
+            icon: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
+            label: 'text-emerald-700 dark:text-emerald-400',
+            value: 'text-emerald-800 dark:text-emerald-300'
           }}
         />
         <SummaryTile
@@ -374,10 +374,10 @@ const ProjectDetail = ({ currentUser }) => {
           label="Total Pengeluaran"
           value={formatCurrency(expense)}
           tone={{
-            wrap: 'border-red-100 bg-red-50/60',
-            icon: 'bg-red-100 text-red-600',
-            label: 'text-red-700',
-            value: 'text-red-800'
+            wrap: 'border-red-100 bg-red-50/60 dark:border-red-500/20 dark:bg-red-500/[0.07]',
+            icon: 'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400',
+            label: 'text-red-700 dark:text-red-400',
+            value: 'text-red-800 dark:text-red-300'
           }}
         />
         <SummaryTile
@@ -385,10 +385,10 @@ const ProjectDetail = ({ currentUser }) => {
           label="Saldo"
           value={formatCurrency(balance)}
           tone={{
-            wrap: 'border-brand-100 bg-brand-50/60',
-            icon: 'bg-brand-100 text-brand-600',
-            label: 'text-brand-700',
-            value: 'text-brand-800'
+            wrap: 'border-brand-100 bg-brand-50/60 dark:border-brand-500/20 dark:bg-brand-500/[0.07]',
+            icon: 'bg-brand-100 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300',
+            label: 'text-brand-700 dark:text-brand-300',
+            value: 'text-brand-800 dark:text-brand-200'
           }}
         />
       </div>

@@ -116,9 +116,13 @@ export const invalidate = () => {};
 export const withTimeout = (p) => p;
 
 // --- Laporan & PDF ---
-// pdfGenerator juga dialihkan ke shim ini, jadi ekspornya wajib ada di sini.
+// pdfGenerator & invoiceGenerator juga dialihkan ke shim ini, jadi ekspornya
+// wajib ada di sini. Tanpa ini, modul aslinya menarik `jspdf` mentah dan
+// pratinjau gagal dengan "Failed to resolve module specifier".
 export const generateFullReportPDF = noopSync;
 export const generateTransactionReport = noopSync;
+export const generateInvoicePDF = noopSync;
+export const buildInvoiceNumber = () => `PREVIEW-${Date.now()}`;
 export const shareProjectWhatsAppRich = noopSync;
 export const buildFinancialSummary = () => ({});
 export const getFinancialInsight = async () => ({});

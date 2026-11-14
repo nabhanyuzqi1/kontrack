@@ -25,13 +25,23 @@ import {
   Bell,
   Sun,
   Moon,
-  HelpCircle
+  HelpCircle,
+  AlertTriangle,
+  CalendarClock,
+  Keyboard,
+  BookOpen,
+  ShieldCheck,
+  CircleUser,
+  Building2
 } from 'lucide-react';
 import ErrorBoundary from '../ui/ErrorBoundary';
 import { signOutUser } from '../../services/auth';
 import { LogoMark } from '../brand/Logo';
 import { useColorMode } from '../../hooks/useColorMode';
 import { getCompanySettings } from '../../services/settings';
+import { getAllProjects } from '../../services/projects';
+import { getAllInvoices, INVOICE_STATUS } from '../../services/invoices';
+import { PROJECT_STATUS } from '../../utils/constants';
 
 const navItems = (isAdmin) => [
   ...(isAdmin ? [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }] : []),
@@ -62,12 +72,68 @@ const IconButton = ({ label, onClick, children, badge = false, className = '' })
     onClick={onClick}
     title={label}
     aria-label={label}
-    className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full glass-3 text-slate-500 glass-hover hover:text-slate-800 ${className}`}
+    className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full glass-3 text-slate-500 ring-1 ring-inset ring-slate-900/[0.04] transition-colors glass-hover hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 dark:text-slate-400 dark:ring-white/[0.06] dark:hover:text-slate-200 ${className}`}
   >
     {children}
     {badge && (
       <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-gold ring-2 ring-[var(--glass-primary)]" />
     )}
+  </button>
+);
+
+// Panel melayang untuk menu header (notifikasi/bantuan/akun): menutup saat klik
+// di luar atau Escape. Satu komponen dipakai bergantian agar tidak ada dua
+// panel terbuka sekaligus.
+const Popover = ({ open, onClose, children, align = 'right' }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div
+      ref={ref}
+      className={`absolute right-0 top-[calc(100%+8px)] z-50 w-80 max-w-[calc(100vw-24px)] animate-scale-in rounded-xl border border-slate-200/80 bg-[var(--glass-elevated)] shadow-card dark:border-white/10 ${align === 'right' ? '' : 'left-0'}`}
+      role="menu"
+    >
+      {children}
+    </div>
+  );
+};
+
+// tone = pasangan kelas statis (Tailwind tidak membaca kelas dinamis template)
+const TONE_CLS = {
+  brand: 'bg-brand-500/10 text-brand-600 dark:text-brand-300',
+  red: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+};
+
+const PopoverItem = ({ icon: Icon, title, desc, tone = 'brand', onClick }) => (
+  <button
+    onClick={onClick}
+    role="menuitem"
+    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-100/70 dark:hover:bg-white/[0.06]"
+  >
+    {Icon && (
+      <span className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLS[tone] || TONE_CLS.brand}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+    )}
+    <span className="min-w-0">
+      <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{title}</span>
+      {desc && <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{desc}</span>}
+    </span>
   </button>
 );
 
@@ -113,25 +179,31 @@ const ModuleStrip = ({ isAdmin, onNavigate }) => (
 // Kapsul profil entitas: nama perusahaan + NPWP (bila ada di Pengaturan).
 // `showText` dipaksa true di dalam drawer: di sana ruangnya cukup, dan kapsul
 // tanpa nama hanya menampilkan satu huruf tanpa arti.
-const EntityCapsule = ({ company, user, showText = false, className = '' }) => {
+const EntityCapsule = ({ company, user, showText = false, className = '', onClick }) => {
   const name = company?.companyName || company?.name || user?.email || 'Kontrack';
   const npwp = company?.npwp;
   const initial = String(name).charAt(0).toUpperCase();
+  const Comp = onClick ? 'button' : 'div';
 
   return (
-    <div className={`flex items-center gap-2.5 rounded-full glass-3 py-1 pl-1 pr-3 ${className}`}>
+    <Comp
+      onClick={onClick}
+      type={onClick ? 'button' : undefined}
+      title={onClick ? 'Profil perusahaan' : undefined}
+      className={`flex max-w-[150px] items-center gap-2.5 rounded-full glass-3 py-1 pl-1 pr-3 ring-1 ring-inset ring-slate-900/[0.04] transition-colors sm:max-w-[260px] dark:ring-white/[0.06] ${onClick ? 'glass-hover text-left' : ''} ${className}`}
+    >
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-gradient font-display text-xs font-bold text-white">
         {initial}
       </div>
       <div className={`min-w-0 leading-tight ${showText ? 'block' : 'hidden sm:block'}`}>
         {npwp && (
-          <p className="tnum truncate text-[10px] uppercase tracking-wide text-slate-400">
+          <p className="tnum truncate text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
             NPWP {npwp}
           </p>
         )}
-        <p className="truncate text-xs font-semibold text-slate-800">{name}</p>
+        <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">{name}</p>
       </div>
-    </div>
+    </Comp>
   );
 };
 
@@ -181,6 +253,8 @@ const AppLayout = ({ currentUser, children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [company, setCompany] = useState(null);
+  const [openMenu, setOpenMenu] = useState(null); // 'notif' | 'help' | 'entity'
+  const [notifications, setNotifications] = useState(null);
   const searchRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -197,6 +271,96 @@ const AppLayout = ({ currentUser, children }) => {
       alive = false;
     };
   }, []);
+
+  // Notifikasi dihitung dari data nyata saat panel pertama kali dibuka — bukan
+  // sekadar lonceng hiasan. Sumber: tenggat proyek (terlambat/mendekati) dan
+  // faktur yang masih menunggu pembayaran/penyetoran PPN.
+  const loadNotifications = async () => {
+    try {
+      const [projects, invoices] = await Promise.all([
+        getAllProjects().catch(() => []),
+        isAdmin ? getAllInvoices().catch(() => []) : Promise.resolve([])
+      ]);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const items = [];
+
+      projects
+        .filter((p) => p.status === PROJECT_STATUS.ONGOING)
+        .forEach((p) => {
+          const end = p.endDate ? new Date(p.endDate) : null;
+          if (!end || Number.isNaN(end.getTime())) return;
+          end.setHours(0, 0, 0, 0);
+          const days = Math.round((end - today) / 86400000);
+          if (days < 0) {
+            items.push({
+              id: `late-${p.id}`,
+              icon: AlertTriangle,
+              tone: 'red',
+              title: p.name,
+              desc: `Terlambat ${Math.abs(days)} hari dari tenggat`,
+              to: `/projects/${p.id}`
+            });
+          } else if (days <= 14) {
+            items.push({
+              id: `soon-${p.id}`,
+              icon: CalendarClock,
+              tone: 'amber',
+              title: p.name,
+              desc: days === 0 ? 'Tenggat hari ini' : `Tenggat dalam ${days} hari`,
+              to: `/projects/${p.id}`
+            });
+          }
+        });
+
+      if (isAdmin) {
+        invoices
+          .filter((inv) => inv.status === INVOICE_STATUS.SENT)
+          .forEach((inv) => {
+            items.push({
+              id: `inv-${inv.id}`,
+              icon: ReceiptText,
+              tone: 'brand',
+              title: inv.clientName || inv.recipient || 'Invoice',
+              desc: `Invoice ${inv.invoiceNumber || inv.number || ''} menunggu pembayaran`,
+              to: '/invoices'
+            });
+          });
+        invoices
+          .filter(
+            (inv) =>
+              inv.status === INVOICE_STATUS.PAID &&
+              !inv.taxPaidAt &&
+              (Number(inv.pajak11) || Number(inv.totals?.ppn) || 0) > 0
+          )
+          .forEach((inv) => {
+            items.push({
+              id: `tax-${inv.id}`,
+              icon: Landmark,
+              tone: 'emerald',
+              title: 'PPN belum disetor',
+              desc: `Invoice ${inv.invoiceNumber || inv.number || ''} sudah dibayar, PPN belum ditandai disetor`,
+              to: '/tax-invoices'
+            });
+          });
+      }
+
+      setNotifications(items);
+    } catch (error) {
+      console.error('Gagal memuat notifikasi:', error);
+      setNotifications([]);
+    }
+  };
+
+  const toggleMenu = (menu) => {
+    setOpenMenu((prev) => {
+      if (prev !== menu && menu === 'notif') {
+        setNotifications(null);
+        loadNotifications();
+      }
+      return prev === menu ? null : menu;
+    });
+  };
 
   // Tutup drawer saat berpindah halaman
   useEffect(() => {
@@ -281,7 +445,7 @@ const AppLayout = ({ currentUser, children }) => {
               />
             </div>
 
-            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
               <IconButton label="Cari" onClick={focusSearch} className="sm:hidden">
                 <Search className="h-4 w-4" />
               </IconButton>
@@ -291,21 +455,153 @@ const AppLayout = ({ currentUser, children }) => {
               >
                 {mode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </IconButton>
-              {/* Lonceng notifikasi: saat ini hanya penanda visual. Belum ada
-                  sumber notifikasi di dalam aplikasi — jangan diklaim berfungsi
-                  sebelum ada pengirimnya (lihat ROADMAP). */}
-              <IconButton label="Notifikasi" badge className="hidden lg:inline-flex">
+
+              {/* Notifikasi: dihitung dari data nyata (tenggat proyek, invoice,
+                  setoran PPN) setiap kali panel dibuka. */}
+              <div className="relative hidden lg:block">
+                <IconButton
+                  label="Notifikasi"
+                  badge={Boolean(notifications?.length)}
+                  onClick={() => toggleMenu('notif')}
+                >
                 <Bell className="h-4 w-4" />
               </IconButton>
-              <IconButton label="Bantuan" className="hidden lg:inline-flex">
-                <HelpCircle className="h-4 w-4" />
-              </IconButton>
-              <Link to="/settings" aria-label="Pengaturan entitas" className="shrink-0">
-                <EntityCapsule company={company} user={currentUser} />
-              </Link>
+              <Popover open={openMenu === 'notif'} onClose={() => setOpenMenu(null)}>
+                  <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Notifikasi</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Tenggat proyek, tagihan, dan pajak
+                    </p>
+                  </div>
+                  <div className="max-h-[420px] overflow-y-auto p-1.5">
+                    {notifications === null && (
+                      <p className="px-3 py-6 text-center text-sm text-slate-400">Memuat…</p>
+                    )}
+                    {notifications !== null && notifications.length === 0 && (
+                      <p className="px-3 py-6 text-center text-sm text-slate-400">
+                        Tidak ada yang perlu ditindak. Nyaman.
+                      </p>
+                    )}
+                    {notifications?.map((n) => (
+                      <PopoverItem
+                        key={n.id}
+                        icon={n.icon}
+                        title={n.title}
+                        desc={n.desc}
+                        tone={n.tone}
+                        onClick={() => {
+                          setOpenMenu(null);
+                          navigate(n.to);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </Popover>
+              </div>
+
+              <div className="relative hidden lg:block">
+                <IconButton label="Bantuan" onClick={() => toggleMenu('help')}>
+                  <HelpCircle className="h-4 w-4" />
+                </IconButton>
+                <Popover open={openMenu === 'help'} onClose={() => setOpenMenu(null)}>
+                  <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Bantuan</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Panduan singkat tiap modul</p>
+                  </div>
+                  <div className="p-1.5">
+                    <PopoverItem
+                      icon={BookOpen}
+                      title="Proyek"
+                      desc="Catat RAB, SPK, dan progres pembayaran. Klik kartu proyek untuk detail termin."
+                      onClick={() => {
+                        setOpenMenu(null);
+                        navigate('/projects');
+                      }}
+                    />
+                    <PopoverItem
+                      icon={ReceiptText}
+                      title="Invoice & Faktur Pajak"
+                      desc="Terbitkan invoice, tandai pembayaran, lalu kelola faktur dan setoran PPN di CoreTax."
+                      onClick={() => {
+                        setOpenMenu(null);
+                        navigate('/invoices');
+                      }}
+                    />
+                    <PopoverItem
+                      icon={BarChart3}
+                      title="Laporan"
+                      desc="Posisi kontrak, arus kas per periode, laporan pajak bulanan, dan analisis tahunan."
+                      onClick={() => {
+                        setOpenMenu(null);
+                        navigate('/reports');
+                      }}
+                    />
+                    <PopoverItem
+                      icon={ShieldCheck}
+                      title="Data & Keamanan"
+                      desc="Identitas perusahaan dan pengaturan hanya bisa diubah oleh admin."
+                      onClick={() => {
+                        setOpenMenu(null);
+                        navigate('/settings');
+                      }}
+                    />
+                  </div>
+                </Popover>
+              </div>
+
+              <div className="relative min-w-0 shrink">
+                <EntityCapsule
+                  company={company}
+                  user={currentUser}
+                  onClick={() => toggleMenu('entity')}
+                />
+                <Popover open={openMenu === 'entity'} onClose={() => setOpenMenu(null)}>
+                  <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
+                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      {company?.companyName || company?.name || currentUser?.email || 'Kontrack'}
+                    </p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      {currentUser?.email}
+                      {currentUser?.role === 'admin' ? ' · Administrator' : ''}
+                    </p>
+                  </div>
+                  <div className="p-1.5">
+                    <PopoverItem
+                      icon={Building2}
+                      title="Pengaturan perusahaan"
+                      desc="Identitas, tema, dan pengguna"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        navigate('/settings');
+                      }}
+                    />
+                    <PopoverItem
+                      icon={mode === 'dark' ? Sun : Moon}
+                      title={mode === 'dark' ? 'Mode terang' : 'Mode gelap'}
+                      desc="Preferensi tersimpan di perangkat ini"
+                      onClick={() => {
+                        toggle();
+                        setOpenMenu(null);
+                      }}
+                    />
+                    {currentUser && (
+                      <PopoverItem
+                        icon={LogOut}
+                        title="Keluar"
+                        desc="Akhiri sesi di perangkat ini"
+                        tone="red"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          handleSignOut();
+                        }}
+                      />
+                    )}
+                  </div>
+                </Popover>
+              </div>
               <button
                 onClick={() => setMobileOpen(true)}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full glass-3 text-slate-600 sm:hidden"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full glass-3 text-slate-600 dark:text-slate-300"
                 aria-label="Buka menu"
               >
                 <Menu className="h-5 w-5" />

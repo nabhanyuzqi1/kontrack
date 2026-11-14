@@ -9,9 +9,9 @@ const variants = {
   secondary:
     'glass-3 text-slate-700 hover:border-slate-300 hover:bg-slate-100 focus-visible:ring-slate-400',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-slate-400',
-  danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm focus-visible:ring-red-500',
-  'danger-ghost': 'text-red-600 hover:bg-red-500/10 focus-visible:ring-red-500',
-  success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm focus-visible:ring-emerald-500'
+  danger: 'bg-red-600 dark:bg-[#dc2626] text-white hover:bg-red-700 dark:hover:bg-[#b91c1c] shadow-sm focus-visible:ring-red-500',
+  'danger-ghost': 'text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:ring-red-500',
+  success: 'bg-emerald-600 dark:bg-[#059669] text-white hover:bg-emerald-700 dark:hover:bg-[#047857] shadow-sm focus-visible:ring-emerald-500'
 };
 
 const sizes = {
