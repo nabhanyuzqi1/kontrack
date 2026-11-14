@@ -162,6 +162,8 @@ const Lightbox = ({ items = [], index = 0, onClose, onNavigate }) => {
         )}
 
         {pdf ? (
+          // Latar putih di sini disengaja: dokumen PDF butuh kanvas terang, dan ini
+          // bukan permukaan UI yang ikut mode. Jangan diganti ke token kaca.
           <iframe
             src={item.url}
             title={item.name || 'Dokumen'}

@@ -20,7 +20,7 @@ import { formatCurrency } from '../../utils/formatters';
 const QuickAction = ({ icon: Icon, title, description, onClick, tone }) => (
   <button
     onClick={onClick}
-    className="group flex items-center gap-4 rounded-xl border border-slate-200/70 bg-white p-4 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card-hover"
+    className="group flex items-center gap-4 glass-2 glass-hover p-4 text-left hover:border-brand-300"
   >
     <div className={`rounded-xl p-3 transition-colors ${tone}`}>
       <Icon className="h-5 w-5" />

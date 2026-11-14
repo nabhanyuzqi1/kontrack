@@ -5,14 +5,22 @@ import AppLayout from '../src/components/layout/AppLayout.jsx';
 import ProjectList from '../src/components/projects/ProjectList.jsx';
 import Reports from '../src/components/reports/Reports.jsx';
 import Dashboard from '../src/components/dashboard/Dashboard.jsx';
+import ClientsPage from '../src/components/clients/ClientsPage.jsx';
+import InvoicesPage from '../src/components/invoices/InvoicesPage.jsx';
+import TaxInvoicesPage from '../src/components/invoices/TaxInvoicesPage.jsx';
+import SettingsPage from '../src/components/settings/SettingsPage.jsx';
 import '../src/styles/globals.css';
 
-// Pratinjau beberapa halaman sekaligus supaya shell, kartu, dan laporan bisa
-// diperiksa dalam satu sesi tanpa login.
+// Pratinjau seluruh halaman supaya audit kontras/overlap mencakup aplikasi
+// sebenarnya, bukan cuma halaman yang kebetulan sudah ada di sini.
 const PAGES = [
   { key: 'projects', label: 'Proyek', el: <ProjectList /> },
   { key: 'reports', label: 'Laporan', el: <Reports /> },
-  { key: 'dashboard', label: 'Dashboard', el: <Dashboard /> }
+  { key: 'dashboard', label: 'Dashboard', el: <Dashboard /> },
+  { key: 'clients', label: 'Klien', el: <ClientsPage /> },
+  { key: 'invoices', label: 'Invoice', el: <InvoicesPage /> },
+  { key: 'tax', label: 'Faktur Pajak', el: <TaxInvoicesPage /> },
+  { key: 'settings', label: 'Pengaturan', el: <SettingsPage /> }
 ];
 
 const user = { role: 'admin', email: 'demo@kontrack.id', name: 'Nabhan Yuzqi' };
@@ -34,6 +42,7 @@ const Harness = () => {
           {PAGES.map((p) => (
             <button
               key={p.key}
+              data-preview-nav={p.key}
               onClick={() => setPage(p.key)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 page === p.key
@@ -52,4 +61,3 @@ const Harness = () => {
 };
 
 createRoot(document.getElementById('root')).render(<Harness />);
-

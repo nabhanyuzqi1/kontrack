@@ -4,6 +4,7 @@
 // lalu disinkronkan sebagai atribut data-theme di <html>.
 import { useState, useEffect, useCallback } from 'react';
 import { resolveMode, applyMode, toggleMode, MODES } from '../utils/colorMode';
+import { applyTheme, getCachedTheme } from '../utils/themes';
 
 export const useColorMode = () => {
   const [mode, setMode] = useState(() => resolveMode());
@@ -12,6 +13,10 @@ export const useColorMode = () => {
   // ditentukan preferensi sistem, bukan pilihan tersimpan.
   useEffect(() => {
     applyMode(mode);
+    // Preset brand ditulis sebagai inline style, jadi varian gelapnya harus
+    // diterapkan ulang lewat jalur yang sama setiap mode berubah — aturan CSS
+    // tidak bisa menimpanya.
+    applyTheme(getCachedTheme(), mode);
   }, [mode]);
 
   // Ikuti perubahan preferensi sistem, tetapi hanya selama pengguna belum memilih

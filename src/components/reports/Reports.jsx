@@ -284,7 +284,7 @@ const Reports = ({ currentUser }) => {
               className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${
                 tab === key
                   ? 'bg-brand-600 text-white shadow-sm'
-                  : 'bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50'
+                  : 'bg-slate-100/70 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-200/70'
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -518,7 +518,7 @@ const Reports = ({ currentUser }) => {
                 <Th>Progress</Th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 bg-white">
+            <tbody className="divide-y divide-slate-200/60">
               {projects.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="px-5 py-8 text-center text-sm text-slate-400">

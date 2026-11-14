@@ -108,11 +108,69 @@ export const THEME_PRESETS = {
 export const DEFAULT_THEME = 'electric';
 const STORAGE_KEY = 'kontrack-theme';
 
-// Terapkan preset ke :root. Dipanggil saat boot + saat user ganti tema.
-export const applyTheme = (presetName) => {
+// Nilai yang dipakai saat mode gelap aktif. Skalanya dibalik untuk ujung terang
+// (50–300 jadi gelap) dan diterangkan untuk ujung gelap (700–900 jadi terang).
+//
+// Kenapa per-mode: preset ditulis sebagai INLINE STYLE di <html>, sehingga aturan
+// CSS `[data-theme='dark']` TIDAK bisa menimpanya (inline selalu menang). Jadi
+// penyesuaian mode harus lewat jalur yang sama — fungsi ini dipanggil ulang tiap
+// mode berubah.
+//
+// Hanya kesan gelap/terang yang diubah, bukan rona warna: tema tetap terlihat
+// sebagai dirinya sendiri.
+const darkVariant = (vars) => {
+  const out = {};
+  Object.entries(vars).forEach(([key, value]) => {
+    const m = key.match(/^--(brand|accent)-(\d+)$/);
+    if (!m || typeof value !== 'string') {
+      out[key] = value;
+      return;
+    }
+    const [, family, stepStr] = m;
+    const step = Number(stepStr);
+    const [r, g, b] = value.split(' ').map(Number);
+    const toHsl = (rr, gg, bb) => {
+      const rn = rr / 255, gn = gg / 255, bn = bb / 255;
+      const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+      const l = (max + min) / 2;
+      let h = 0, s = 0;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) * 60;
+        else if (max === gn) h = ((bn - rn) / d + 2) * 60;
+        else h = ((rn - gn) / d + 4) * 60;
+      }
+      return [h, s * 100, l * 100];
+    };
+    const [h, s, l] = toHsl(r, g, b);
+    // Titik balik di sekitar langkah 500: langkah terang jadi gelap, dan sebaliknya.
+    const targetL = step <= 400 ? Math.max(14, Math.min(34, 46 - l * 0.42))
+      : step >= 700 ? Math.max(62, Math.min(84, 100 - l * 0.35))
+      : l;
+    const sPrime = Math.max(38, Math.min(72, s));
+    // HSL -> RGB (tanpa dependensi)
+    const c = ((1 - Math.abs((2 * targetL) / 100 - 1)) * sPrime) / 100;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const mAdd = targetL / 100 - c / 2;
+    const seg = Math.floor(h / 60) % 6;
+    const rgb = [
+      [c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]
+    ][seg];
+    out[key] = rgb.map((v) => Math.round((v + mAdd) * 255)).join(' ') + ` /* ${family} ${step} */`;
+  });
+  return out;
+};
+
+const cleanVars = (obj) =>
+  Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, String(v).replace(/\s*\/\*.*?\*\//, '')]));
+
+// Terapkan preset ke :root. Dipanggil saat boot + saat user ganti tema + saat mode berubah.
+export const applyTheme = (presetName, mode = 'light') => {
   const preset = THEME_PRESETS[presetName] || THEME_PRESETS[DEFAULT_THEME];
   const root = document.documentElement;
-  Object.entries(preset.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  const vars = mode === 'dark' ? cleanVars(darkVariant(preset.vars)) : preset.vars;
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   try {
     localStorage.setItem(STORAGE_KEY, presetName);
   } catch (e) {

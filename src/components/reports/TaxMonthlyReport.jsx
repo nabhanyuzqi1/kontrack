@@ -106,7 +106,7 @@ const TaxMonthlyReport = ({ invoices, year }) => {
                 <Th>Status Setor</Th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 bg-white">
+            <tbody className="divide-y divide-slate-200/60">
               {rows.map((r) => {
                 const diff = r.ppnTerhutang - r.ppnDisetor;
                 const empty = r.invoiceCount === 0 && r.ppnDisetor === 0;

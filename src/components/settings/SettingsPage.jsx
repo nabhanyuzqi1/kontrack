@@ -102,7 +102,7 @@ const AssetCard = ({
             onClick={onRemove}
             disabled={removing}
             title={`Hapus ${title}`}
-            className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-400 shadow-sm transition-colors hover:text-red-600 disabled:opacity-40"
+            className="absolute right-2 top-2 rounded-lg bg-slate-100/90 p-1.5 text-slate-500 shadow-sm backdrop-blur transition-colors hover:text-red-600 disabled:opacity-40"
           >
             {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
@@ -114,7 +114,7 @@ const AssetCard = ({
         </div>
       )}
 
-      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+      <label className="inline-flex cursor-pointer items-center justify-center gap-2 glass-3 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300">
         {uploading ? (
           <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
         ) : (
@@ -327,7 +327,7 @@ const SettingsPage = ({ currentUser }) => {
             className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${
               tab === key
                 ? 'bg-brand-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50'
+                : 'bg-slate-100/70 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-200/70'
             }`}
           >
             <Icon className="h-4 w-4" />

@@ -18,11 +18,11 @@ import { getCompanySettings, getThemeFromSettings } from './services/settings';
 import { resolveMode, applyMode } from './utils/colorMode';
 import './styles/globals.css';
 
+// Mode dipasang lebih dulu: tema butuh tahu mode mana yang aktif.
+const initialMode = resolveMode();
+applyMode(initialMode);
 // Tema dari cache lokal terpasang sebelum render pertama (hindari flash warna default)
-applyTheme(getCachedTheme());
-// Mode terang/gelap juga dipasang sebelum render: bila menunggu efek React, satu
-// frame pertama akan tampil dengan latar mode yang salah (kedipan putih).
-applyMode(resolveMode());
+applyTheme(getCachedTheme(), initialMode);
 
 const SplashScreen = () => (
   <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-navy-950">
@@ -56,7 +56,7 @@ function App() {
 
     // Sinkronkan tema tersimpan dari Firestore (menimpa cache bila berbeda)
     getCompanySettings().then((settings) => {
-      if (settings) applyTheme(getThemeFromSettings(settings));
+      if (settings) applyTheme(getThemeFromSettings(settings), resolveMode());
     });
 
     return () => {

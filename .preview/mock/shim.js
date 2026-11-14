@@ -46,13 +46,24 @@ export const analyzeTransactionImages = async () => ({ transactions: [] });
 // --- Invoice & dokumen pajak ---
 export const getAllInvoices = async () => invoices;
 export const addInvoice = async () => 'i-baru';
+export const deleteInvoice = noop;
 export const setInvoiceStatus = noop;
 export const markInvoicePaid = noop;
 export const updateTaxDocs = noop;
 export const calcInvoiceTotals = () => ({ dpp: 0, ppn: 0, grandTotal: 0 });
-export const billingStageLabel = () => 'Belum';
-export const taxDocsProgress = () => ({ done: 0, total: 3 });
-export const isPpnCair = () => false;
+export const billingStageLabel = (stage) => {
+  if (!stage) return '';
+  if (String(stage).startsWith('termin-')) return `Termin ${String(stage).split('-')[1]}`;
+  return String(stage).charAt(0).toUpperCase() + String(stage).slice(1);
+};
+// Bentuknya ARRAY (bukan objek) — komponen memanggil .filter() padanya.
+export const taxDocsProgress = (inv = {}) => [
+  { key: 'faktur', label: 'Faktur Pajak', done: Boolean(inv.taxInvoiceNumber) },
+  { key: 'billing', label: 'Billing Pajak', done: Boolean(inv.billingCode) },
+  { key: 'ppn', label: 'Pembayaran PPN', done: Boolean(inv.taxPaidAt || inv.taxPaymentProofUrl) },
+  { key: 'ntpn', label: 'Nomor NTPN', done: Boolean(inv.ntpnNumber) }
+];
+export const isPpnCair = (inv = {}) => inv.coreTaxStatus === 'cleared';
 
 // --- Klien ---
 export const getAllClients = async () => [];
@@ -89,9 +100,20 @@ export const signInUser = async () => ({ role: 'admin' });
 export const signInWithGoogle = async () => ({ role: 'admin' });
 
 // --- Firebase: modul yang mengimpor langsung (mis. ProjectDetail) ---
+// `services/[^/]+` dialihkan seluruhnya, jadi nama dari functionsRegion dan
+// cache pun wajib tersedia di sini.
 export const db = {};
 export const storage = {};
 export const auth = {};
+export const REGION = 'asia-southeast2';
+export const AI_REGION = REGION;
+export const LEGACY_REGION = REGION;
+export const kontrackFunctions = () => ({});
+export const aiFunctions = kontrackFunctions;
+export const CACHE_KEYS = {};
+export const cached = async (_k, fn) => fn();
+export const invalidate = () => {};
+export const withTimeout = (p) => p;
 
 // --- Laporan & PDF ---
 // pdfGenerator juga dialihkan ke shim ini, jadi ekspornya wajib ada di sini.

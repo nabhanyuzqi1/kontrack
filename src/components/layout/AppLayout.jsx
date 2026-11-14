@@ -72,34 +72,42 @@ const IconButton = ({ label, onClick, children, badge = false, className = '' })
 );
 
 // Baris navigasi modul: satu rail horizontal, bisa digeser di layar sempit.
+// Penanda pudar di tepi kanan menunjukkan masih ada menu lanjutan — tanpa itu,
+// "Pengaturan" tampak hilang di lebar tablet.
 const ModuleStrip = ({ isAdmin, onNavigate }) => (
-  <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-2 pb-1">
-    {navItems(isAdmin).map(({ to, label, icon: Icon, end }) => (
-      <NavLink
-        key={`${to}-${label}`}
-        to={to}
-        end={end}
-        onClick={onNavigate}
-        className={({ isActive }) =>
-          `relative inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-            isActive
-              ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300'
-              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
-          }`
-        }
-      >
-        {({ isActive }) => (
-          <>
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="whitespace-nowrap">{label}</span>
-            {isActive && (
-              <span className="absolute inset-x-2 -bottom-1 h-0.5 rounded-full bg-brand-600" />
-            )}
-          </>
-        )}
-      </NavLink>
-    ))}
-  </nav>
+  <div className="relative">
+    <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-2 pb-1">
+      {navItems(isAdmin).map(({ to, label, icon: Icon, end }) => (
+        <NavLink
+          key={`${to}-${label}`}
+          to={to}
+          end={end}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            `relative inline-flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+              isActive
+                ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="whitespace-nowrap">{label}</span>
+              {isActive && (
+                <span className="absolute inset-x-2 -bottom-1 h-0.5 rounded-full bg-brand-600" />
+              )}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </nav>
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--glass-primary)] to-transparent"
+    />
+  </div>
 );
 
 // Kapsul profil entitas: nama perusahaan + NPWP (bila ada di Pengaturan).
@@ -273,7 +281,7 @@ const AppLayout = ({ currentUser, children }) => {
               />
             </div>
 
-            <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
               <IconButton label="Cari" onClick={focusSearch} className="sm:hidden">
                 <Search className="h-4 w-4" />
               </IconButton>
@@ -286,13 +294,13 @@ const AppLayout = ({ currentUser, children }) => {
               {/* Lonceng notifikasi: saat ini hanya penanda visual. Belum ada
                   sumber notifikasi di dalam aplikasi — jangan diklaim berfungsi
                   sebelum ada pengirimnya (lihat ROADMAP). */}
-              <IconButton label="Notifikasi" badge className="hidden sm:inline-flex">
+              <IconButton label="Notifikasi" badge className="hidden lg:inline-flex">
                 <Bell className="h-4 w-4" />
               </IconButton>
-              <IconButton label="Bantuan" className="hidden sm:inline-flex">
+              <IconButton label="Bantuan" className="hidden lg:inline-flex">
                 <HelpCircle className="h-4 w-4" />
               </IconButton>
-              <Link to="/settings" aria-label="Pengaturan entitas">
+              <Link to="/settings" aria-label="Pengaturan entitas" className="shrink-0">
                 <EntityCapsule company={company} user={currentUser} />
               </Link>
               <button

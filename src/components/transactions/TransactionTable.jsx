@@ -73,11 +73,11 @@ const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }
             {(onEdit || onDelete) && <Th className="text-right">Aksi</Th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-50 bg-white">
+        <tbody className="divide-y divide-slate-200/60">
           {transactions.map((transaction) => {
             const isIncome = transaction.type === TRANSACTION_TYPES.INCOME;
             return (
-              <tr key={transaction.id} className="transition-colors hover:bg-slate-50/60">
+              <tr key={transaction.id} className="transition-colors hover:bg-slate-100/60">
                 <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
                   <div className="flex items-center gap-1.5">
                     {formatDateTime(transaction.date)}
