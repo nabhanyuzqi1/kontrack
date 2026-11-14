@@ -2,7 +2,7 @@ import React from 'react';
 import Card from './Card';
 
 const iconTones = {
-  brand: 'bg-brand-50 text-brand-600',
+  brand: 'bg-brand-50 text-brand-700',
   cyan: 'bg-cyan-50 text-cyan-600',
   emerald: 'bg-emerald-50 text-emerald-600',
   amber: 'bg-amber-50 text-amber-600',

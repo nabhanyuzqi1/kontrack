@@ -145,7 +145,10 @@ const darkVariant = (vars) => {
     };
     const [h, s, l] = toHsl(r, g, b);
     // Titik balik di sekitar langkah 500: langkah terang jadi gelap, dan sebaliknya.
-    const targetL = step <= 400 ? Math.max(14, Math.min(34, 46 - l * 0.42))
+    // 300/400 sengaja TIDAK diubah: keduanya dipakai sebagai teks/border terang
+    // di atas latar gelap (mis. `dark:text-brand-300`) — menggelapkannya membuat
+    // nav aktif dan chip filter tak terbaca di mode gelap.
+    const targetL = step <= 200 ? Math.max(14, Math.min(34, 46 - l * 0.42))
       : step >= 700 ? Math.max(62, Math.min(84, 100 - l * 0.35))
       : l;
     const sPrime = Math.max(38, Math.min(72, s));

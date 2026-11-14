@@ -165,7 +165,7 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
             <input type="file" accept="image/*" multiple onChange={handleFilesChange} className="hidden" />
             <UploadCloud className="mb-2 h-9 w-9 text-slate-300 transition-colors group-hover:text-brand-400" />
             <p className="text-sm text-slate-600">
-              <span className="font-semibold text-brand-600">Klik untuk upload</span> — bisa pilih banyak
+              <span className="font-semibold text-brand-700">Klik untuk upload</span> — bisa pilih banyak
             </p>
             <p className="mt-1 text-xs text-slate-400">JPG, PNG, WebP · maks 5MB/gambar</p>
           </label>
@@ -246,7 +246,7 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
                     </div>
                     <button
                       onClick={() => removeResult(idx)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:text-red-600"
                       title="Hapus hasil ini"
                     >
                       <Trash2 className="h-4 w-4" />

@@ -127,7 +127,7 @@ const Dashboard = ({ currentUser }) => {
           label="Total Proyek"
           value={stats.totalProjects}
           sub={`${stats.ongoingProjects} sedang berjalan`}
-          subTone="text-brand-600"
+          subTone="text-brand-700"
         />
         <StatCard
           icon={Wallet}
@@ -158,7 +158,7 @@ const Dashboard = ({ currentUser }) => {
       <div className="mb-6 grid grid-cols-1 gap-3 sm:mb-8 sm:gap-4 md:grid-cols-3">
         <QuickAction
           icon={Plus}
-          tone="bg-brand-50 text-brand-600 group-hover:bg-brand-600 group-hover:text-white"
+          tone="bg-brand-50 text-brand-700 group-hover:bg-brand-600 group-hover:text-white"
           title="Proyek Baru"
           description="Tambah proyek atau kontrak baru"
           onClick={() => setShowProjectModal(true)}

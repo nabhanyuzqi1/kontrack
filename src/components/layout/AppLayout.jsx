@@ -17,7 +17,6 @@ import {
   Settings,
   LogOut,
   LogIn,
-  Menu,
   X,
   Plus,
   MoreHorizontal,
@@ -113,7 +112,7 @@ const Popover = ({ open, onClose, children, align = 'right' }) => {
 
 // tone = pasangan kelas statis (Tailwind tidak membaca kelas dinamis template)
 const TONE_CLS = {
-  brand: 'bg-brand-500/10 text-brand-600 dark:text-brand-300',
+  brand: 'bg-brand-500/10 text-brand-700 dark:text-brand-300',
   red: 'bg-red-500/10 text-red-600 dark:text-red-400',
   amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
@@ -131,7 +130,7 @@ const PopoverItem = ({ icon: Icon, title, desc, tone = 'brand', onClick }) => (
       </span>
     )}
     <span className="min-w-0">
-      <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{title}</span>
+      <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-700">{title}</span>
       {desc && <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{desc}</span>}
     </span>
   </button>
@@ -201,7 +200,7 @@ const EntityCapsule = ({ company, user, showText = false, className = '', onClic
             NPWP {npwp}
           </p>
         )}
-        <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">{name}</p>
+        <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-700">{name}</p>
       </div>
     </Comp>
   );
@@ -414,7 +413,10 @@ const AppLayout = ({ currentUser, children }) => {
     <div className="min-h-screen">
       {/* ===== Header kaca dua tingkat ===== */}
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-4 sm:pt-4">
-        <div className="mx-auto max-w-[1400px] overflow-hidden rounded-[18px] glass-1">
+        {/* overflow-hidden sengaja TIDAK dipakai di container header: panel
+            notifikasi/bantuan/akun menjorok keluar dari kotak, dan overflow
+            akan memotongnya. Sudut bawah dipotong per-tingkat di baris nav. */}
+        <div className="mx-auto max-w-[1400px] rounded-[18px] glass-1">
           {/* Tingkat 1 — baris utilitas */}
           <div className="flex h-[60px] items-center gap-2 px-3 sm:gap-3 sm:px-5">
             <Link
@@ -468,7 +470,7 @@ const AppLayout = ({ currentUser, children }) => {
               </IconButton>
               <Popover open={openMenu === 'notif'} onClose={() => setOpenMenu(null)}>
                   <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Notifikasi</p>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-700">Notifikasi</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Tenggat proyek, tagihan, dan pajak
                     </p>
@@ -505,7 +507,7 @@ const AppLayout = ({ currentUser, children }) => {
                 </IconButton>
                 <Popover open={openMenu === 'help'} onClose={() => setOpenMenu(null)}>
                   <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Bantuan</p>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-700">Bantuan</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Panduan singkat tiap modul</p>
                   </div>
                   <div className="p-1.5">
@@ -549,15 +551,18 @@ const AppLayout = ({ currentUser, children }) => {
                 </Popover>
               </div>
 
+              {/* Kapsul entitas — di ponsel ini juga jalan masuk ke menu lengkap
+                  (lewat rail bawah "Lainnya") dan tindakan keluar. Tidak ada
+                  tombol hamburger terpisah: satu jalan masuk cukup. */}
               <div className="relative min-w-0 shrink">
                 <EntityCapsule
                   company={company}
                   user={currentUser}
-                  onClick={() => toggleMenu('entity')}
+                  onClick={currentUser ? () => toggleMenu('entity') : undefined}
                 />
                 <Popover open={openMenu === 'entity'} onClose={() => setOpenMenu(null)}>
                   <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
-                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-700">
                       {company?.companyName || company?.name || currentUser?.email || 'Kontrack'}
                     </p>
                     <p className="truncate text-xs text-slate-500 dark:text-slate-400">
@@ -599,18 +604,11 @@ const AppLayout = ({ currentUser, children }) => {
                   </div>
                 </Popover>
               </div>
-              <button
-                onClick={() => setMobileOpen(true)}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full glass-3 text-slate-600 dark:text-slate-300"
-                aria-label="Buka menu"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
             </div>
           </div>
 
           {/* Tingkat 2 — rail navigasi modul (tablet ke atas) */}
-          <div className="hidden border-t border-slate-200/70 sm:block">
+          <div className="hidden overflow-hidden rounded-b-[18px] border-t border-slate-200/70 sm:block">
             <ModuleStrip isAdmin={isAdmin} />
           </div>
         </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 
 export const Spinner = ({ className = 'h-5 w-5' }) => (
-  <Loader2 className={`animate-spin text-brand-600 ${className}`} />
+  <Loader2 className={`animate-spin text-brand-700 ${className}`} />
 );
 
 // Loader satu halaman penuh (dipakai saat data awal dimuat)

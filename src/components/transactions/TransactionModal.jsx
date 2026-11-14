@@ -292,7 +292,7 @@ const TransactionModal = ({
             <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
               <UploadCloud className="h-5 w-5 text-slate-400" />
               <span>
-                <span className="font-medium text-brand-600">Upload bukti</span> — foto nota /
+                <span className="font-medium text-brand-700">Upload bukti</span> — foto nota /
                 transfer (JPG, PNG, maks 5MB)
               </span>
               <input

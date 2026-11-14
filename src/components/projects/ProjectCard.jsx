@@ -139,7 +139,7 @@ const ProjectCard = ({ project, onEdit, onDelete, currentUser }) => {
               <span className="truncate">{project.contractNumber}</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 opacity-0 transition-opacity group-hover:opacity-100 dark:text-brand-300">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 opacity-0 transition-opacity group-hover:opacity-100 dark:text-brand-300">
               Lihat detail
               <ArrowRight className="h-3.5 w-3.5" />
             </span>
@@ -149,7 +149,7 @@ const ProjectCard = ({ project, onEdit, onDelete, currentUser }) => {
             <button
               onClick={copyProjectLink}
               title="Salin link proyek"
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600"
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-700"
             >
               <Link2 className="h-4 w-4" />
             </button>

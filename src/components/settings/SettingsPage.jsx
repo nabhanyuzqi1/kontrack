@@ -76,7 +76,7 @@ const AssetCard = ({
         <p className="mb-4 mt-1 text-xs text-slate-400">{description}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2 pt-0.5">
-        <span className={`text-[11px] font-medium ${enabled ? 'text-brand-600' : 'text-slate-400'}`}>
+        <span className={`text-[11px] font-medium ${enabled ? 'text-brand-700' : 'text-slate-400'}`}>
           {enabled ? 'Tampil' : 'Disembunyikan'}
         </span>
         <Switch checked={enabled} onChange={onToggle} label={`Tampilkan ${title} di invoice`} />
@@ -116,9 +116,9 @@ const AssetCard = ({
 
       <label className="inline-flex cursor-pointer items-center justify-center gap-2 glass-3 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300">
         {uploading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+          <Loader2 className="h-4 w-4 animate-spin text-brand-700" />
         ) : (
-          <UploadCloud className="h-4 w-4 text-brand-600" />
+          <UploadCloud className="h-4 w-4 text-brand-700" />
         )}
         {uploading ? 'Mengunggah…' : previewUrl ? `Ganti ${title}` : `Unggah ${title}`}
         <input type="file" accept={accept} className="hidden" onChange={onUpload} />
@@ -521,7 +521,7 @@ const SettingsPage = ({ currentUser }) => {
                 type="checkbox"
                 checked={Boolean(form.notifications?.whatsappEnabled)}
                 onChange={(e) => setNotif('whatsappEnabled', e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
               />
               <span className="text-sm text-slate-600">
                 <span className="font-medium text-slate-800">Aktifkan pengiriman otomatis</span> —

@@ -13,7 +13,7 @@ const RecentProjects = ({ projects }) => (
       action={
         <Link
           to="/projects"
-          className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
+          className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 transition-colors hover:text-brand-700"
         >
           Lihat Semua
           <ArrowRight className="h-4 w-4" />

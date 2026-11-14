@@ -353,7 +353,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
                   {items.length > 1 && (
                     <button
                       onClick={() => removeItem(idx)}
-                      className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                      className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:text-red-600"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -362,7 +362,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
                 {items.length > 1 && (
                   <button
                     onClick={() => removeItem(idx)}
-                    className="col-span-1 hidden justify-self-end rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:block"
+                    className="col-span-1 hidden justify-self-end rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:text-red-600 sm:block"
                     title="Hapus item"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -391,7 +391,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
             type="checkbox"
             checked={useDppNilaiLain}
             onChange={(e) => setUseDppNilaiLain(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
           />
           <span className="text-sm text-slate-600">
             <span className="font-medium text-slate-800">Gunakan DPP Nilai Lain</span> — DPP = 11/12
@@ -418,7 +418,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project }) => {
                 <span className="tnum">{formatCurrency(totals.pajak11)}</span>
               </div>
             )}
-            <div className="flex justify-between border-t border-slate-200 pt-1.5 font-display text-base font-bold text-brand-600">
+            <div className="flex justify-between border-t border-slate-200 pt-1.5 font-display text-base font-bold text-brand-700">
               <span>Grand Total</span>
               <span>{formatCurrency(totals.grandTotal)}</span>
             </div>

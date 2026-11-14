@@ -136,7 +136,7 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
                   type="checkbox"
                   checked={selected.has(inv.id)}
                   onChange={() => toggle(inv.id)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-800">

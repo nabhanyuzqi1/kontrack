@@ -30,7 +30,7 @@ const healthTone = {
 const typeIcon = {
   positif: { icon: TrendingUp, cls: 'text-emerald-600 bg-emerald-50' },
   risiko: { icon: AlertTriangle, cls: 'text-red-600 bg-red-50' },
-  peluang: { icon: Lightbulb, cls: 'text-brand-600 bg-brand-50' }
+  peluang: { icon: Lightbulb, cls: 'text-brand-700 bg-brand-50' }
 };
 
 const AIInsightCard = ({ projects, transactions, invoices, period = 'keseluruhan', className = '' }) => {

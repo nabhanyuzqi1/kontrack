@@ -256,7 +256,7 @@ const InvoicesPage = () => {
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-end justify-between gap-3 rounded-lg bg-slate-50 p-3">
+                <div className="mt-3 flex flex-wrap items-end justify-between gap-3 rounded-lg glass-3 p-3">
                   <div>
                     <p className="text-xs text-slate-400">Grand Total</p>
                     <p className="font-display text-lg font-bold text-slate-900">{formatCurrency(inv.grandTotal || 0)}</p>

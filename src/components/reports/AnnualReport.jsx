@@ -100,7 +100,7 @@ const AnnualReport = ({ projects, transactions, invoices, year }) => {
               tone={bs.taxPayable > 0 ? 'text-amber-600' : 'text-slate-700'}
             />
             <div className="my-2 border-t-2 border-slate-200" />
-            <Row label="Ekuitas" value={formatCurrency(bs.equity)} bold tone="text-brand-600" />
+            <Row label="Ekuitas" value={formatCurrency(bs.equity)} bold tone="text-brand-700" />
             <p className="mt-2 flex items-start gap-1.5 text-xs text-slate-400">
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
               Ringkasan berbasis kas, bukan neraca akuntansi penuh.

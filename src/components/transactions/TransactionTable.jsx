@@ -102,7 +102,7 @@ const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }
                         onClick={() =>
                           setPreviewIndex(proofs.findIndex((p) => p.id === transaction.id))
                         }
-                        className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                        className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:text-brand-700"
                       >
                         <ImageIcon className="h-3 w-3" />
                         Lihat Bukti
@@ -129,7 +129,7 @@ const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }
                           onClick={() => onEdit(transaction)}
                           disabled={deletingId === transaction.id}
                           title="Edit transaksi"
-                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-40"
                         >
                           <PenLine className="h-4 w-4" />
                         </button>
@@ -139,7 +139,7 @@ const TransactionTable = ({ transactions, onEdit, onDelete, showProject = true }
                           onClick={() => handleDelete(transaction)}
                           disabled={deletingId === transaction.id}
                           title="Hapus transaksi"
-                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

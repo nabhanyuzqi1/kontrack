@@ -203,7 +203,7 @@ const ProjectDetail = ({ currentUser }) => {
       {currentUser && (
         <Link
           to="/projects"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-700"
         >
           <ArrowLeft className="h-4 w-4" />
           Daftar Proyek
@@ -386,7 +386,7 @@ const ProjectDetail = ({ currentUser }) => {
           value={formatCurrency(balance)}
           tone={{
             wrap: 'border-brand-100 bg-brand-50/60 dark:border-brand-500/20 dark:bg-brand-500/[0.07]',
-            icon: 'bg-brand-100 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300',
+            icon: 'bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300',
             label: 'text-brand-700 dark:text-brand-300',
             value: 'text-brand-800 dark:text-brand-200'
           }}

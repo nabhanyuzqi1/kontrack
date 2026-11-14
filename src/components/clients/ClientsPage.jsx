@@ -121,7 +121,7 @@ const ClientsPage = () => {
             <Card key={c.id} hover className="p-4 sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 shrink-0 rounded-lg bg-brand-50 p-2 text-brand-600">
+                  <div className="mt-0.5 shrink-0 rounded-lg bg-brand-50 p-2 text-brand-700">
                     <Building2 className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
@@ -134,7 +134,7 @@ const ClientsPage = () => {
                     {c.npwp && (
                       <button
                         onClick={() => copyNpwp(c.npwp)}
-                        className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-brand-600"
+                        className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-brand-700"
                         title="Salin NPWP"
                       >
                         NPWP {c.npwp}
@@ -158,7 +158,7 @@ const ClientsPage = () => {
                   </button>
                   <button
                     onClick={() => handleDelete(c)}
-                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:text-red-600"
                     title="Hapus"
                   >
                     <Trash2 className="h-4 w-4" />
