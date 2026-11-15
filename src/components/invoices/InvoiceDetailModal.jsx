@@ -508,7 +508,6 @@ const InvoiceDetailModal = ({
           </div>
         </div>
       </div>
-      )}
     </Modal>
 
     {pdfPreview && (
