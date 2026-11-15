@@ -81,6 +81,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice, revise = f
     setBillToName(inv.clientName || '');
     setClientNpwp(inv.client?.npwp || '');
     setPoNumber(inv.poNumber || '');
+    setSpkNumber(inv.spkNumber || '');
     setBahkNumber(inv.bahkNumber || '');
     setPkNumber(inv.pkNumber || '');
     setWphoNumber(inv.wphoNumber || '');
@@ -133,7 +134,8 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice, revise = f
   };
 
   const [poNumber, setPoNumber] = useState('');
-  const [pkNumber, setPkNumber] = useState(project?.contractNumber || '');
+  const [spkNumber, setSpkNumber] = useState(project?.contractNumber || '');
+  const [pkNumber, setPkNumber] = useState(project?.pkNumber || '');
   const [wphoNumber, setWphoNumber] = useState('');
   const [taxInvoiceNumber, setTaxInvoiceNumber] = useState('');
 
@@ -277,6 +279,7 @@ const [shippedVia, setShippedVia] = useState('Lion Parcel');
         // denormalisasi kecil supaya PDF punya alamat + NPWP client
         client: { client_name: billToName, address: billToAddress, npwp: clientNpwp },
         poNumber,
+        spkNumber,
         pkNumber,
         bahkNumber,
         wphoNumber,
@@ -392,11 +395,11 @@ const [shippedVia, setShippedVia] = useState('Lion Parcel');
             <Field label="Jatuh Tempo">
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </Field>
-            <Field label="PO / PK">
-              <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="022/SLM/LGL-K/II/2026" />
+            <Field label="No. SPK / Kontrak (dari proyek)">
+              <Input value={spkNumber} onChange={(e) => setSpkNumber(e.target.value)} placeholder="No. SPK proyek" />
             </Field>
-            <Field label="PK No.">
-              <Input value={pkNumber} onChange={(e) => setPkNumber(e.target.value)} placeholder="SLM/PK-HO/TEK/11/3/2026" />
+            <Field label="No. PK (dari proyek)">
+              <Input value={pkNumber} onChange={(e) => setPkNumber(e.target.value)} placeholder="No. PK proyek" />
             </Field>
             <Field label="No. BAHK">
               <Input

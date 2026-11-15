@@ -1,5 +1,6 @@
 // src/services/auth.js
 import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
@@ -50,6 +51,24 @@ export const signInUser = async (email, password) => {
     console.error('Error signing in:', error);
     throw error;
   }
+};
+
+// Daftar akun baru (email/password): buat user auth + dokumen `users`
+// berperan 'staff' — administrator menaikkan peran lewat Pengaturan.
+export const signUpUser = async (email, password, name) => {
+  const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  try {
+    await setDoc(doc(collection(db, 'users')), {
+      email: user.email,
+      name: (name || '').trim() || user.email,
+      role: 'staff',
+      createdAt: new Date().toISOString()
+    });
+  } catch (err) {
+    // Akun auth sudah terbuat; dokumen profil gagal — jangan bikin login macet.
+    console.error('Gagal membuat dokumen profil pengguna:', err);
+  }
+  return { uid: user.uid, email: user.email, name: (name || '').trim() || user.email, role: 'staff' };
 };
 
 /**

@@ -41,6 +41,7 @@ const InvoicesPage = () => {
   const [projectMap, setProjectMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('date');
   const [statusFilter, setStatusFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all');
   const [busyId, setBusyId] = useState(null);
@@ -90,23 +91,34 @@ const InvoicesPage = () => {
   const projectNameOf = (inv) =>
     projectMap[inv.projectId]?.name || inv.projectName || '—';
 
-  const filtered = useMemo(
-    () =>
-      invoices.filter((inv) => {
-        if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
-        if (stageFilter !== 'all' && inv.billingStage !== stageFilter) return false;
-        if (search) {
-          const s = search.toLowerCase();
-          return (
-            (inv.invoiceNumber || '').toLowerCase().includes(s) ||
-            projectNameOf(inv).toLowerCase().includes(s) ||
-            clientNameOf(inv).toLowerCase().includes(s)
-          );
-        }
-        return true;
-      }),
-    [invoices, statusFilter, stageFilter, search, clientMap, projectMap]
-  );
+  const filtered = useMemo(() => {
+    const list = invoices.filter((inv) => {
+      if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+      if (stageFilter !== 'all' && inv.billingStage !== stageFilter) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        return (
+          (inv.invoiceNumber || '').toLowerCase().includes(s) ||
+          projectNameOf(inv).toLowerCase().includes(s) ||
+          clientNameOf(inv).toLowerCase().includes(s)
+        );
+      }
+      return true;
+    });
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === 'amount') return (Number(b.grandTotal) || 0) - (Number(a.grandTotal) || 0);
+      if (sortBy === 'number')
+        return String(a.invoiceNumber || '').localeCompare(String(b.invoiceNumber || ''), 'id');
+      if (sortBy === 'project')
+        return projectNameOf(a).localeCompare(projectNameOf(b), 'id');
+      if (sortBy === 'status')
+        return String(a.status || '').localeCompare(String(b.status || '')) ||
+          String(b.issueDate || '').localeCompare(String(a.issueDate || ''));
+      return String(b.issueDate || '').localeCompare(String(a.issueDate || '')); // tanggal terbaru
+    });
+    return sorted;
+  }, [invoices, statusFilter, stageFilter, search, sortBy, clientMap, projectMap]);
 
   const stats = useMemo(() => {
     const active = invoices.filter((i) => i.status !== INVOICE_STATUS.VOID);
@@ -210,7 +222,7 @@ const InvoicesPage = () => {
           <StatCard tone="amber" label="PPN Menunggu" value={formatCurrency(stats.unpaidPpn)} sub="Belum dicairkan" subTone="text-amber-600" />
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari no. invoice, proyek, atau client…" className="pl-9" />
@@ -226,6 +238,13 @@ const InvoicesPage = () => {
           {BILLING_STAGES.map((t) => (
             <option key={t} value={t}>{billingStageLabel(t)}</option>
           ))}
+        </Select>
+        <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="date">Urutkan: tanggal</option>
+          <option value="amount">Urutkan: nominal</option>
+          <option value="number">Urutkan: no. invoice</option>
+          <option value="project">Urutkan: proyek</option>
+          <option value="status">Urutkan: status</option>
         </Select>
       </div>
 

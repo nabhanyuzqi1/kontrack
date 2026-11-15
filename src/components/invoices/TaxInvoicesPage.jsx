@@ -89,8 +89,8 @@ const TaxInvoicesPage = () => {
   return (
     <div className="animate-fade-in">
       <PageHeader
-        title="Faktur Pajak"
-        subtitle="Kepatuhan e-Faktur: dokumen pajak per invoice & ekspor CoreTax"
+        title="Pajak"
+        subtitle="Pengelolaan pajak: e-Faktur, setoran PPN, NTPN & ekspor CoreTax"
         actions={
           invoices.length > 0 && (
             <Button variant="secondary" size="sm" onClick={() => setShowExport(true)}>

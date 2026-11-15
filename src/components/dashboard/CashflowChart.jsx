@@ -2,20 +2,23 @@
 // Grafik arus kas 6 bulan terakhir — pemasukan vs pengeluaran.
 // Sengaja ringkas: dashboard menjawab "bagaimana kondisi kas saya?",
 // analisis mendalam ada di halaman Laporan.
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 import { Card, CardHeader } from '../ui/Card';
 import { formatCurrency } from '../../utils/formatters';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
@@ -23,6 +26,7 @@ const compact = (v) =>
   new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
 
 const CashflowChart = ({ transactions = [], months = 6 }) => {
+  const [mode, setMode] = useState('line');
   const { labels, income, expense, net } = useMemo(() => {
     const buckets = [];
     const now = new Date();
@@ -61,22 +65,46 @@ const CashflowChart = ({ transactions = [], months = 6 }) => {
 
   const data = {
     labels,
-    datasets: [
-      {
-        label: 'Pemasukan',
-        data: income,
-        backgroundColor: 'rgba(16, 185, 129, 0.85)',
-        borderRadius: 5,
-        maxBarThickness: 26
-      },
-      {
-        label: 'Pengeluaran',
-        data: expense,
-        backgroundColor: 'rgba(239, 68, 68, 0.75)',
-        borderRadius: 5,
-        maxBarThickness: 26
-      }
-    ]
+    datasets:
+      mode === 'line'
+        ? [
+            {
+              label: 'Pemasukan',
+              data: income,
+              borderColor: 'rgba(16, 185, 129, 1)',
+              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+              pointRadius: 3,
+              pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+              tension: 0.35,
+              fill: true
+            },
+            {
+              label: 'Pengeluaran',
+              data: expense,
+              borderColor: 'rgba(239, 68, 68, 1)',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              pointRadius: 3,
+              pointBackgroundColor: 'rgba(239, 68, 68, 1)',
+              tension: 0.35,
+              fill: true
+            }
+          ]
+        : [
+            {
+              label: 'Pemasukan',
+              data: income,
+              backgroundColor: 'rgba(16, 185, 129, 0.85)',
+              borderRadius: 5,
+              maxBarThickness: 26
+            },
+            {
+              label: 'Pengeluaran',
+              data: expense,
+              backgroundColor: 'rgba(239, 68, 68, 0.75)',
+              borderRadius: 5,
+              maxBarThickness: 26
+            }
+          ]
   };
 
   const options = {
@@ -112,18 +140,34 @@ const CashflowChart = ({ transactions = [], months = 6 }) => {
       <CardHeader
         title={`Arus Kas ${months} Bulan Terakhir`}
         action={
-          <span
-            className={`tnum text-sm font-semibold ${net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
-          >
-            {net >= 0 ? '+' : ''}
-            {formatCurrency(net)}
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-white/10">
+              {[
+                ['line', 'Garis'],
+                ['bar', 'Batang']
+              ].map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                    mode === m ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className={`tnum text-sm font-semibold ${net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {net >= 0 ? '+' : ''}
+              {formatCurrency(net)}
+            </span>
+          </div>
         }
       />
       <div className="p-4 sm:p-5">
         <div style={{ height: 240 }}>
           {hasData ? (
-            <Bar data={data} options={options} />
+            mode === 'line' ? <Line data={data} options={options} /> : <Bar data={data} options={options} />
           ) : (
             <p className="flex h-full items-center justify-center text-sm text-slate-400">
               Belum ada transaksi pada periode ini

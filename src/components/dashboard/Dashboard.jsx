@@ -184,20 +184,26 @@ const Dashboard = ({ currentUser }) => {
         />
       </div>
 
-      {/* Yang perlu ditindaklanjuti lebih dulu, baru gambaran & riwayat */}
+      {/* Yang perlu ditindaklanjuti lebih dulu */}
       <ProjectReminders projects={projects} />
 
-      <AIInsightCard
-        projects={allProjects}
-        transactions={allTransactions}
-        invoices={invoices}
-        period="keseluruhan"
-        className="mb-6"
-      />
+      {/* Grafik arus kas & analisis AI berdampingan di layar lebar */}
+      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2 [&>.mb-6]:mb-0">
+          <CashflowChart transactions={allTransactions} />
+        </div>
+        <AIInsightCard
+          projects={allProjects}
+          transactions={allTransactions}
+          invoices={invoices}
+          period="keseluruhan"
+        />
+      </div>
 
-      <CashflowChart transactions={allTransactions} />
-      <RecentProjects projects={projects} />
-      <RecentTransactions transactions={transactions} />
+      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <RecentProjects projects={projects} />
+        <RecentTransactions transactions={transactions} />
+      </div>
 
       {showProjectModal && (
         <ProjectModal

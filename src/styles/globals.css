@@ -421,6 +421,29 @@
   width: 100%;
 }
 
+/* Panel pejal (opaque): modal, drawer, popover, dropdown, dan form.
+   Efek kaca transparan membuat teks di atas latar sibuk sulit dibaca;
+   lapisan interaktif seperti ini wajib pejal. */
+  .panel-solid {
+    background: #ffffff;
+    border: 1px solid var(--line-specular);
+    box-shadow: var(--shadow-glass-lg);
+  }
+
+  [data-theme='dark'] .panel-solid {
+    background: #1c1f25;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Header: pejal saat halaman digulir supaya konten di belakang tidak tembus */
+  .header-solid {
+    background: #ffffff;
+  }
+
+  [data-theme='dark'] .header-solid {
+    background: #1c1f25;
+  }
+
 @media print {
   .no-print {
     display: none !important;

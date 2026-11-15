@@ -48,7 +48,7 @@ const navItems = (isAdmin) => [
   ...(isAdmin
     ? [
         { to: '/invoices', label: 'Invoice', icon: ReceiptText },
-        { to: '/tax-invoices', label: 'Faktur Pajak', icon: Landmark },
+        { to: '/tax-invoices', label: 'Pajak', icon: Landmark },
         { to: '/clients', label: 'Klien', icon: Users }
       ]
     : []),
@@ -102,7 +102,7 @@ const Popover = ({ open, onClose, children, align = 'right' }) => {
   return (
     <div
       ref={ref}
-      className={`absolute right-0 top-[calc(100%+8px)] z-50 w-80 max-w-[calc(100vw-24px)] animate-scale-in rounded-xl border border-slate-200/80 bg-[var(--glass-elevated)] shadow-card dark:border-white/10 ${align === 'right' ? '' : 'left-0'}`}
+      className={`absolute right-0 top-[calc(100%+8px)] z-50 w-80 max-w-[calc(100vw-24px)] animate-scale-in rounded-xl panel-solid ${align === 'right' ? '' : 'left-0'}`}
       role="menu"
     >
       {children}
@@ -161,7 +161,7 @@ const ModuleStrip = ({ isAdmin, onNavigate }) => (
               <Icon className="h-4 w-4 shrink-0" />
               <span className="whitespace-nowrap">{label}</span>
               {isActive && (
-                <span className="absolute inset-x-2 -bottom-1 h-0.5 rounded-full bg-brand-600" />
+                <span className="absolute inset-x-1.5 -bottom-1.5 h-[2px] rounded-full bg-brand-600" />
               )}
             </>
           )}
@@ -251,6 +251,9 @@ const UserSection = ({ currentUser, onSignOut, onNavigate }) => {
 const AppLayout = ({ currentUser, children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Header pejal saat halaman digulir — kaca transparan membuat teks nav
+  // bertabrakan dengan konten di belakangnya.
+  const [scrolled, setScrolled] = useState(false);
   const [company, setCompany] = useState(null);
   const [openMenu, setOpenMenu] = useState(null); // 'notif' | 'help' | 'entity'
   const [notifications, setNotifications] = useState(null);
@@ -385,6 +388,13 @@ const AppLayout = ({ currentUser, children }) => {
     }
   };
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const focusSearch = () => {
     setSearchOpen(true);
     // Fokus setelah elemen benar-benar terpasang
@@ -416,9 +426,13 @@ const AppLayout = ({ currentUser, children }) => {
         {/* overflow-hidden sengaja TIDAK dipakai di container header: panel
             notifikasi/bantuan/akun menjorok keluar dari kotak, dan overflow
             akan memotongnya. Sudut bawah dipotong per-tingkat di baris nav. */}
-        <div className="mx-auto max-w-[1400px] rounded-[18px] glass-1">
+        <div
+          className={`mx-auto max-w-[1400px] rounded-[18px] transition-colors duration-200 ${
+            scrolled ? 'header-solid border border-slate-200/70 dark:border-white/10' : 'glass-1'
+          }`}
+        >
           {/* Tingkat 1 — baris utilitas */}
-          <div className="flex h-[60px] items-center gap-2 px-3 sm:gap-3 sm:px-5">
+          <div className="flex h-[52px] items-center gap-2 px-3 sm:gap-3 sm:px-5">
             <Link
               to={isAdmin ? '/' : '/projects'}
               className="flex shrink-0 items-center gap-2"
@@ -443,7 +457,7 @@ const AppLayout = ({ currentUser, children }) => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') submitSearch(e.currentTarget.value);
                 }}
-                className="field-surface h-9 w-full rounded-full pl-9 pr-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/60 sm:max-w-[380px]"
+                className="field-surface h-8 w-full rounded-lg pl-9 pr-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/60 sm:max-w-[360px]"
               />
             </div>
 

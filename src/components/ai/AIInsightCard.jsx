@@ -12,6 +12,9 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Card } from '../ui/Card';
+// Riwayat analisis tersimpan lokal per perangkat; tidak perlu server
+// karena isinya ringkasan (tanpa data transaksi mentah).
+const HISTORY_KEY = 'kontrack-ai-insight-history';
 import Button from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
 import { buildFinancialSummary, getFinancialInsight } from '../../services/aiInsights';
@@ -37,13 +40,28 @@ const AIInsightCard = ({ projects, transactions, invoices, period = 'keseluruhan
   const [insight, setInsight] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [history, setHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  });
 
   const run = async (force = false) => {
     setLoading(true);
     setError('');
     try {
       const summary = buildFinancialSummary({ projects, transactions, invoices, period });
-      setInsight(await getFinancialInsight(summary, { force }));
+      const result = await getFinancialInsight(summary, { force });
+      setInsight(result);
+      // Simpan riwayat (maks 10 terakhir) supaya analisis lama tetap terbaca.
+      try {
+        const hist = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        hist.unshift({ at: new Date().toISOString(), insight: result });
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(hist.slice(0, 10)));
+        setHistory(hist.slice(0, 10));
+      } catch {}
     } catch (err) {
       console.error('Analisis AI gagal:', err);
       // Cloud Function mengirim penyebab yang spesifik (kredit habis, key tidak
@@ -176,6 +194,25 @@ const AIInsightCard = ({ projects, transactions, invoices, period = 'keseluruhan
             <p className="text-[11px] text-slate-400">
               Dihasilkan AI dari ringkasan angka Anda — periksa sebelum mengambil keputusan.
             </p>
+
+            {history.length > 1 && (
+              <details className="rounded-xl border border-slate-200 p-3.5 dark:border-white/10">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Analisis lama ({history.length - 1})
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {history.slice(1).map((h, i) => (
+                    <li key={i} className="text-xs text-slate-500">
+                      <span className="font-medium text-slate-600">
+                        {new Date(h.at).toLocaleString('id-ID')}
+                      </span>
+                      {' — '}
+                      {h.insight?.headline}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { onAuthStateChange } from './services/auth';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './components/auth/LoginPage';
+import LandingPage from './components/landing/LandingPage';
 import Dashboard from './components/dashboard/Dashboard';
 import ProjectList from './components/projects/ProjectList';
 import ProjectDetail from './components/projects/ProjectDetail';
@@ -74,6 +75,14 @@ function App() {
   return (
     <Router>
       <Routes>
+        {/* Landing page publik di akar; pengguna yang sudah masuk dialihkan ke app */}
+        <Route
+          path="/welcome"
+          element={
+            currentUser ? <Navigate to={isAdmin ? '/' : '/projects'} replace /> : <LandingPage />
+          }
+        />
+
         {/* Halaman login berdiri sendiri (dark, tanpa shell aplikasi) */}
         <Route
           path="/login"

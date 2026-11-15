@@ -39,8 +39,8 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, 
       <div
         className={
           drawer
-            ? 'glass-1 flex h-full w-full max-w-2xl flex-col overflow-hidden shadow-2xl animate-slide-in-right'
-            : `glass-1 flex max-h-[92vh] w-full flex-col overflow-hidden shadow-2xl animate-scale-in ${sizes[size]}`
+            ? 'panel-solid flex h-full w-full max-w-2xl flex-col overflow-hidden shadow-2xl animate-slide-in-right'
+            : `panel-solid flex max-h-[92vh] w-full flex-col overflow-hidden shadow-2xl animate-scale-in ${sizes[size]}`
         }
         role="dialog"
         aria-modal="true"
@@ -59,7 +59,7 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, 
           </button>
         </div>
 
-        <div className="custom-scrollbar flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="custom-scrollbar flex-1 overflow-y-auto px-6 pb-10 pt-5">{children}</div>
 
         {footer && (
           <div className="flex justify-end gap-3 border-t border-slate-200/70 bg-slate-100/60 px-6 py-4">

@@ -1,7 +1,7 @@
 // src/components/invoices/TaxDocsModal.jsx
 // Alur dokumen pajak per invoice (skema live): Faktur Pajak → Billing → PPN → NTPN.
 import React, { useState } from 'react';
-import { CheckCircle2, Circle, Save } from 'lucide-react';
+import { CheckCircle2, Circle, Save, ScanLine } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Field, Input } from '../ui/Field';
@@ -13,7 +13,8 @@ const isoDate = (v) => {
   const d = toDate(v);
   return d ? d.toLocaleDateString('sv') : '';
 };
-import { updateTaxDocs, taxDocsProgress } from '../../services/invoices';
+import { updateTaxDocs, taxDocsProgress, uploadInvoiceDocument } from '../../services/invoices';
+import { scanWphoDocument } from '../../services/ai';
 
 const Section = ({ step, title, done, children }) => (
   <div className="rounded-xl border border-slate-200 p-4">
@@ -38,6 +39,7 @@ const TaxDocsModal = ({ isOpen, onClose, invoice, onSaved }) => {
     ntpnRecordedAt: isoDate(invoice?.ntpnRecordedAt)
   }));
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const set = (field) => (e) => setF((prev) => ({ ...prev, [field]: e.target.value }));
   const progress = taxDocsProgress({
@@ -46,6 +48,29 @@ const TaxDocsModal = ({ isOpen, onClose, invoice, onSaved }) => {
     taxPaidAt: f.taxPaidAt,
     ntpnNumber: f.ntpnNumber
   });
+
+  // Scan upload faktur pajak: AI mengisi nomor faktur + tanggal otomatis,
+  // berkas tersimpan ke arsip digital invoice.
+  const handleScanUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setScanning(true);
+    try {
+      const doc = await scanWphoDocument(file, 'faktur');
+      setF((prev) => ({
+        ...prev,
+        taxInvoiceNumber: doc?.taxInvoiceNumber || prev.taxInvoiceNumber,
+        taxInvoiceRecordedAt: doc?.date || prev.taxInvoiceRecordedAt
+      }));
+      await uploadInvoiceDocument(invoice.id, 'faktur', file).catch(() => {});
+    } catch (err) {
+      console.error('Gagal scan faktur:', err);
+      alert(err?.message || 'Gagal memindai faktur. Coba lagi.');
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -103,7 +128,22 @@ const TaxDocsModal = ({ isOpen, onClose, invoice, onSaved }) => {
       <div className="space-y-4">
         <Section step={1} title="Faktur Pajak (e-Faktur)" done={Boolean(f.taxInvoiceNumber)}>
           <Field label="Nomor Faktur Pajak">
-            <Input value={f.taxInvoiceNumber} onChange={set('taxInvoiceNumber')} placeholder="040026001428…" />
+            <div className="flex gap-2">
+              <Input value={f.taxInvoiceNumber} onChange={set('taxInvoiceNumber')} placeholder="040026001428…" />
+              <label
+                title="Pindai faktur pajak — AI mengisi nomor & tanggal otomatis, berkas masuk arsip"
+                className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-600 transition-colors hover:border-brand-300 hover:text-brand-700 dark:border-white/10"
+              >
+                {scanning ? 'Memindai…' : (<><ScanLine className="h-4 w-4" /> Scan</>)}
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*,.pdf,.tif,.tiff"
+                  disabled={scanning}
+                  onChange={handleScanUpload}
+                />
+              </label>
+            </div>
           </Field>
           <Field label="Tanggal Faktur">
             <Input type="date" value={f.taxInvoiceRecordedAt} onChange={set('taxInvoiceRecordedAt')} />

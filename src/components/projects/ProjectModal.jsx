@@ -49,6 +49,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
     name: project?.name || '',
     partner: project?.partner || '',
     contractNumber: project?.contractNumber || '',
+    pkNumber: project?.pkNumber || '',
     status: project?.status || PROJECT_STATUS.AKAN_DATANG,
     value: project?.value ? project.value.toString() : '',
     taxRate: project?.taxRate !== undefined ? project.taxRate : 11,
@@ -79,6 +80,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
         name: project?.name || '',
         partner: project?.partner || '',
         contractNumber: project?.contractNumber || '',
+        pkNumber: project?.pkNumber || '',
         status: project?.status || PROJECT_STATUS.AKAN_DATANG,
         value: initialValue,
         taxRate: project?.taxRate !== undefined ? project.taxRate : 11,
@@ -148,6 +150,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
         name: formData.name.trim(),
         partner: formData.partner.trim(),
         contractNumber: formData.contractNumber.trim(),
+        pkNumber: formData.pkNumber.trim(),
         status: formData.status,
         value: numericValue,
         taxRate: numericTaxRate,
@@ -263,15 +266,28 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
             )}
           </Field>
 
-          <Field label="No. SPK/MOU">
-            <Input
-              type="text"
-              name="contractNumber"
-              value={formData.contractNumber}
-              onChange={handleChange}
-              placeholder="cth. SPK/2026/001"
-              disabled={loading}
-            />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="No. SPK / Kontrak Kerja">
+              <Input
+                type="text"
+                name="contractNumber"
+                value={formData.contractNumber}
+                onChange={handleChange}
+                placeholder="cth. SPK/2026/001"
+                disabled={loading}
+              />
+            </Field>
+            <Field label="No. PK (Perjanjian Kerja)">
+              <Input
+                type="text"
+                name="pkNumber"
+                value={formData.pkNumber}
+                onChange={handleChange}
+                placeholder="cth. SLM/PK-HO/TEK/37/7/2026"
+                disabled={loading}
+              />
+            </Field>
+          </div>
             {/* Arsip digital: SPK & PK diunggah per proyek; tiap BAHK/WPHO
                 per invoice otomatis menempel di arsip invoice masing-masing. */}
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -313,7 +329,6 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                 {' '}— ganti lewat tombol di atas.
               </p>
             )}
-          </Field>
 
           <Field label="Status" required>
             <Select name="status" value={formData.status} onChange={handleChange} disabled={loading}>

@@ -25,6 +25,9 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
 
   const chosen = useMemo(() => invoices.filter((i) => selected.has(i.id)), [invoices, selected]);
   const issues = useMemo(() => validateForCoretax(chosen, company), [chosen, company]);
+  // Peringatan tidak memblokir unduhan: pengguna tetap bisa mengunduh lalu
+  // melengkapi NPWP di CoreTax. Yang diblokir hanya bila tidak ada faktur dipilih.
+  const canExport = chosen.length > 0;
 
   const toggle = (id) =>
     setSelected((prev) => {
@@ -50,7 +53,7 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
           <Button variant="secondary" onClick={onClose}>
             Batal
           </Button>
-          <Button onClick={handleExport} disabled={chosen.length === 0 || issues.length > 0}>
+          <Button onClick={handleExport} disabled={!canExport}>
             <FileCode2 className="h-4 w-4" />
             Unduh XML ({chosen.length})
           </Button>
@@ -105,7 +108,7 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3.5">
             <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-amber-800">
               <TriangleAlert className="h-4 w-4" />
-              Perlu dilengkapi sebelum ekspor
+              Perlu dilengkapi (XML tetap bisa diunduh)
             </p>
             <ul className="list-inside list-disc space-y-0.5 text-xs text-amber-700">
               {issues.slice(0, 6).map((it, i) => (

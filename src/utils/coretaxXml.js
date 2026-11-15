@@ -124,8 +124,12 @@ export const buildCoretaxXml = (invoices, company, options = {}) => {
     const client = inv.client || {};
     const buyerTin = cleanTin(client.npwp || inv.clientNpwp);
     const useDppNilaiLain = inv.useDppNilaiLain !== false;
-    const items = (inv.items || []).filter((i) => i.description);
-    const list = (items.length ? items : [{ description: inv.projectName, amount: inv.totals?.subtotal }])
+    // Bentuk data invoice Kontrack: rincian di `invoiceItems`, nilai di root.
+    const items = (inv.invoiceItems || inv.items || []).filter(
+      (i) => i && (i.description || i.amount || i.unitPrice)
+    );
+    const fallbackAmount = inv.totals?.subtotal ?? inv.subtotal ?? inv.grandTotal;
+    const list = (items.length ? items : [{ description: inv.projectName, amount: fallbackAmount }])
       .map((item) => buildGoodService(item, { opt, code, unit, useDppNilaiLain, vatRate }))
       .join('\n');
 
@@ -187,7 +191,13 @@ export const validateForCoretax = (invoices, company) => {
     const client = inv.client || {};
     if (!cleanTin(client.npwp || inv.clientNpwp)) issues.push(`${no}: NPWP klien kosong.`);
     if (!(client.client_name || inv.clientName)) issues.push(`${no}: nama klien kosong.`);
-    if (!(inv.totals?.subtotal || inv.items?.length)) issues.push(`${no}: tidak ada item/nilai.`);
+    const hasValue =
+      inv.invoiceItems?.length ||
+      inv.items?.length ||
+      inv.totals?.subtotal ||
+      inv.subtotal ||
+      inv.grandTotal;
+    if (!hasValue) issues.push(`${no}: tidak ada item/nilai.`);
   });
   return issues;
 };

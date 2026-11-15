@@ -1,5 +1,8 @@
 // src/components/projects/ProjectDetail.jsx
-import React, { useState, useEffect } from 'react';
+// Detail proyek ala ERP: kartu info ringkas, tabel transaksi dengan
+// rekap per kategori (sort + cari), panel arsip berkas proyek & invoice,
+// serta reminder retensi dihitung dari BA terakhir.
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import {
@@ -9,14 +12,15 @@ import {
   FileText,
   Sparkles,
   Plus,
-  ArrowDownRight,
-  ArrowUpRight,
-  Scale,
   CalendarDays,
-  FileSignature
+  FileSignature,
+  FolderArchive,
+  Timer,
+  ExternalLink
 } from 'lucide-react';
 import { db } from '../../services/firebase';
 import { getTransactionsByProject, deleteTransaction } from '../../services/transactions';
+import { getAllInvoices, INVOICE_DOC_LABELS } from '../../services/invoices';
 import TransactionModal from '../transactions/TransactionModal';
 import AITransactionModal from '../transactions/AITransactionModal';
 import TransactionTable from '../transactions/TransactionTable';
@@ -32,6 +36,10 @@ import { StatusBadge } from '../ui/Badge';
 import ProgressBar from '../ui/ProgressBar';
 import { SkeletonDetail } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
+import { Input, Select } from '../ui/Field';
+
+// Masa retensi standar sejak BA terakhir, sebelum penagihan garansi retensi (bulan).
+const RETENTION_MONTHS = 3;
 
 const WhatsAppIcon = ({ className = 'h-4 w-4' }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -39,15 +47,13 @@ const WhatsAppIcon = ({ className = 'h-4 w-4' }) => (
   </svg>
 );
 
-const SummaryTile = ({ icon: Icon, label, value, tone }) => (
-  <div className={`flex items-center gap-3 rounded-xl border p-4 ${tone.wrap}`}>
-    <div className={`rounded-lg p-2.5 ${tone.icon}`}>
-      <Icon className="h-5 w-5" />
-    </div>
-    <div className="min-w-0">
-      <p className={`text-xs font-medium ${tone.label}`}>{label}</p>
-      <p className={`truncate font-display text-lg font-bold ${tone.value}`}>{value}</p>
-    </div>
+const MetaRow = ({ label, value, icon: Icon }) => (
+  <div className="flex items-baseline justify-between gap-3 py-1.5">
+    <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+    <span className="flex min-w-0 items-center gap-1.5 truncate text-[13px] font-semibold text-slate-800">
+      {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+      <span className="truncate">{value || '—'}</span>
+    </span>
   </div>
 );
 
@@ -55,6 +61,7 @@ const ProjectDetail = ({ currentUser }) => {
   const { id } = useParams();
   const [project, setProject] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -62,6 +69,11 @@ const ProjectDetail = ({ currentUser }) => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [txnRestricted, setTxnRestricted] = useState(false);
+
+  // Kontrol tabel transaksi
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [catFilter, setCatFilter] = useState('all');
 
   useEffect(() => {
     if (id) {
@@ -80,8 +92,6 @@ const ProjectDetail = ({ currentUser }) => {
         const projectData = { id: projectSnap.id, ...projectSnap.data() };
         setProject(projectData);
 
-        // Transaksi butuh login (security rules) — pengunjung share-link
-        // tetap bisa melihat info & progres proyek tanpa transaksi internal.
         try {
           const transactionData = await getTransactionsByProject(id);
           setTransactions(transactionData);
@@ -91,6 +101,11 @@ const ProjectDetail = ({ currentUser }) => {
           setTransactions([]);
           setTxnRestricted(true);
         }
+
+        // Invoice proyek — untuk arsip berkas & reminder retensi.
+        getAllInvoices()
+          .then((all) => setInvoices(all.filter((i) => i.projectId === id || i.projectId === projectData.name)))
+          .catch(() => setInvoices([]));
       } else {
         setError('Proyek tidak ditemukan');
       }
@@ -162,12 +177,6 @@ const ProjectDetail = ({ currentUser }) => {
     }
   };
 
-  const handleGenerateInvoice = () => {
-    if (project) {
-      setShowInvoiceModal(true);
-    }
-  };
-
   if (loading) {
     return <SkeletonDetail />;
   }
@@ -192,14 +201,71 @@ const ProjectDetail = ({ currentUser }) => {
   const progress = calculateProjectProgress(project);
   const daysLeft = calculateDaysLeft(project.endDate);
   const totalValue = project.value * (1 + project.taxRate / 100);
-  const income = transactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const expense = transactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-  const balance = income - expense;
+  const paidAmount = project.paidAmount || 0;
   const isAdmin = currentUser && currentUser.role === 'admin';
+
+  // --- Rekap transaksi per kategori ---
+  const categories = useMemo(() => {
+    const map = {};
+    transactions.forEach((t) => {
+      const k = t.category || 'Lainnya';
+      if (!map[k]) map[k] = { category: k, income: 0, expense: 0, count: 0 };
+      map[k][t.type === 'income' ? 'income' : 'expense'] += Number(t.amount) || 0;
+      map[k].count++;
+    });
+    return Object.values(map).sort((a, b) => b.income + b.expense - (a.income + a.expense));
+  }, [transactions]);
+
+  const filteredTxns = useMemo(() => {
+    let list = transactions;
+    if (catFilter !== 'all') list = list.filter((t) => (t.category || 'Lainnya') === catFilter);
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          (t.description || '').toLowerCase().includes(s) ||
+          (t.category || '').toLowerCase().includes(s)
+      );
+    }
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === 'category') return (a.category || '').localeCompare(b.category || '');
+      if (sortBy === 'amount') return (Number(b.amount) || 0) - (Number(a.amount) || 0);
+      // default: tanggal terbaru
+      return String(b.date || '').localeCompare(String(a.date || ''));
+    });
+    return sorted;
+  }, [transactions, search, sortBy, catFilter]);
+
+  // --- Arsip berkas: dokumen proyek + dokumen tiap invoice ---
+  const projectDocs = project.documents || {};
+  const invoiceDocEntries = invoices.flatMap((inv) =>
+    Object.entries(inv.documents || {}).map(([kind, d]) => ({
+      label: `${INVOICE_DOC_LABELS[kind] || kind} · ${inv.invoiceNumber || ''}`,
+      url: d.url,
+      inv: inv.invoiceNumber
+    }))
+  );
+
+  // --- Reminder retensi: dari tanggal BA terakhir ---
+  const retentionInfo = useMemo(() => {
+    const lastBA = invoices
+      .map((i) => i.issueDate)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    if (!lastBA) return null;
+    const baDate = new Date(lastBA);
+    if (isNaN(baDate.getTime())) return null;
+    const due = new Date(baDate);
+    due.setMonth(due.getMonth() + RETENTION_MONTHS);
+    const today = new Date();
+    const diffDays = Math.ceil((due - today) / 86400000);
+    return { baDate: lastBA, dueDate: due, diffDays };
+  }, [invoices]);
 
   return (
     <div className="animate-fade-in">
-      {/* Navigasi kembali — hanya untuk pengguna internal (tamu share-link tak punya daftar) */}
       {currentUser && (
         <Link
           to="/projects"
@@ -231,7 +297,6 @@ const ProjectDetail = ({ currentUser }) => {
             {!sharingWa && <WhatsAppIcon />}
             {sharingWa ? 'Menyiapkan…' : 'WhatsApp'}
           </Button>
-          {/* Export PDF & Invoice hanya untuk pengguna internal, bukan tamu share-link */}
           {currentUser && (
             <Button variant="secondary" size="sm" onClick={handleExportPDF}>
               <FileDown className="h-4 w-4" />
@@ -239,7 +304,7 @@ const ProjectDetail = ({ currentUser }) => {
             </Button>
           )}
           {isAdmin && (
-            <Button variant="primary" size="sm" onClick={handleGenerateInvoice}>
+            <Button variant="primary" size="sm" onClick={() => setShowInvoiceModal(true)}>
               <FileSignature className="h-4 w-4" />
               Invoice
             </Button>
@@ -247,97 +312,55 @@ const ProjectDetail = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Kartu info */}
+      {/* Baris kartu: Informasi | Nilai & Pembayaran | Progress */}
       <div className="mb-5 grid grid-cols-1 gap-4 sm:mb-6 lg:grid-cols-3">
         <Card className="p-4 sm:p-5">
-          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <h3 className="mb-2 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
             Informasi Proyek
           </h3>
-          <dl className="space-y-2.5 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-slate-500">Mulai</dt>
-              <dd className="flex items-center gap-1.5 font-medium text-slate-700">
-                <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-                {formatDate(project.startDate)}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-slate-500">Selesai</dt>
-              <dd className="flex items-center gap-1.5 font-medium text-slate-700">
-                <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-                {formatDate(project.endDate)}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-slate-500">No. SPK/MOU</dt>
-              <dd className="font-medium text-slate-700">{project.contractNumber || '—'}</dd>
-            </div>
-            {project.documents && (project.documents.spk || project.documents.pk) ? (
-              <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2.5">
-                <dt className="text-slate-500">Arsip Berkas</dt>
-                <dd className="flex gap-2 text-xs font-medium">
-                  {project.documents.spk && (
-                    <a href={project.documents.spk.url} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline dark:text-brand-300">
-                      SPK/Kontrak
-                    </a>
-                  )}
-                  {project.documents.pk && (
-                    <a href={project.documents.pk.url} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline dark:text-brand-300">
-                      PK
-                    </a>
-                  )}
-                </dd>
-              </div>
-            ) : null}
+          <div className="divide-y divide-slate-100 dark:divide-white/5">
+            <MetaRow label="Mulai" value={formatDate(project.startDate)} icon={CalendarDays} />
+            <MetaRow label="Selesai" value={formatDate(project.endDate)} icon={CalendarDays} />
+            <MetaRow label="No. SPK / Kontrak" value={project.contractNumber} />
+            <MetaRow label="No. PK" value={project.pkNumber} />
             {project.description && (
-              <div className="border-t border-slate-100 pt-2.5">
-                <dt className="mb-1 text-slate-500">Deskripsi</dt>
-                <dd className="leading-relaxed text-slate-600">{project.description}</dd>
+              <div className="pt-2">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Deskripsi</p>
+                <p className="text-[13px] leading-relaxed text-slate-600">{project.description}</p>
               </div>
             )}
-          </dl>
+          </div>
         </Card>
 
         <Card className="p-4 sm:p-5">
-          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Nilai & Pembayaran
+          <h3 className="mb-2 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Nilai &amp; Pembayaran
           </h3>
-          <dl className="space-y-2.5 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Nilai Kontrak</dt>
-              <dd className="font-semibold text-slate-800">{formatCurrency(project.value)}</dd>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Nilai Kontrak</span>
+            <span className="tnum font-display text-lg font-bold text-slate-900">
+              {formatCurrency(project.value)}
+            </span>
+          </div>
+          <div className="mt-1 flex items-baseline justify-between gap-3 text-[13px] text-slate-500">
+            <span>Total + pajak ({project.taxRate}%)</span>
+            <span className="tnum font-medium text-slate-700">{formatCurrency(totalValue)}</span>
+          </div>
+          <div className="mt-3 border-t border-slate-100 pt-3 dark:border-white/5">
+            <ProgressBar value={project.value > 0 ? Math.min(100, (paidAmount / project.value) * 100) : 0} className="h-2" />
+            <div className="mt-1.5 flex items-baseline justify-between text-[13px]">
+              <span className="text-emerald-600">
+                Terbayar <span className="tnum font-semibold">{formatCurrency(paidAmount)}</span>
+              </span>
+              <span className={paidAmount >= project.value ? 'font-semibold text-emerald-600' : 'font-semibold text-red-600'}>
+                {project.value - paidAmount <= 0 ? 'Lunas' : `Sisa ${formatCurrency(project.value - paidAmount)}`}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Pajak ({project.taxRate}%)</dt>
-              <dd className="text-slate-600">
-                {formatCurrency((project.value * project.taxRate) / 100)}
-              </dd>
-            </div>
-            <div className="flex justify-between border-t border-slate-100 pt-2.5">
-              <dt className="font-medium text-slate-600">Total + Pajak</dt>
-              <dd className="font-display font-bold text-slate-900">{formatCurrency(totalValue)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Terbayar</dt>
-              <dd className="font-semibold text-emerald-600">
-                {formatCurrency(project.paidAmount || 0)}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Sisa Tagihan</dt>
-              {project.value - (project.paidAmount || 0) <= 0 ? (
-                <dd className="font-semibold text-emerald-600">Lunas</dd>
-              ) : (
-                <dd className="font-semibold text-red-600">
-                  {formatCurrency(project.value - (project.paidAmount || 0))}
-                </dd>
-              )}
-            </div>
-          </dl>
+          </div>
         </Card>
 
         <Card className="p-4 sm:p-5">
-          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <h3 className="mb-2 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
             Progress
           </h3>
           <div className="mb-2 flex items-end justify-between">
@@ -349,9 +372,7 @@ const ProjectDetail = ({ currentUser }) => {
               <span className="text-xs font-semibold text-red-600">Deadline hari ini!</span>
             )}
             {project.status === 'ongoing' && daysLeft < 0 && (
-              <span className="text-xs font-semibold text-red-600">
-                Terlambat {Math.abs(daysLeft)} hari
-              </span>
+              <span className="text-xs font-semibold text-red-600">Terlambat {Math.abs(daysLeft)} hari</span>
             )}
           </div>
           <ProgressBar value={progress} className="h-2.5" />
@@ -361,56 +382,109 @@ const ProjectDetail = ({ currentUser }) => {
         </Card>
       </div>
 
-      {/* Ringkasan & tabel transaksi — tersembunyi untuk pengunjung share-link */}
+      {/* Reminder retensi */}
+      {retentionInfo && (
+        <div
+          className={`mb-5 flex flex-wrap items-center gap-2 rounded-[10px] border px-4 py-3 text-sm ${
+            retentionInfo.diffDays > 30
+              ? 'border-slate-200 bg-slate-50/60 text-slate-600 dark:border-white/10 dark:bg-white/[0.03]'
+              : retentionInfo.diffDays > 0
+                ? 'border-amber-200 bg-amber-50/70 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+                : 'border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+          }`}
+        >
+          <Timer className="h-4 w-4 shrink-0" />
+          {retentionInfo.diffDays > 0 ? (
+            <span>
+              Masa retensi berakhir <strong>{formatDate(retentionInfo.dueDate)}</strong> ({retentionInfo.diffDays} hari lagi)
+              — penagihan garansi retensi bisa dilakukan setelah itu. BA terakhir: {formatDate(retentionInfo.baDate)}.
+            </span>
+          ) : (
+            <span>
+              Masa retensi sudah lewat sejak <strong>{formatDate(retentionInfo.dueDate)}</strong> — penagihan garansi retensi siap dilakukan.
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Arsip berkas proyek & invoice */}
+      {(Object.keys(projectDocs).length > 0 || invoiceDocEntries.length > 0) && (
+        <Card className="mb-5 p-4 sm:p-5">
+          <h3 className="mb-3 flex items-center gap-1.5 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <FolderArchive className="h-4 w-4" />
+            Arsip Berkas
+          </h3>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {Object.entries(projectDocs).map(([kind, d]) => (
+              <a
+                key={`p-${kind}`}
+                href={d.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 px-3 py-2 text-[13px] transition-colors hover:border-brand-300 dark:border-white/10"
+              >
+                <span className="truncate">
+                  <span className="font-medium text-slate-800">{INVOICE_DOC_LABELS[kind] || kind}</span>
+                  <span className="ml-1.5 text-xs text-slate-400">· proyek</span>
+                </span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              </a>
+            ))}
+            {invoiceDocEntries.map((d, i) => (
+              <a
+                key={`i-${i}`}
+                href={d.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 px-3 py-2 text-[13px] transition-colors hover:border-brand-300 dark:border-white/10"
+              >
+                <span className="truncate">
+                  <span className="font-medium text-slate-800">{d.label}</span>
+                </span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {txnRestricted ? (
         <Card className="p-6 text-center">
-          <p className="text-sm font-medium text-slate-600">
-            Transaksi proyek hanya terlihat setelah login.
-          </p>
+          <p className="text-sm font-medium text-slate-600">Transaksi proyek hanya terlihat setelah login.</p>
           <p className="mt-1 text-xs text-slate-400">
-            Anda melihat halaman ini melalui link berbagi — informasi proyek dan progres tetap
-            tersedia di atas.
+            Anda melihat halaman ini melalui link berbagi — informasi proyek dan progres tetap tersedia di atas.
           </p>
         </Card>
       ) : (
         <>
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
-        <SummaryTile
-          icon={ArrowDownRight}
-          label="Total Pemasukan"
-          value={formatCurrency(income)}
-          tone={{
-            wrap: 'border-emerald-100 bg-emerald-50/60 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]',
-            icon: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
-            label: 'text-emerald-700 dark:text-emerald-400',
-            value: 'text-emerald-800 dark:text-emerald-300'
-          }}
-        />
-        <SummaryTile
-          icon={ArrowUpRight}
-          label="Total Pengeluaran"
-          value={formatCurrency(expense)}
-          tone={{
-            wrap: 'border-red-100 bg-red-50/60 dark:border-red-500/20 dark:bg-red-500/[0.07]',
-            icon: 'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400',
-            label: 'text-red-700 dark:text-red-400',
-            value: 'text-red-800 dark:text-red-300'
-          }}
-        />
-        <SummaryTile
-          icon={Scale}
-          label="Saldo"
-          value={formatCurrency(balance)}
-          tone={{
-            wrap: 'border-brand-100 bg-brand-50/60 dark:border-brand-500/20 dark:bg-brand-500/[0.07]',
-            icon: 'bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300',
-            label: 'text-brand-700 dark:text-brand-300',
-            value: 'text-brand-800 dark:text-brand-200'
-          }}
-        />
-      </div>
+      {/* Rekap per kategori */}
+      {categories.length > 0 && (
+        <Card className="mb-5 p-4 sm:p-5">
+          <h3 className="mb-3 font-display text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Rekap per Kategori
+          </h3>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((c) => (
+              <div key={c.category} className="flex items-baseline justify-between gap-3 border-b border-slate-100 pb-1.5 text-[13px] last:border-0 dark:border-white/5">
+                <span className="truncate font-medium text-slate-700">
+                  {c.category}
+                  <span className="ml-1.5 text-[11px] text-slate-400">({c.count})</span>
+                </span>
+                <span className="tnum shrink-0 text-right">
+                  {c.income > 0 && <span className="font-semibold text-emerald-600">+{formatCurrency(c.income)}</span>}
+                  {c.expense > 0 && (
+                    <span className={c.income > 0 ? 'ml-2 text-slate-500' : 'font-semibold text-red-600'}>
+                      −{formatCurrency(c.expense)}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-      {/* Tabel transaksi */}
+      {/* Tabel transaksi: cari, urut, filter kategori */}
       <Card>
         <CardHeader
           title="Transaksi Proyek"
@@ -429,8 +503,29 @@ const ProjectDetail = ({ currentUser }) => {
             )
           }
         />
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari deskripsi / kategori…"
+            className="text-sm"
+          />
+          <Select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+            <option value="all">Semua kategori</option>
+            {categories.map((c) => (
+              <option key={c.category} value={c.category}>
+                {c.category}
+              </option>
+            ))}
+          </Select>
+          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="date">Urutkan: tanggal terbaru</option>
+            <option value="amount">Urutkan: nominal terbesar</option>
+            <option value="category">Urutkan: kategori</option>
+          </Select>
+        </div>
         <TransactionTable
-          transactions={transactions}
+          transactions={filteredTxns}
           onEdit={isAdmin ? handleEditTransaction : null}
           onDelete={isAdmin ? handleDeleteTransaction : null}
           showProject={false}

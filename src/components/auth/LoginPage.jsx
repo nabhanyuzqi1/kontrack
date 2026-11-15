@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ShieldCheck, Zap, LineChart } from 'lucide-react';
-import { signInUser, signInWithGoogle } from '../../services/auth';
+import { signInUser, signUpUser, signInWithGoogle } from '../../services/auth';
 import Logo from '../brand/Logo';
 import Button from '../ui/Button';
 
@@ -11,7 +11,10 @@ const errorMessages = {
   'auth/user-not-found': 'Email tidak terdaftar',
   'auth/wrong-password': 'Password salah',
   'auth/invalid-credential': 'Email atau password salah',
-  'auth/too-many-requests': 'Terlalu banyak percobaan. Silakan coba lagi nanti'
+  'auth/too-many-requests': 'Terlalu banyak percobaan. Silakan coba lagi nanti',
+  'auth/email-already-in-use': 'Email sudah terdaftar — masuk saja',
+  'auth/weak-password': 'Password minimal 6 karakter',
+  'auth/operation-not-allowed': 'Metode masuk belum diaktifkan di Firebase Console — hubungi administrator'
 };
 
 const highlights = [
@@ -29,6 +32,8 @@ const LoginPage = ({ onUserLogin }) => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+  const [signup, setSignup] = useState(false);
+  const [name, setName] = useState('');
   const navigate = useNavigate();
 
   const handleGoogle = async () => {
@@ -57,7 +62,9 @@ const LoginPage = ({ onUserLogin }) => {
     setError('');
 
     try {
-      const user = await signInUser(email, password);
+      const user = signup
+        ? await signUpUser(email, password, name)
+        : await signInUser(email, password);
       onUserLogin(user);
       navigate(user.role === 'admin' ? '/' : '/projects');
     } catch (err) {
@@ -99,12 +106,32 @@ const LoginPage = ({ onUserLogin }) => {
         {/* Kartu form login */}
         <div className="flex flex-1 items-center justify-center px-6 pb-12 lg:px-0 lg:pb-0">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-xl">
-            <h2 className="font-display text-xl font-semibold text-white">Masuk ke Kontrack</h2>
+            <h2 className="font-display text-xl font-semibold text-white">
+              {signup ? 'Daftar Akun Baru' : 'Masuk ke Kontrack'}
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Gunakan akun yang terdaftar di organisasi Anda
+              {signup ? 'Buat akun Kontrack dengan email dan password' : 'Gunakan akun yang terdaftar di organisasi Anda'}
             </p>
 
             <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+              {signup && (
+                <div>
+                  <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-slate-300">
+                    Nama lengkap
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={darkInput}
+                    placeholder="Nama Anda"
+                    autoComplete="name"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+              )}
               <div>
                 <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-300">
                   Email
@@ -146,7 +173,7 @@ const LoginPage = ({ onUserLogin }) => {
               )}
 
               <Button type="submit" variant="gradient" size="lg" loading={loading} className="w-full">
-                {loading ? 'Memproses…' : 'Masuk'}
+                {loading ? 'Memproses…' : signup ? 'Daftar' : 'Masuk'}
               </Button>
             </form>
 
@@ -184,8 +211,20 @@ const LoginPage = ({ onUserLogin }) => {
               {googleLoading ? 'Menghubungkan…' : 'Masuk dengan Google'}
             </button>
 
-            <p className="mt-6 text-xs leading-relaxed text-slate-500">
-              Belum punya akun? Hubungi administrator perusahaan Anda untuk diundang.
+            <p className="mt-4 text-xs">
+              <Link to="/welcome" className="text-slate-500 hover:text-slate-300">
+                ← Kembali ke halaman utama
+              </Link>
+            </p>
+            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              {signup ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
+              <button
+                type="button"
+                onClick={() => { setSignup(!signup); setError(''); }}
+                className="font-medium text-brand-400 hover:text-brand-300"
+              >
+                {signup ? 'Masuk di sini' : 'Daftar sekarang'}
+              </button>
             </p>
           </div>
         </div>
