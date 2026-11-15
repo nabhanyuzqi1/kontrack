@@ -27,14 +27,16 @@ const cssToken = (name, fallback) => {
   return parts.length === 3 && parts.every((n) => !isNaN(n)) ? `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})` : fallback;
 };
 
-// Sumbu Y ringkas: juta/miliar.
+// Sumbu Y ringkas: juta/miliar. Tanda minus ditaruh sebelum "Rp" supaya
+// "-Rp2,5 M" terbaca, bukan "Rp-2,5 M".
 const axisRupiah = (value) => {
   const n = Number(value) || 0;
   const abs = Math.abs(n);
-  if (abs >= 1e9) return `Rp${(n / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 1 })} M`;
-  if (abs >= 1e6) return `Rp${(n / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`;
-  if (abs >= 1e3) return `Rp${Math.round(n / 1e3).toLocaleString('id-ID')} rb`;
-  return `Rp${n.toLocaleString('id-ID')}`;
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e9) return `${sign}Rp${(abs / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 1 })} M`;
+  if (abs >= 1e6) return `${sign}Rp${(abs / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`;
+  if (abs >= 1e3) return `${sign}Rp${Math.round(abs / 1e3).toLocaleString('id-ID')} rb`;
+  return `${sign}Rp${abs.toLocaleString('id-ID')}`;
 };
 
 // Tooltip rupiah penuh.

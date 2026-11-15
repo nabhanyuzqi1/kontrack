@@ -35,6 +35,28 @@ const invoiceBelongsTo = (client, inv) =>
   nameKey(inv.clientName) === nameKey(clientDisplayName(client)) ||
   nameKey(inv.client?.client_name) === nameKey(clientDisplayName(client));
 
+/**
+ * Susun alamat tanpa pengulangan.
+ *
+ * Di data asli `address` sering SUDAH memuat kota dan provinsi
+ * ("... Kabupaten Kotawaringin Timur, Kalimantan Tengah 74312") sementara
+ * `city`/`province` juga terisi terpisah. Menggabungkan semuanya apa adanya
+ * mencetak "Kasongan, Kasongan, Kalimantan Tengah, Kalimantan Tengah".
+ * Bagian yang sudah muncul di address tidak diulang.
+ */
+const formatAddress = (c) => {
+  const address = String(c.address || '').trim();
+  const parts = [c.city, c.province, c.postalCode]
+    .map((s) => String(s || '').trim())
+    .filter(Boolean);
+
+  if (!address) return parts.join(', ') || '-';
+
+  const addressLower = address.toLowerCase();
+  const extra = parts.filter((p) => !addressLower.includes(p.toLowerCase()));
+  return [address, ...extra].join(', ');
+};
+
 // Agregat per klien: kontrak, invoice, terbayar, sisa.
 const summarize = (client, projects, invoices) => {
   const projs = projects.filter((p) => projectBelongsTo(client, p));
@@ -351,9 +373,7 @@ const ClientsPage = () => {
                   <div className="flex items-start gap-2">
                     <dt className="w-28 shrink-0 text-slate-500">Alamat</dt>
                     <dd className="text-slate-900">
-                      {[detail.address, detail.city, detail.province, detail.postalCode]
-                        .filter(Boolean)
-                        .join(', ')}
+                      {formatAddress(detail)}
                     </dd>
                   </div>
                 )}

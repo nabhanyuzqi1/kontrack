@@ -412,3 +412,25 @@ generate 153ms, blob bisa di-fetch utuh. Build live `index-D5xZjxjh.js`.
 Catatan harness: merender iframe PDF membuat tab headless macet (`Runtime.evaluate`
 timeout). Itu artefak viewer headless, bukan bug aplikasi — diuji dengan generator
 dipanggil langsung, tanpa iframe.
+
+## 2026-11-15 — Klien & mitra + grafik (diverifikasi sendiri)
+
+Unit 4 sudah ter-commit di `9a15ea9`; diverifikasi ulang dengan menjalankan
+aplikasinya, bukan membaca laporannya.
+
+- Tabel klien: agregat benar (Dinas PUPR Katingan: 3 proyek Rp7.770.000.000,
+  3 invoice Rp2.494.774.772, terbayar Rp2.202.162.160, sisa Rp292.612.612).
+- Drawer detail: `z:100`, portal, tautan proyek `/app/projects/p1|p3|p5`.
+- Grafik: label sumbu ringkas (`Rp800 jt`, `Rp1,5 M`) diuji di Node; legenda
+  satu baris, tanpa overflow di 390px; mode terang & gelap diperiksa dengan
+  screenshot (label, bulan, legenda terbaca di keduanya).
+
+Perbaikan dari pengujian:
+
+- **Alamat dobel**: `address` di data asli sering SUDAH memuat kota/provinsi
+  ("... Kabupaten Kotawaringin Timur, Kalimantan Tengah 74312") sementara
+  `city`/`province` terisi terpisah, sehingga tercetak "Kasongan, Kasongan,
+  Kalimantan Tengah, Kalimantan Tengah". Ditambah `formatAddress` yang tidak
+  mengulang bagian yang sudah ada di address; diuji terhadap 5 bentuk data asli.
+- **Tanda minus sumbu grafik**: `Rp-2,5 M` diperbaiki jadi `-Rp2,5 M`
+  (`CashflowChart.jsx` dan `ReportCharts.jsx`).
