@@ -1,8 +1,10 @@
 // src/components/invoices/InvoiceDetailModal.jsx
-// Detail invoice ala ERP dalam drawer: informasi penting dirancang muat
-// satu viewport (dua kolom di desktop) — identitas & nominal di kepala,
-// kolom kiri (referensi + perhitungan), kolom kanan (rincian + pajak).
-import React, { useState } from 'react';
+// Detail invoice ala ERP dalam drawer. Prinsip: SATU informasi tampil SATU
+// kali — nomor invoice di judul, grand total hanya di kepala, ringkasan
+// pembayaran hanya rincian turunannya. Dua kolom di desktop agar muat satu
+// viewport: kiri (referensi + rincian pekerjaan), kanan (pembayaran + pajak
+// + arsip berkas).
+import React, { useMemo, useState } from 'react';
 import {
   FileDown,
   Landmark,
@@ -12,21 +14,30 @@ import {
   CalendarDays,
   Building2,
   Briefcase,
-  FileText
+  FileText,
+  Upload,
+  Mail,
+  Package,
+  History
 } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { Field, Input, Textarea } from '../ui/Field';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { generateInvoicePDF } from '../../utils/invoiceGenerator';
+import { generateShippingLabel } from '../../utils/shippingLabel';
 import {
   INVOICE_STATUS,
   INVOICE_STATUS_LABEL,
   billingStageLabel,
   taxDocsProgress,
-  isPpnCair
+  isPpnCair,
+  INVOICE_DOC_LABELS,
+  uploadInvoiceDocument
 } from '../../services/invoices';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
+import { sendInvoiceEmail, buildBillingEmailContent } from '../../services/email';
 
 const statusTone = { draft: 'slate', sent: 'blue', paid: 'emerald', void: 'red' };
 
@@ -43,15 +54,48 @@ const SectionLabel = ({ children }) => (
   </p>
 );
 
-const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, onMarkSent, busy }) => {
+const DOC_KEYS = ['bahk', 'wpho', 'faktur'];
+
+const InvoiceDetailModal = ({
+  invoice,
+  onClose,
+  onEdit,
+  onTaxDocs,
+  onMarkPaid,
+  onMarkSent,
+  onRevise,
+  busy
+}) => {
   const [downloading, setDownloading] = useState(false);
+  const [uploading, setUploading] = useState(null);
+
+  // Form email penagihan
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailUp, setEmailUp] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
+
+  // Form label kirim
+  const [labelOpen, setLabelOpen] = useState(false);
+  const [labelUp, setLabelUp] = useState('');
+  const [labelVia, setLabelVia] = useState('Lion Parcel');
+
   if (!invoice) return null;
 
   const inv = { ...invoice };
   const items = Array.isArray(inv.invoiceItems) ? inv.invoiceItems : [];
   const isPaid = inv.status === INVOICE_STATUS.PAID;
+  const isSent = inv.status === INVOICE_STATUS.SENT;
   const progress = taxDocsProgress(inv);
   const doneCount = progress.filter((p) => p.done).length;
+  const docs = inv.documents || {};
+  const attachments = useMemo(
+    () =>
+      DOC_KEYS.map((k) => (docs[k] ? { name: `${INVOICE_DOC_LABELS[k]} (${docs[k].name})`, url: docs[k].url } : null)).filter(Boolean),
+    [inv.id]
+  );
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -66,7 +110,85 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
     }
   };
 
+  const openEmail = async () => {
+    const settings = await getCompanySettings().catch(() => null);
+    const merged = mergeCompanyInfo(settings || {});
+    const c = buildBillingEmailContent(inv, merged, { up: emailUp });
+    setEmailTo(inv.client?.email || '');
+    setEmailSubject(c.subject);
+    setEmailBody(c.body);
+    setEmailOpen(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailTo) {
+      alert('Isi alamat email tujuan terlebih dahulu.');
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      await sendInvoiceEmail({
+        to: emailTo,
+        subject: emailSubject,
+        body: emailBody.replace(/\{UP\}/g, emailUp).replace('u.p. {UP}', emailUp ? `u.p. ${emailUp}` : ''),
+        attachments,
+      });
+      alert('Email penagihan terkirim.');
+      setEmailOpen(false);
+    } catch (err) {
+      console.error('Gagal kirim email:', err);
+      alert(err?.message || 'Gagal mengirim email.');
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const handleUpload = async (kind, file) => {
+    if (!file) return;
+    setUploading(kind);
+    try {
+      await uploadInvoiceDocument(inv.id, kind, file);
+      alert('Berkas terunggah.');
+    } catch (err) {
+      console.error('Gagal unggah berkas:', err);
+      alert('Gagal mengunggah berkas. Coba lagi.');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const openLabel = async () => {
+    if (!labelOpen) {
+      const settings = await getCompanySettings().catch(() => null);
+      const merged = mergeCompanyInfo(settings || {});
+      setLabelOpen(true);
+      // prefill UP dari kontak klien bila ada
+      setEmailUp((prev) => prev || inv.client?.contactPerson || '');
+      void merged;
+    } else {
+      setLabelOpen(false);
+    }
+  };
+
+  const printLabel = async () => {
+    const settings = await getCompanySettings().catch(() => null);
+    const merged = mergeCompanyInfo(settings || {});
+    generateShippingLabel(inv, {
+      from: { name: merged.name, address: [merged.address, merged.city].filter(Boolean).join(', '), phone: merged.phone },
+      to: {
+        name: inv.clientName || inv.client?.client_name || '',
+        address: inv.client?.address || '',
+        phone: inv.client?.phone || ''
+      },
+      up: labelUp,
+      via: labelVia,
+      documents: attachments.map((a) => a.name)
+    });
+    setLabelOpen(false);
+  };
+
   return (
+    <>
     <Modal
       isOpen={Boolean(invoice)}
       onClose={onClose}
@@ -87,12 +209,26 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
             </Button>
           )}
           <div className="flex flex-wrap gap-2 sm:justify-end">
+            {isSent && onRevise && (
+              <Button variant="secondary" size="sm" onClick={() => onRevise(inv)}>
+                <History className="h-4 w-4" />
+                Revisi
+              </Button>
+            )}
             {!isPaid && inv.status === INVOICE_STATUS.DRAFT && (
               <Button variant="secondary" size="sm" onClick={() => onMarkSent(inv)} disabled={busy}>
                 <Send className="h-4 w-4" />
                 Tandai Terkirim
               </Button>
             )}
+            <Button variant="secondary" size="sm" onClick={openLabel}>
+              <Package className="h-4 w-4" />
+              Label Kirim
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openEmail}>
+              <Mail className="h-4 w-4" />
+              Kirim Email
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => onTaxDocs(inv)}>
               <Landmark className="h-4 w-4" />
               Dokumen Pajak
@@ -112,7 +248,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
       }
     >
       <div className="space-y-4">
-        {/* Kepala: status + identitas | grand total */}
+        {/* Kepala: identitas | grand total — tampil sekali saja */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -153,9 +289,9 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
           </div>
         </div>
 
-        {/* Dua kolom: muat satu viewport di desktop */}
+        {/* Dua kolom */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Kolom kiri: referensi + perhitungan */}
+          {/* Kolom kiri */}
           <div className="space-y-4">
             <div>
               <SectionLabel>
@@ -172,45 +308,6 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
               </div>
             </div>
 
-            <div>
-              <SectionLabel>Perhitungan</SectionLabel>
-              <div className="space-y-1 text-[13px]">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span className="tnum">{formatCurrency(inv.subtotal ?? inv.dppNilaiLain ?? 0)}</span>
-                </div>
-                {inv.dppNilaiLain > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>DPP Nilai Lain</span>
-                    <span className="tnum">{formatCurrency(inv.dppNilaiLain)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-slate-500">
-                  <span>PPN</span>
-                  <span className="tnum">{formatCurrency(inv.pajak11 || 0)}</span>
-                </div>
-                <div className="flex justify-between border-t border-slate-200/70 pt-1 font-display text-base font-bold text-brand-700 dark:border-white/10">
-                  <span>Grand Total</span>
-                  <span className="tnum">{formatCurrency(inv.grandTotal || 0)}</span>
-                </div>
-                {inv.taxDeductedAmount > 0 && (
-                  <>
-                    <div className="flex justify-between text-slate-500">
-                      <span>PPh (dipotong client)</span>
-                      <span className="tnum">−{formatCurrency(inv.taxDeductedAmount)}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold text-slate-800">
-                      <span>Diterima</span>
-                      <span className="tnum">{formatCurrency(inv.netProceeds)}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Kolom kanan: rincian item + dokumen pajak */}
-          <div className="space-y-4">
             {items.length > 0 && (
               <div>
                 <SectionLabel>Rincian Pekerjaan</SectionLabel>
@@ -248,6 +345,41 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Kolom kanan */}
+          <div className="space-y-4">
+            <div>
+              <SectionLabel>Pembayaran</SectionLabel>
+              <div className="space-y-1 text-[13px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal</span>
+                  <span className="tnum">{formatCurrency(inv.subtotal ?? inv.dppNilaiLain ?? 0)}</span>
+                </div>
+                {inv.dppNilaiLain > 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>DPP Nilai Lain</span>
+                    <span className="tnum">{formatCurrency(inv.dppNilaiLain)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-500">
+                  <span>PPN</span>
+                  <span className="tnum">{formatCurrency(inv.pajak11 || 0)}</span>
+                </div>
+                {inv.taxDeductedAmount > 0 && (
+                  <>
+                    <div className="flex justify-between text-slate-500">
+                      <span>PPh (dipotong client)</span>
+                      <span className="tnum">−{formatCurrency(inv.taxDeductedAmount)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-slate-800">
+                      <span>Diterima</span>
+                      <span className="tnum">{formatCurrency(inv.netProceeds)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
 
             <div>
               <div className="flex items-center justify-between">
@@ -267,10 +399,120 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, onTaxDocs, onMarkPaid, o
                 ))}
               </div>
             </div>
+
+            <div>
+              <SectionLabel>Arsip Berkas</SectionLabel>
+              <div className="space-y-1.5">
+                {DOC_KEYS.map((k) => (
+                  <div key={k} className="flex items-center justify-between gap-2 text-[13px]">
+                    <span className={docs[k] ? 'font-medium text-slate-800' : 'text-slate-400'}>
+                      {INVOICE_DOC_LABELS[k]}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {docs[k] ? (
+                        <a
+                          href={docs[k].url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
+                        >
+                          Lihat
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-300">belum ada</span>
+                      )}
+                      <label
+                        title={`Unggah ${INVOICE_DOC_LABELS[k]}`}
+                        className="cursor-pointer rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-700"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*,.pdf,.tif,.tiff"
+                          disabled={uploading === k}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (file) handleUpload(k, file);
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </Modal>
+
+    {labelOpen && (
+      <Modal
+        isOpen
+        onClose={() => setLabelOpen(false)}
+        title="Label Kirim"
+        subtitle="Cetak label pengiriman berkas fisik"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setLabelOpen(false)}>Batal</Button>
+            <Button onClick={printLabel}>Cetak Label</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="UP (kepada)">
+            <Input value={labelUp} onChange={(e) => setLabelUp(e.target.value)} placeholder="Nama pegawai tujuan" />
+          </Field>
+          <Field label="Jalur kirim">
+            <Input value={labelVia} onChange={(e) => setLabelVia(e.target.value)} placeholder="Lion Parcel" />
+          </Field>
+          <p className="text-xs text-slate-400">
+            Alamat pengirim otomatis dari profil perusahaan; penerima dari data klien.
+          </p>
+        </div>
+      </Modal>
+    )}
+
+    {emailOpen && (
+      <Modal
+        isOpen
+        onClose={() => setEmailOpen(false)}
+        title="Kirim Email Penagihan"
+        subtitle={`${attachments.length} berkas dilampirkan`}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEmailOpen(false)}>Batal</Button>
+            <Button onClick={handleSendEmail} loading={emailBusy}>
+              <Mail className="h-4 w-4" />
+              Kirim
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Kepada (email)">
+            <Input value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="apfinance@slm.com" />
+          </Field>
+          <Field label="UP (untuk perhatian)">
+            <Input value={emailUp} onChange={(e) => setEmailUp(e.target.value)} placeholder="Opsional" />
+          </Field>
+          <Field label="Subjek">
+            <Input value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
+          </Field>
+          <Field label="Isi email">
+            <Textarea rows={10} value={emailBody} onChange={(e) => setEmailBody(e.target.value)} />
+          </Field>
+          <p className="text-xs text-slate-400">
+            Lampiran: {attachments.length > 0 ? attachments.map((a) => a.name).join(', ') : 'belum ada berkas di arsip — unggah BAHK/WPHO/Faktur dulu.'}
+          </p>
+        </div>
+      </Modal>
+    )}
+    </>
   );
 };
 

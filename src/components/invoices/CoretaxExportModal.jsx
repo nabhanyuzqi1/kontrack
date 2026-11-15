@@ -19,7 +19,8 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
   const [selected, setSelected] = useState(() => new Set(invoices.map((i) => i.id)));
   const [code, setCode] = useState('010000');
   const [unit, setUnit] = useState('UM.0018');
-  const [trxCode, setTrxCode] = useState('01');
+  // Default 04 — PT PEB menerbitkan faktur dengan DPP Nilai Lain (PMK 131/2024).
+  const [trxCode, setTrxCode] = useState('04');
   const [opt, setOpt] = useState(GOODSERVICE_OPT.JASA);
 
   const chosen = useMemo(() => invoices.filter((i) => selected.has(i.id)), [invoices, selected]);

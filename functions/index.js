@@ -4,6 +4,7 @@ const admin = require("firebase-admin");
 const {getFirestore} = require("firebase-admin/firestore");
 // Secret Manager (menggantikan defineString yang membaca .env plaintext ter-commit).
 const {defineSecret} = require("firebase-functions/params");
+const nodemailer = require("nodemailer");
 // Node 22 sudah menyediakan fetch secara global — tidak perlu paket node-fetch
 // (yang memang tidak terdaftar di dependencies dan membuat deploy gagal).
 
@@ -15,6 +16,13 @@ const GEMINI_API_URL =
 
 // Set nilainya sekali via: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+
+// Kredensial SMTP untuk kirim email penagihan. Pakai Gmail App Password
+// (bukan password akun) — set via:
+//   firebase functions:secrets:set SMTP_USER
+//   firebase functions:secrets:set SMTP_PASS
+const smtpUser = defineSecret("SMTP_USER");
+const smtpPass = defineSecret("SMTP_PASS");
 
 // ---------------------------------------------------------------------------
 // DUA JALUR MENUJU GEMINI
@@ -363,6 +371,79 @@ exports.analyzeTransactionImageWithAI = onCall(
         if (error instanceof HttpsError) throw error;
         logger.error("Kesalahan memanggil Gemini:", error);
         throw new HttpsError("unknown", "Terjadi kesalahan saat menganalisis gambar.");
+      }
+    },
+);
+
+
+// ---------------------------------------------------------------------------
+// Kirim email penagihan lengkap dengan lampiran berkas (WPHO, BAHK, PK,
+// INVOICE, FAKTUR). Lampiran diunduh dari Cloud Storage memakai URL yang
+// tersimpan di dokumen invoice.
+// ---------------------------------------------------------------------------
+
+/** Unduh satu URL menjadi Buffer. Mendukung URL Firebase Storage. */
+const fetchAttachment = async (url, name) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Gagal mengunduh lampiran ${name}: ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  return {filename: name || "lampiran", content: buf};
+};
+
+exports.sendInvoiceEmail = onCall(
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, secrets: [smtpUser, smtpPass]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Anda harus login untuk mengirim email.");
+      }
+
+      const {to, cc, subject, body, attachments = [], replyTo} = request.data || {};
+      if (!to || !/^[^@ ]+@[^@ ]+\.[^@ ]+$/.test(String(to).trim())) {
+        throw new HttpsError("invalid-argument", "Alamat email tujuan tidak valid.");
+      }
+      if (!smtpUser.value() || !smtpPass.value()) {
+        throw new HttpsError(
+            "failed-precondition",
+            "SMTP belum dikonfigurasi. Pemilik perlu menyetel secret SMTP_USER dan SMTP_PASS.",
+        );
+      }
+
+      // Batasi jumlah & ukuran lampiran: total maksimal ~20 MB.
+      let totalBytes = 0;
+      const files = [];
+      for (const att of attachments.slice(0, 12)) {
+        if (!att || !att.url) continue;
+        const file = await fetchAttachment(att.url, att.name);
+        totalBytes += file.content.length;
+        if (totalBytes > 20 * 1024 * 1024) {
+          throw new HttpsError("invalid-argument", "Total lampiran melebihi 20 MB.");
+        }
+        files.push(file);
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {user: smtpUser.value(), pass: smtpPass.value()},
+      });
+
+      try {
+        const info = await transporter.sendMail({
+          from: smtpUser.value(),
+          to,
+          cc: cc || undefined,
+          replyTo: replyTo || smtpUser.value(),
+          subject: subject || "Penagihan",
+          text: body || "",
+          html: body ? `<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">${String(body).replace(/[<>]/g, "")}</div>` : undefined,
+          attachments: files,
+        });
+        logger.info(`Email penagihan terkirim: ${info.messageId}`);
+        return {messageId: info.messageId, accepted: info.accepted || [], attachmentCount: files.length};
+      } catch (error) {
+        logger.error("Gagal kirim email:", error);
+        throw new HttpsError("unknown", `Gagal mengirim email: ${error.message}`);
       }
     },
 );

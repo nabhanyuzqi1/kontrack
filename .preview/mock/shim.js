@@ -161,3 +161,21 @@ export const buildInvoiceNumber = () => `PREVIEW-${Date.now()}`;
 export const shareProjectWhatsAppRich = noopSync;
 export const buildFinancialSummary = () => ({});
 export const getFinancialInsight = async () => ({});
+
+// services/email
+export const sendInvoiceEmail = async () => ({ messageId: 'mock' });
+export const buildBillingEmailContent = (invoice) => ({
+  subject: `Penagihan ${invoice?.invoiceNumber || ''}`,
+  body: 'mock body'
+});
+
+// Dokumen arsip + revisi invoice
+export const INVOICE_DOC_LABELS = {
+  bahk: 'BAHK (Berita Acara Hasil Kerja)',
+  wpho: 'WPHO / BAST',
+  spk: 'SPK / Kontrak Kerja',
+  pk: 'Perjanjian Kerja (PK)',
+  faktur: 'Faktur Pajak'
+};
+export const uploadInvoiceDocument = async () => ({ url: 'https://example.invalid/doc.pdf', name: 'doc.pdf' });
+export const reviseInvoice = async () => ({ revision: 1, invoiceNumber: 'INV-001/PEB/11/2026 Rev.1' });

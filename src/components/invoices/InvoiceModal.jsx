@@ -1,6 +1,6 @@
 // src/components/invoices/InvoiceModal.jsx
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Plus, Trash2, FileDown, ScanLine, Loader2, FileSearch } from 'lucide-react';
+import { Plus, Trash2, FileDown, ScanLine, Loader2, FileSearch, Paperclip } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Field, Input, Textarea, Label } from '../ui/Field';
@@ -12,6 +12,7 @@ import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
 import {
   addInvoice,
   updateInvoice,
+  reviseInvoice,
   getNextInvoiceNumber,
   calcInvoiceTotals,
   BILLING_STAGES,
@@ -19,6 +20,7 @@ import {
 } from '../../services/invoices';
 import { getAllClients, clientDisplayName } from '../../services/clients';
 import { scanWphoDocument } from '../../services/ai';
+import { uploadInvoiceDocument } from '../../services/invoices';
 import { Select } from '../ui/Field';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -39,7 +41,7 @@ const rowAmount = (it) => {
 // Builder invoice — meniru struktur template resmi PT PEB.
 // Mode edit: oper prop `invoice` (record Firestore). Tanpa prop itu, mode buat baru;
 // nomor invoice diisi otomatis dari urutan bulan berjalan.
-const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
+const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice, revise = false }) => {
   const editing = Boolean(invoice);
   const [number, setNumber] = useState(() => invoice?.invoiceNumber || buildInvoiceNumber());
   const [dueDate, setDueDate] = useState(addDaysISO(14));
@@ -79,6 +81,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
     setBillToName(inv.clientName || '');
     setClientNpwp(inv.client?.npwp || '');
     setPoNumber(inv.poNumber || '');
+    setBahkNumber(inv.bahkNumber || '');
     setPkNumber(inv.pkNumber || '');
     setWphoNumber(inv.wphoNumber || '');
     setTaxInvoiceNumber(inv.taxInvoiceNumber || '');
@@ -134,8 +137,11 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
   const [wphoNumber, setWphoNumber] = useState('');
   const [taxInvoiceNumber, setTaxInvoiceNumber] = useState('');
 
-  const [franco, setFranco] = useState('-');
-  const [shippedVia, setShippedVia] = useState('-');
+  // Franco tidak lagi relevan; field disembunyikan dari form, nilai tetap dikirim
+// untuk kompatibilitas skema & PDF lama.
+const [franco, setFranco] = useState('-');
+  // Shipped Via default Lion Parcel — jalur kirim berkas fisik yang biasa dipakai.
+const [shippedVia, setShippedVia] = useState('Lion Parcel');
   const [paymentTerm, setPaymentTerm] = useState(INVOICE_DEFAULTS.paymentTerm);
 
   const [items, setItems] = useState(() => [
@@ -187,6 +193,10 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
   const [generating, setGenerating] = useState(false);
   const [scanningWpho, setScanningWpho] = useState(false);
   const [scanningFaktur, setScanningFaktur] = useState(false);
+  // Berkas BAHK & WPHO adalah dokumen FISIK yang berbeda — diunggah terpisah,
+  // lalu disimpan ke arsip begitu invoice punya id.
+  const [pendingDocs, setPendingDocs] = useState({ bahk: null, wpho: null });
+  const [bahkNumber, setBahkNumber] = useState('');
 
   // Scan WPHO/BAST: isi nomor WPHO + item pekerjaan (nilai & deskripsi) otomatis.
   const handleScanWpho = async (e) => {
@@ -268,6 +278,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
         client: { client_name: billToName, address: billToAddress, npwp: clientNpwp },
         poNumber,
         pkNumber,
+        bahkNumber,
         wphoNumber,
         taxInvoiceNumber,
         franco,
@@ -287,10 +298,27 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
       };
 
       // Simpan sebagai draft — PDF tidak dibuat otomatis; tersedia di detail invoice.
-      if (editing) {
+      // Mode revisi: nomor ditandai Rev.N dan status kembali ke draft.
+      if (editing && revise) {
+        await reviseInvoice(invoice.id, payload);
+      } else if (editing) {
         await updateInvoice(invoice.id, payload);
       } else {
-        await addInvoice(payload);
+        const newId = await addInvoice(payload);
+        // Unggah berkas BAHK/WPHO yang dipilih sebelum invoice tersimpan.
+        const uploads = [];
+        if (pendingDocs.bahk) uploads.push(uploadInvoiceDocument(newId, 'bahk', pendingDocs.bahk).catch(() => {}));
+        if (pendingDocs.wpho) uploads.push(uploadInvoiceDocument(newId, 'wpho', pendingDocs.wpho).catch(() => {}));
+        await Promise.all(uploads);
+        setPendingDocs({ bahk: null, wpho: null });
+      }
+      // Edit mode: unggah berkas baru langsung ke invoice yang sudah ada.
+      if (editing) {
+        const ups = [];
+        if (pendingDocs.bahk) ups.push(uploadInvoiceDocument(invoice.id, 'bahk', pendingDocs.bahk).catch(() => {}));
+        if (pendingDocs.wpho) ups.push(uploadInvoiceDocument(invoice.id, 'wpho', pendingDocs.wpho).catch(() => {}));
+        await Promise.all(ups);
+        setPendingDocs({ bahk: null, wpho: null });
       }
       onSuccess?.();
       onClose?.();
@@ -311,7 +339,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={editing ? "Edit Invoice" : "Buat Invoice"}
+      title={editing ? (revise ? `Revisi Invoice (Rev.${(Number(invoice?.revision) || 0) + 1})` : 'Edit Invoice') : 'Buat Invoice'}
       subtitle={project?.name || invoice?.projectName}
       size="xl"
       footer={
@@ -320,7 +348,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
             Batal
           </Button>
           <Button onClick={handleGenerate} loading={generating}>
-            {generating ? 'Menyimpan…' : editing ? 'Simpan Perubahan' : 'Simpan Draft'}
+            {generating ? 'Menyimpan…' : editing ? (revise ? 'Simpan Revisi (Rev.Reset)' : 'Simpan Perubahan') : 'Simpan Draft'}
           </Button>
         </>
       }
@@ -370,6 +398,13 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
             <Field label="PK No.">
               <Input value={pkNumber} onChange={(e) => setPkNumber(e.target.value)} placeholder="SLM/PK-HO/TEK/11/3/2026" />
             </Field>
+            <Field label="No. BAHK">
+              <Input
+                value={bahkNumber}
+                onChange={(e) => setBahkNumber(e.target.value)}
+                placeholder="No. Berita Acara Hasil Kerja"
+              />
+            </Field>
             <Field label="No. WPHO / BAST">
               <div className="flex gap-1.5">
                 <Input value={wphoNumber} onChange={(e) => setWphoNumber(e.target.value)} placeholder="SLM/WP/2611/00449" />
@@ -413,11 +448,39 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
           </div>
         </div>
 
-        {/* Franco / Shipped / Term */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Franco">
-            <Input value={franco} onChange={(e) => setFranco(e.target.value)} />
-          </Field>
+        {/* Berkas BAHK & WPHO — dua dokumen fisik yang berbeda */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {['bahk', 'wpho'].map((kind) => (
+            <div
+              key={kind}
+              className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 dark:border-white/15"
+            >
+              <div className="min-w-0 text-sm">
+                <p className="font-medium text-slate-700">{kind === 'bahk' ? 'Berkas BAHK' : 'Berkas WPHO / BAST'}</p>
+                <p className="truncate text-xs text-slate-400">
+                  {pendingDocs[kind] ? pendingDocs[kind].name : 'Belum dipilih'}
+                </p>
+              </div>
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-slate-100 dark:text-brand-300">
+                <Paperclip className="h-3.5 w-3.5" />
+                Pilih
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*,.pdf,.tif,.tiff"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) setPendingDocs((prev) => ({ ...prev, [kind]: file }));
+                  }}
+                />
+              </label>
+            </div>
+          ))}
+        </div>
+
+        {/* Shipped / Term — Franco tidak lagi relevan, disembunyikan */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Shipped Via">
             <Input value={shippedVia} onChange={(e) => setShippedVia(e.target.value)} />
           </Field>

@@ -12,6 +12,28 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 
 ## Sudah selesai
 
+### Batch arsip & penagihan (2026-11-15)
+- Drawer detail invoice: tanpa duplikasi (grand total hanya di kepala), layout
+  dua kolom, terverifikasi nol scroll di 1440×900.
+- Arsip berkas per invoice: BAHK, WPHO/BAST, Faktur Pajak (Storage:
+  `doc-archives/invoices/{id}/`), field `documents.{kind}` di dokumen invoice.
+- Form proyek: unggah SPK/Kontrak & PK (Storage: `doc-archives/projects/{id}/`),
+  tautan arsip tampil di detail proyek. BAHK/WPHO per invoice otomatis jadi
+  rekap arsip digital penagihan.
+- Revisi invoice: tombol Revisi di drawer (status terkirim) → nomor ditandai
+  `Rev.N` (`reviseInvoice`), status reset ke draft.
+- Label Kirim: PDF label pengiriman (pengirim dari profil perusahaan, penerima
+  dari data klien, UP kustom, via default Lion Parcel).
+- Kirim Email penagihan: Cloud Function `sendInvoiceEmail` (nodemailer, Gmail
+  SMTP) + modal compose di drawer. PR: pemilik harus menjalankan
+  `firebase functions:secrets:set SMTP_USER / SMTP_PASS` (Gmail App Password)
+  untuk mengaktifkan pengiriman — saat ini secret berisi placeholder.
+- Form invoice: field No. BAHK terpisah, unggah berkas BAHK & WPHO terpisah;
+  Franco disembunyikan; Shipped Via default Lion Parcel.
+- Export CoreTax: TrxCode default 04 (DPP Nilai Lain); XML diverifikasi cocok
+  faktur asli (TaxBase=subtotal, OtherTaxBase=11/12, VAT=12%).
+
+
 ### Batch b18d8ea (2026-11-15)
 - Perbaikan `)}` bocor di daftar proyek (sisa ternary lama di ProjectList).
 - Kartu grid proyek didesain ulang: datar satu tingkat, tanpa panel kotak-dalam-kotak.

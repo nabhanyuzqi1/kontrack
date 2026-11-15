@@ -49,6 +49,7 @@ const InvoicesPage = () => {
   const [company, setCompany] = useState(null);
   const [detailInvoice, setDetailInvoice] = useState(null);
   const [editInvoice, setEditInvoice] = useState(null);
+  const [reviseMode, setReviseMode] = useState(false);
 
   useEffect(() => {
     getCompanySettings()
@@ -369,6 +370,7 @@ const InvoicesPage = () => {
           onEdit={(inv) => {
             setDetailInvoice(null);
             setEditInvoice(inv);
+            setReviseMode(false);
           }}
           onTaxDocs={(inv) => {
             setDetailInvoice(null);
@@ -376,6 +378,11 @@ const InvoicesPage = () => {
           }}
           onMarkPaid={handleMarkPaid}
           onMarkSent={(inv) => handleStatus(inv, INVOICE_STATUS.SENT)}
+          onRevise={(inv) => {
+            setDetailInvoice(null);
+            setEditInvoice(inv);
+            setReviseMode(true);
+          }}
           busy={busyId === (detailInvoice?.id || null)}
         />
       )}
@@ -383,11 +390,16 @@ const InvoicesPage = () => {
       {editInvoice && (
         <InvoiceModal
           isOpen={Boolean(editInvoice)}
+          revise={reviseMode}
           invoice={editInvoice}
           project={projectMap[editInvoice.projectId]}
-          onClose={() => setEditInvoice(null)}
+          onClose={() => {
+            setEditInvoice(null);
+            setReviseMode(false);
+          }}
           onSuccess={() => {
             setEditInvoice(null);
+            setReviseMode(false);
             load({ silent: true });
           }}
         />

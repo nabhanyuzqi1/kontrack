@@ -22,7 +22,8 @@ import {
   orderBy,
   arrayUnion
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, storage } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cached, invalidate, CACHE_KEYS } from './cache';
 import { addTransaction } from './transactions';
 
@@ -162,6 +163,56 @@ export const deleteInvoice = async (invoiceId) => {
   await assertMutable(invoiceId);
   await deleteDoc(doc(db, COLLECTION, invoiceId));
   invalidate(CACHE_KEYS.INVOICES);
+};
+
+
+// ---------- Dokumen pendukung (BAHK / WPHO / SPK / PK / faktur) ----------
+// Tiap berkas disimpan di Storage under `invoice-docs/{invoiceId}/{kind}` dan
+// jejaknya di field `documents` invoice — menjadi arsip digital penagihan.
+export const INVOICE_DOC_LABELS = {
+  bahk: 'BAHK (Berita Acara Hasil Kerja)',
+  wpho: 'WPHO / BAST',
+  spk: 'SPK / Kontrak Kerja',
+  pk: 'Perjanjian Kerja (PK)',
+  faktur: 'Faktur Pajak'
+};
+
+// `collectionName` memungkinkan arsip dipakai ulang untuk proyek (SPK/PK);
+// path Storage tetap eksplisit per jenis dokumen.
+export const uploadInvoiceDocument = async (invoiceId, kind, file, collectionName = COLLECTION) => {
+  const safe = String(file.name || 'berkas').replace(/[^a-zA-Z0-9._-]+/g, '_');
+  const path = `doc-archives/${collectionName}/${invoiceId}/${kind}_${Date.now()}_${safe}`;
+  const snapshot = await uploadBytes(ref(storage, path), file);
+  const url = await getDownloadURL(snapshot.ref);
+  const entry = { url, path, name: safe, uploadedAt: new Date().toISOString() };
+  await updateDoc(doc(db, collectionName, invoiceId), {
+    [`documents.${kind}`]: entry,
+    updatedAt: new Date().toISOString()
+  });
+  invalidate(CACHE_KEYS.INVOICES);
+  invalidate(CACHE_KEYS.PROJECTS);
+  return entry;
+};
+
+
+// Revisi invoice terkirim: penomoran ditandai Rev.N dan status kembali ke
+// draft (belum terkirim) — sesuai praktik surat-menyurat kontrak.
+export const reviseInvoice = async (invoiceId, data) => {
+  const snap = await getDoc(doc(db, COLLECTION, invoiceId));
+  const current = snap.exists() ? snap.data() : {};
+  const revision = (Number(current.revision) || 0) + 1;
+  const baseNumber = String(data.invoiceNumber || current.invoiceNumber || '')
+    .replace(/\s*Rev\.?\s*\d+$/i, '')
+    .trim();
+  const invoiceNumber = `${baseNumber} Rev.${revision}`;
+  await updateInvoice(invoiceId, {
+    ...data,
+    invoiceNumber,
+    revision,
+    status: INVOICE_STATUS.DRAFT,
+    statusUpdatedAt: new Date().toISOString()
+  });
+  return { revision, invoiceNumber };
 };
 
 // ---------- Dokumen pajak (Fase C) ----------

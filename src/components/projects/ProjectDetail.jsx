@@ -272,6 +272,23 @@ const ProjectDetail = ({ currentUser }) => {
               <dt className="text-slate-500">No. SPK/MOU</dt>
               <dd className="font-medium text-slate-700">{project.contractNumber || '—'}</dd>
             </div>
+            {project.documents && (project.documents.spk || project.documents.pk) ? (
+              <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2.5">
+                <dt className="text-slate-500">Arsip Berkas</dt>
+                <dd className="flex gap-2 text-xs font-medium">
+                  {project.documents.spk && (
+                    <a href={project.documents.spk.url} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline dark:text-brand-300">
+                      SPK/Kontrak
+                    </a>
+                  )}
+                  {project.documents.pk && (
+                    <a href={project.documents.pk.url} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline dark:text-brand-300">
+                      PK
+                    </a>
+                  )}
+                </dd>
+              </div>
+            ) : null}
             {project.description && (
               <div className="border-t border-slate-100 pt-2.5">
                 <dt className="mb-1 text-slate-500">Deskripsi</dt>

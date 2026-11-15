@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { addProject, updateProject } from '../../services/projects';
+import { uploadInvoiceDocument } from '../../services/invoices';
 import { getAllClients, clientDisplayName } from '../../services/clients';
 import { PROJECT_STATUS, TAX_RATES } from '../../utils/constants';
 import Modal from '../ui/Modal';
@@ -57,6 +58,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [docBusy, setDocBusy] = useState(null);
   const [errors, setErrors] = useState({});
   const [displayValue, setDisplayValue] = useState(() => formatNumberDisplay(project?.value || ''));
   const [clients, setClients] = useState(null); // null = belum dimuat
@@ -270,6 +272,47 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
               placeholder="cth. SPK/2026/001"
               disabled={loading}
             />
+            {/* Arsip digital: SPK & PK diunggah per proyek; tiap BAHK/WPHO
+                per invoice otomatis menempel di arsip invoice masing-masing. */}
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {['spk', 'pk'].map((kind) => (
+                <label
+                  key={kind}
+                  title={kind === 'spk' ? 'Unggah SPK / Kontrak Kerja' : 'Unggah Perjanjian Kerja (PK)'}
+                  className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-xs text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-white/15"
+                >
+                  {kind === 'spk' ? 'SPK / Kontrak' : 'PK'}
+                  {project?.documents?.[kind] ? ' (ada)' : ''}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*,.pdf,.tif,.tiff"
+                    disabled={docBusy === kind}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file || !project?.id) return;
+                      setDocBusy(kind);
+                      try {
+                        await uploadInvoiceDocument(project.id, kind, file, 'projects');
+                        alert('Berkas terunggah ke arsip proyek.');
+                      } catch (err) {
+                        alert('Gagal mengunggah berkas.');
+                      } finally {
+                        setDocBusy(null);
+                      }
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+            {project?.documents && (project.documents.spk || project.documents.pk) && (
+              <p className="mt-1 text-[11px] text-slate-400">
+                Terunggah:{' '}
+                {[project.documents.spk && 'SPK', project.documents.pk && 'PK'].filter(Boolean).join(' · ')}
+                {' '}— ganti lewat tombol di atas.
+              </p>
+            )}
           </Field>
 
           <Field label="Status" required>
