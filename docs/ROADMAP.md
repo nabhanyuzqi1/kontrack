@@ -229,3 +229,22 @@ Agen tidak boleh mengerjakan ini. Lihat AGENTS.md §8.
 | Long-polling Firestore dipaksa | Safari menolak transport streaming |
 | Kuota AI ditegakkan di server | Penegakan di klien bisa dilewati dengan memanggil callable langsung |
 | Hanya `kontrack.web.app` yang dipakai | Domain lain akan dibuang pemilik |
+## Batch 32ccfec (2026-11-15) — UX ERP batch besar
+
+Selesai:
+- Drawer detail invoice 2 tab (Detail | Arsip Berkas): urutan judul → nomor referensi full (grid 3 kolom, termasuk No. SPK) → rincian pekerjaan full → pembayaran & dokumen pajak 2 kolom. Grand total hanya sekali di kepala.
+- Panel pejal: kelas `panel-solid` untuk modal/drawer, popover tidak transparan; header navbar pejal saat scroll, tinggi 52px, underline aktif dirapikan, search bar h-8.
+- Menu "Faktur Pajak" → "Pajak" (nav + judul halaman).
+- FIX export CoreTax: `coretaxXml.js` kini membaca `invoiceItems` + `subtotal`/`grandTotal` (bukan `items`/`totals`); validasi jadi peringatan tidak memblokir unduh. Diverifikasi di preview: XML terunduh, DPP=11/12×subtotal & PPN=12%×DPP cocok.
+- Form proyek: No. SPK/Kontrak dan No. PK terpisah + upload masing-masing; form invoice otomatis terisi dari proyek (`spkNumber`/`pkNumber`).
+- Detail proyek: rekap transaksi per kategori (pemasukan/pengeluaran), cari + urut (tanggal/nominal/kategori), kartu info/nilai/progress didesain ulang, arsip berkas proyek+invoice, reminder retensi 3 bulan sejak BA terakhir.
+- Daftar invoice: sortir nominal/nomor/proyek/status.
+- TaxDocsModal: tombol Scan faktur pajak (AI isi nomor+tanggal, berkas ke arsip).
+- Dashboard: grafik arus kas garis (toggle garis/batang), analisis AI berdampingan grafik + riwayat analisis tersimpan (localStorage `kontrack-ai-insight-history`).
+- Login: daftar akun baru email/password (`signUpUser`, role staff) + link ke landing page `/welcome`.
+
+Belum terverifikasi (butuh owner):
+- Google Sign-In masih `auth/operation-not-allowed` — aktifkan provider Google di Firebase Console.
+- Email penagihan nyata menunggu secret SMTP asli.
+- Scan faktur/WPHO end-to-end dengan Gemini sungguhan; data Firestore asli.
+
