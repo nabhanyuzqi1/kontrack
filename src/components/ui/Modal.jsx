@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 const sizes = {
@@ -29,9 +30,15 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, 
 
   if (!isOpen) return null;
 
-  return (
+  // Dirender lewat portal ke <body>, bukan di tempat pemanggilnya.
+  // Sebab: <main> memakai .page-enter (animasi dengan `transform`), dan elemen
+  // ber-transform membentuk stacking context baru — `position: fixed` di
+  // dalamnya ikut terkurung, sehingga modal tampil DI BAWAH header sticky
+  // (z-40). Menaikkan z-index tidak menyelesaikan ini; portal memindahkan
+  // modal ke akar dokumen sehingga lapisannya benar-benar global.
+  const content = (
     <div
-      className={`fixed inset-0 z-50 bg-scrim/45 backdrop-blur-sm animate-fade-in ${
+      className={`fixed inset-0 z-[100] bg-scrim/45 backdrop-blur-sm animate-fade-in ${
         drawer ? 'flex justify-end' : 'flex items-center justify-center p-4'
       }`}
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
@@ -69,6 +76,8 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, 
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 };
 
 export default Modal;

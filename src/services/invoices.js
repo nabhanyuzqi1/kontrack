@@ -235,6 +235,21 @@ export const updateTaxDocs = async (invoiceId, fields, historyNote) => {
   invalidate(CACHE_KEYS.INVOICES);
 };
 
+// ---------- Ekspor XML CoreTax ----------
+// Catat waktu ekspor XML per invoice. Tidak lewat updateInvoice karena
+// invoice terbayar (terkunci) tetap boleh ditandai sudah diekspor —
+// dokumen pajak boleh berubah setelah lunas.
+export const markCoretaxExported = async (invoiceIds) => {
+  if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) return;
+  const now = new Date().toISOString();
+  await Promise.all(
+    invoiceIds.map((id) =>
+      updateDoc(doc(db, COLLECTION, id), { coretaxExportedAt: now, updatedAt: now })
+    )
+  );
+  invalidate(CACHE_KEYS.INVOICES);
+};
+
 // ---------- Auto-transaksi saat terbayar (Fase D) ----------
 // Membuat transaksi income "Pembayaran INV" (netProceeds) + expense
 // "PPN Otomatis" (pajak11), menyimpan id-nya ke invoice (seperti live).

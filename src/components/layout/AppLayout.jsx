@@ -41,6 +41,8 @@ import { getCompanySettings } from '../../services/settings';
 import { getAllProjects } from '../../services/projects';
 import { getAllInvoices, INVOICE_STATUS } from '../../services/invoices';
 import { PROJECT_STATUS } from '../../utils/constants';
+import NotificationCenter from './NotificationCenter';
+import { monthlyTaxReport, taxDueDate, taxDueStatus } from '../../utils/reportCalc';
 
 const navItems = (isAdmin) => [
   ...(isAdmin ? [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true }] : []),
@@ -136,12 +138,13 @@ const PopoverItem = ({ icon: Icon, title, desc, tone = 'brand', onClick }) => (
   </button>
 );
 
-// Baris navigasi modul: satu rail horizontal, bisa digeser di layar sempit.
-// Penanda pudar di tepi kanan menunjukkan masih ada menu lanjutan — tanpa itu,
-// "Pengaturan" tampak hilang di lebar tablet.
+// Baris navigasi modul. Dulu memakai overflow-x-auto sehingga rail ini bisa
+// digeser sendiri dan ikut bergeser saat roda mouse dipakai di atas header.
+// Kini: tanpa scroll (menu diringkas agar muat), dan klik pada rail yang
+// meluap dialihkan ke drawer ponsel lewat tombol menu.
 const ModuleStrip = ({ isAdmin, onNavigate }) => (
   <div className="relative">
-    <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-2 pb-1">
+    <nav className="flex items-center gap-1 overflow-hidden px-2 pb-1">
       {navItems(isAdmin).map(({ to, label, icon: Icon, end }) => (
         <NavLink
           key={`${to}-${label}`}
@@ -297,6 +300,8 @@ const AppLayout = ({ currentUser, children }) => {
           if (days < 0) {
             items.push({
               id: `late-${p.id}`,
+              kind: 'project',
+              priority: 1,
               icon: AlertTriangle,
               tone: 'red',
               title: p.name,
@@ -306,6 +311,8 @@ const AppLayout = ({ currentUser, children }) => {
           } else if (days <= 14) {
             items.push({
               id: `soon-${p.id}`,
+              kind: 'project',
+              priority: 3,
               icon: CalendarClock,
               tone: 'amber',
               title: p.name,
@@ -319,12 +326,24 @@ const AppLayout = ({ currentUser, children }) => {
         invoices
           .filter((inv) => inv.status === INVOICE_STATUS.SENT)
           .forEach((inv) => {
+            // Umur tagihan menentukan prioritas: makin lama menunggu, makin naik.
+            const issued = inv.issueDate ? new Date(inv.issueDate) : null;
+            const ageDays =
+              issued && !Number.isNaN(issued.getTime())
+                ? Math.round((today - new Date(issued.getFullYear(), issued.getMonth(), issued.getDate())) / 86400000)
+                : 0;
             items.push({
               id: `inv-${inv.id}`,
+              kind: 'invoice',
+              priority: ageDays > 30 ? 1 : 2,
+              invoice: inv,
               icon: ReceiptText,
-              tone: 'brand',
+              tone: ageDays > 30 ? 'amber' : 'brand',
               title: inv.clientName || inv.recipient || 'Invoice',
-              desc: `Invoice ${inv.invoiceNumber || inv.number || ''} menunggu pembayaran`,
+              desc:
+                ageDays > 30
+                  ? `${inv.invoiceNumber || inv.number || 'Invoice'} menunggu ${ageDays} hari. Kirim pengingat.`
+                  : `Invoice ${inv.invoiceNumber || inv.number || ''} menunggu pembayaran`,
               to: '/app/invoices'
             });
           });
@@ -338,6 +357,8 @@ const AppLayout = ({ currentUser, children }) => {
           .forEach((inv) => {
             items.push({
               id: `tax-${inv.id}`,
+              kind: 'tax',
+              priority: 1,
               icon: Landmark,
               tone: 'emerald',
               title: 'PPN belum disetor',
@@ -345,6 +366,35 @@ const AppLayout = ({ currentUser, children }) => {
               to: '/app/tax-invoices'
             });
           });
+
+        // Tenggat lapor/setor PPN bulan berjalan: satu pengingat per periode,
+        // dihitung dari rumus pajak yang sama dengan halaman Laporan.
+        try {
+          const year = new Date().getFullYear();
+          const rows = monthlyTaxReport(invoices, year);
+          const thisMonth = new Date().getMonth();
+          const active = rows
+            .filter((r) => r.invoiceCount > 0 && r.month - 1 <= thisMonth)
+            .pop();
+          if (active) {
+            const selisih = (active.ppnTerhutang || 0) - (active.ppnDisetor || 0);
+            const status = taxDueStatus(active.year || year, active.month - 1, selisih);
+            if (selisih > 0) {
+              items.push({
+                id: `ppn-due-${year}-${active.month}`,
+                kind: 'tax',
+                priority: status.state === 'telat' ? 1 : 2,
+                icon: Landmark,
+                tone: status.state === 'telat' ? 'red' : 'amber',
+                title: `PPN ${active.label} ${year} belum disetor`,
+                desc: `Kurang setor Rp${Math.round(selisih).toLocaleString('id-ID')}. ${status.label}.`,
+                to: '/app/reports'
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Reminder PPN dilewati:', err);
+        }
       }
 
       setNotifications(items);
@@ -505,35 +555,16 @@ const AppLayout = ({ currentUser, children }) => {
                 <Bell className="h-4 w-4" />
               </IconButton>
               <Popover open={openMenu === 'notif'} onClose={() => setOpenMenu(null)}>
-                  <div className="border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-700">Notifikasi</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Tenggat proyek, tagihan, dan pajak
-                    </p>
-                  </div>
-                  <div className="max-h-[420px] overflow-y-auto p-1.5">
-                    {notifications === null && (
-                      <p className="px-3 py-6 text-center text-sm text-slate-400">Memuat…</p>
-                    )}
-                    {notifications !== null && notifications.length === 0 && (
-                      <p className="px-3 py-6 text-center text-sm text-slate-400">
-                        Tidak ada yang perlu ditindak. Nyaman.
-                      </p>
-                    )}
-                    {notifications?.map((n) => (
-                      <PopoverItem
-                        key={n.id}
-                        icon={n.icon}
-                        title={n.title}
-                        desc={n.desc}
-                        tone={n.tone}
-                        onClick={() => {
-                          setOpenMenu(null);
-                          navigate(n.to);
-                        }}
-                      />
-                    ))}
-                  </div>
+                  <NotificationCenter
+                    items={notifications || []}
+                    loading={notifications === null}
+                    isAdmin={isAdmin}
+                    company={company}
+                    onNavigate={(to) => {
+                      setOpenMenu(null);
+                      navigate(to);
+                    }}
+                  />
                 </Popover>
               </div>
 

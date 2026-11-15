@@ -5,6 +5,14 @@ agen/sesi berikutnya tidak mengulang yang sudah selesai.
 
 Diperbarui: 2026-11-15
 
+### Batch audit keamanan (2026-11-15, unit 5)
+Temuan & perbaikan lengkap: `docs/SECURITY-AUDIT.md`. Singkat: catch-all
+firestore.rules dibuang (menutup tulis `users`/`ai_usage`/`audit_logs` dari
+klien), header keamanan + CSP di `firebase.json`, validasi ukuran/tipe di
+semua callable, SSRF di lampiran email ditutup, kuota harian baru
+(email/asset/whatsapp). Semua BELUM di-deploy. Gagal build saat audit berasal
+dari `AppLayout.jsx` (unit lain), bukan dari berkas unit keamanan.
+
 Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.md`
 (dua berkas itu sudah dihapus karena isinya mulai saling bertentangan).
 
@@ -266,3 +274,55 @@ Belum terverifikasi (butuh owner):
 - Impor XML CoreTax ke portal DJP (kode satuan jasa `UM.0030` belum diuji di sistem DJP).
 - Tampilan data asli di balik login: preview memakai mock.
 - 5 proyek tanpa `pkNumber` dan 2 proyek tanpa nomor kontrak — sengaja tidak diisi otomatis karena butuh data pemilik.
+
+## Unit 4 batch (2026-11-15) — klien & grafik
+
+Selesai:
+- `ClientsPage`: daftar jadi tabel ERP (Klien + jumlah proyek/invoice, NPWP salin, kota, nilai kontrak, sisa tagihan) dan klik baris membuka drawer `Modal drawer` berisi ringkasan keuangan (kontrak, invoice, terbayar, sisa), identitas + NPWP, kontak/narahubung, daftar proyek bertaut ke `/app/projects/:id`, daftar invoice, catatan. Join proyek lewat id atau nama `partner` (data lama), invoice lewat `clientId` atau nama — dua bentuk data tetap terhubung tanpa migrasi.
+- Tabel `min-w-[560px]` dalam wrapper `overflow-x-auto`; kolom NPWP/kota disembunyikan di layar sempit. Drawer 390px: ringkasan 1 kolom, nama proyek membungkus (tidak `truncate`), tanpa overflow horizontal.
+- `CashflowChart` + `ReportCharts`: sumbu Y ringkas `Rp… rb/jt/M`, grid halus (`drawTicks:false`), tooltip rupiah penuh, legenda `usePointStyle` berwarna mode, warna solid dari token CSS (`--emerald-500`, `--red-500`, `--brand-500`), `fill:false` (gradasi dihapus), label mengikuti `data-theme` lewat MutationObserver (gelap memakai slate-600 agar 11px tetap terbaca), donut border = warna permukaan kartu, sumbu X bar dipotong pada 14 karakter.
+
+Belum terverifikasi:
+- Data Firestore asli: harness `.preview` memakai mock; relasi `project.partner`/`invoice.clientId` di produksi belum dihitung terhadap dokumen nyata.
+- Tooltip diverifikasi lewat callback (format dicetak), bukan hover mouse langsung (daemon CDP tidak stabil saat dispatch mouse).
+
+## Batch besar UI/UX & ERP (2026-11-15, lanjutan `d2bf146`)
+
+Selesai dan sudah di-deploy (`index-BTtq8u2M.js`, functions 10 buah):
+
+- **Modal tertutup header (akar, bukan tambalan)**: `<main className="page-enter">` memakai `transform`, sehingga membentuk stacking context dan mengurung `position: fixed` di bawah header `z-40`. `src/components/ui/Modal.jsx` sekarang merender lewat `createPortal(content, document.body)` dengan `z-[100]`. Terukur di harness: modal proyek, pratinjau PDF, dan detail klien semuanya `elementFromPoint` mengembalikan elemen dialog (`z:100`, `parent: DIV`).
+- **Transisi halaman benar-benar jalan**: keyframes `page-in` dideklarasikan di `globals.css`, bukan hanya di `tailwind.config.js`. Tailwind hanya memancarkan keyframes sebuah animasi bila kelas utilitasnya (`animate-page-in`) dipakai; karena `.page-enter` CSS biasa, animasi dulu mati total. Dibuktikan: `animationName: page-in`, `0.34s`, keyframes ada di `document.styleSheets`.
+- **Navbar tidak bisa di-scroll**: rail modul memakai `overflow-hidden` (bukan `overflow-x-auto`). Terukur di 1280px: `scrollWidth 1231 === clientWidth 1231`.
+- **Pengaturan dipecah 6 tab**: Perusahaan, Dokumen & Data (penomoran, retensi arsip, kesehatan data baca-saja), Pajak (TrxCode/Opt/satuan/objek pajak + simulasi DPP 11/12 & PPN), Tema, Notifikasi, Pengguna.
+- **Notifikasi jadi alat kerja**: `layout/NotificationCenter.jsx` berisi ringkasan belum dibaca, prioritas per urgensi (tagihan lama menunggu, PPN belum disetor, tenggat SPT Masa), filter belum-dibaca persisten, aksi cepat "Email pengingat"/"WhatsApp"/"Buka" per tagihan, dan "Ingatkan semua". Hasil kirim dilaporkan apa adanya (bukan diklaim terkirim).
+- **Akun ganda undangan pengguna (akar)**: `addUserToCompany` lama hanya menulis dokumen `users` tanpa akun Auth, sehingga orang yang diundang mendaftar sendiri dan mendapat dokumen kedua. Sekarang function membuat akun Auth (tanpa password), **memakai ulang** dokumen beremail sama, idempoten, dan mengembalikan `{reused, accountCreated, emailSent, emailError}`. Sisi klien (`services/auth.js`) menambahkan `claimInvitedUserDoc` untuk pendaftaran email/Google agar dokumen undangan diklaim, bukan diduplikasi. `UsersTab` menandai "Belum masuk" dan memperingatkan email yang punya lebih dari satu dokumen.
+- **WhatsApp server-side**: `sendWhatsApp` mendukung gateway tidak resmi (`WA_GATEWAY_URL`, mis. whatsapp-web.js/Baileys di VPS milik pemilik) atau Cloud API resmi (`WA_TOKEN` + `WA_PHONE_ID`), dibatasi kuota harian, nomor normalisasi `62…`, wajib https. Nomor pengirim adalah nomor resmi Kontrack, bukan nomor pribadi pengguna.
+- **Email templat**: undangan & pemberitahuan memakai `emailLayout` (tabel + gaya inline, tanpa emoji/gradasi) menggantikan teks polos `white-space: pre-wrap`. Function baru `notifyUsers` (maks 25 penerima, validasi email, isi pesan disusun server) dan `notifyChannels` (melaporkan kanal siap tanpa membocorkan secret).
+- **PDF invoice**: elemen yang tidak relevan untuk penagihan (kode billing, NTPN, status CoreTax, nomor faktur pajak) dihapus; `generateInvoicePDF({download:false})` mengembalikan blob, dan `ui/PdfPreview.jsx` menampilkan pratinjau lewat `URL.createObjectURL` dengan tombol Unduh terpisah serta `revokeObjectURL` saat ditutup.
+
+Verifikasi nyata: `npm run check` bersih, `npm run build` hijau (2015 modul), harness 390px `scrollWidth === innerWidth` (overflow 0), dan live `kontrack.web.app` menyajikan `/`, `/login`, `/terms`, `/privacy`, `/support` HTTP 200.
+
+Temuan keamanan dari audit (detail: `docs/SECURITY-AUDIT.md`), **belum diterapkan**:
+- Catch-all `match /{document=**} { allow read, write: if signedIn() }` membuat blok `allow write: if false` untuk `users`/`ai_usage` tidak berarti, karena rules dievaluasi OR. Deploy `firestore.rules`/`storage.rules` hasil audit **belum** dilakukan pada batch ini; menunggu keputusan pemilik karena berisiko mematikan fitur jika aturan belum lengkap.
+- `projects` masih publik penuh; peran pengguna belum memakai custom claims; belum ada App Check dan WAF/Cloud Armor.
+
+Belum terverifikasi (butuh pemilik):
+- Email undangan/pengingat nyata: `SMTP_USER`/`SMTP_PASS` masih placeholder `BELUM-DISET`.
+- WhatsApp nyata: secret `WA_GATEWAY_URL`/`WA_TOKEN`/`WA_PHONE_ID` dibuat dengan placeholder `BELUM-DISET`; status di Pengaturan akan menunjukkan "Belum disetel" sampai diisi.
+- Pratinjau PDF diuji dengan blob mock di harness; PDF asli (jsPDF + kop surat) belum dibuka di perangkat pemilik.
+- Tampilan halaman di balik login dengan data Firestore asli.
+
+## Saran fitur kontraktor berikutnya (belum dikerjakan)
+
+Diurutkan menurut dampak pada masalah utama kontraktor (jeda arus kas):
+
+1. **Rencana vs realisasi biaya per proyek (RAB)**: anggaran per kategori pekerjaan, persen serap, dan peringatan ketika realisasi melampaui RAB. Saat ini "efisiensi" dihitung dari rasio beban terhadap pendapatan, bukan terhadap anggaran.
+2. **Termin & kurva-S terjadwal**: rencana termin per tanggal, proyeksi kas masuk (bukan hanya kas tercatat), dan selisih terhadap realisasi pencairan.
+3. **Retensi otomatis**: pengingat penagihan retensi berbasis tanggal BA terakhir + masa retensi, dengan daftar retensi jatuh tempo lintas proyek.
+4. **Bukti potong PPh mitra**: unggah bukti potong, rekonsiliasi terhadap invoice, dan rekap PPh dipotong per lawan transaksi (melengkapi keputusan "PPN yang utama, PPh hanya info").
+5. **Subkontraktor & mandor**: pembayaran ke pihak ketiga per proyek, utang berjalan, dan serapan biaya lapangan.
+6. **Perencanaan material & stok proyek**: permintaan, penerimaan, sisa material per lokasi.
+7. **Laporan progres harian/mingguan dengan foto bergeotag** dan rekap otomatis ke laporan progres proyek.
+8. **Jadwal penagihan otomatis** (reminder H-7/H-1/H+3) yang terhubung ke kanal email/WhatsApp yang sudah ada.
+9. **Rekonsiliasi bank**: impor mutasi rekening dan pencocokan otomatis ke invoice/transaksi.
+10. **Dasbor pemilik**: kas masuk 30/60/90 hari ke depan, proyek dengan margin terancam, dan umur piutang.

@@ -5,7 +5,7 @@
 // supaya tab pertama tetap muat satu viewport.
 import React, { useMemo, useState } from 'react';
 import {
-  FileDown,
+  FileText,
   FileCode2,
   Landmark,
   PenLine,
@@ -14,7 +14,6 @@ import {
   CalendarDays,
   Building2,
   Briefcase,
-  FileText,
   Upload,
   Mail,
   Package,
@@ -26,6 +25,7 @@ import { Badge } from '../ui/Badge';
 import { Field, Input, Textarea } from '../ui/Field';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { generateInvoicePDF } from '../../utils/invoiceGenerator';
+import PdfPreview from '../ui/PdfPreview';
 import { generateShippingLabel } from '../../utils/shippingLabel';
 import {
   INVOICE_STATUS,
@@ -69,6 +69,8 @@ const InvoiceDetailModal = ({
 }) => {
   const [tab, setTab] = useState('detail');
   const [downloading, setDownloading] = useState(false);
+  // Pratinjau PDF: blob disimpan di state, PdfPreview yang membuat/mencabut object URL.
+  const [pdfPreview, setPdfPreview] = useState(null);
   const [coretaxOpen, setCoretaxOpen] = useState(false);
   const [companyForCoretax, setCompanyForCoretax] = useState(null);
   const [uploading, setUploading] = useState(null);
@@ -101,13 +103,14 @@ const InvoiceDetailModal = ({
     [inv.id]
   );
 
-  const handleDownload = async () => {
+  const handlePreviewPdf = async () => {
     setDownloading(true);
     try {
       const settings = await getCompanySettings();
-      await generateInvoicePDF(inv, mergeCompanyInfo(settings));
+      const { blob, fileName } = await generateInvoicePDF(inv, mergeCompanyInfo(settings), { download: false });
+      setPdfPreview({ blob, fileName });
     } catch (err) {
-      console.error('Gagal unduh PDF:', err);
+      console.error('Gagal membuat pratinjau PDF:', err);
       alert('Gagal membuat PDF. Coba lagi.');
     } finally {
       setDownloading(false);
@@ -240,9 +243,9 @@ const InvoiceDetailModal = ({
               <FileCode2 className="h-4 w-4" />
               Export CoreTax
             </Button>
-            <Button size="sm" onClick={handleDownload} loading={downloading}>
-              <FileDown className="h-4 w-4" />
-              Unduh PDF
+            <Button size="sm" onClick={handlePreviewPdf} loading={downloading}>
+              <FileText className="h-4 w-4" />
+              Lihat PDF
             </Button>
           </div>
         </>
@@ -468,6 +471,16 @@ const InvoiceDetailModal = ({
       </div>
       )}
     </Modal>
+
+    {pdfPreview && (
+      <PdfPreview
+        isOpen
+        onClose={() => setPdfPreview(null)}
+        blob={pdfPreview.blob}
+        fileName={pdfPreview.fileName}
+        title="Pratinjau Invoice"
+      />
+    )}
 
     {coretaxOpen && (
       <CoretaxExportModal

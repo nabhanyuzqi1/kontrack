@@ -96,26 +96,26 @@ export const transactions = [
 
 export const invoices = [
   {
-    id: 'i1', status: 'paid', number: '001/INV/PEB/III/2026',
+    id: 'i1', status: 'paid', number: '001/INV/PEB/III/2026', invoiceNumber: '001/INV/PEB/III/2026',
     issueDate: '2026-03-15', dppNilaiLain: 1310810810, pajak11: 157297297,
     taxPaidAt: '2026-04-22', taxPaymentAmount: 157297297,
-    grandTotal: 1468108107, projectId: 'p1'
+    grandTotal: 1468108107, projectId: 'p1', clientId: 'c1'
   },
   {
-    id: 'i2', status: 'paid', number: '002/INV/PEB/VI/2026',
+    id: 'i2', status: 'paid', number: '002/INV/PEB/VI/2026', invoiceNumber: '002/INV/PEB/VI/2026',
     issueDate: '2026-06-10', dppNilaiLain: 655405405, pajak11: 78648648,
     taxPaidAt: '2026-07-18', taxPaymentAmount: 78648648,
-    grandTotal: 734054053, projectId: 'p1'
+    grandTotal: 734054053, projectId: 'p1', clientId: 'c1'
   },
   {
-    id: 'i3', status: 'paid', number: '003/INV/PEB/X/2026',
+    id: 'i3', status: 'paid', number: '003/INV/PEB/X/2026', invoiceNumber: '003/INV/PEB/X/2026',
     issueDate: '2026-10-12', dppNilaiLain: 522522522, pajak11: 62702702,
-    grandTotal: 585225224, projectId: 'p2'
+    grandTotal: 585225224, projectId: 'p2', clientId: 'c2'
   },
   {
-    id: 'i4', status: 'sent', number: '004/INV/PEB/XI/2026',
+    id: 'i4', status: 'sent', number: '004/INV/PEB/XI/2026', invoiceNumber: '004/INV/PEB/XI/2026',
     issueDate: { seconds: Math.floor(new Date('2026-11-06T09:00:00+07:00').getTime() / 1000) },
     dppNilaiLain: 261261261, pajak11: 31351351,
-    grandTotal: 292612612, projectId: 'p1'
+    grandTotal: 292612612, projectId: 'p1', clientId: 'c1'
   }
 ];

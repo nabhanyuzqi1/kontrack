@@ -10,9 +10,14 @@ import {
   Loader2,
   Image as ImageIcon,
   PenTool,
-  Trash2
+  Trash2,
+  FileText,
+  Landmark
 } from 'lucide-react';
 import UsersTab from './UsersTab';
+import TaxSettings from './TaxSettings';
+import NotifySettings from './NotifySettings';
+import DataSettings from './DataSettings';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -28,7 +33,7 @@ import {
 } from '../../services/settings';
 import { THEME_PRESETS, applyTheme } from '../../utils/themes';
 
-/** Saklar kecil untuk menyalakan/mematikan aset dokumen. */
+/** Tab bar ditulis sebagai daftar tetap supaya label & ikon tidak menyimpang. */
 const Switch = ({ checked, onChange, label }) => (
   <button
     type="button"
@@ -130,6 +135,8 @@ const AssetCard = ({
 
 const TABS = [
   { key: 'company', label: 'Perusahaan', icon: Building2 },
+  { key: 'documents', label: 'Dokumen & Data', icon: FileText },
+  { key: 'tax', label: 'Pajak', icon: Landmark },
   { key: 'theme', label: 'Tema & Tampilan', icon: Palette },
   { key: 'notifications', label: 'Notifikasi', icon: Bell },
   { key: 'users', label: 'Pengguna', icon: Users }
@@ -495,51 +502,11 @@ const SettingsPage = ({ currentUser }) => {
 
       {tab === 'users' && <UsersTab currentUser={currentUser} />}
 
-      {tab === 'notifications' && (
-        <Card className="p-4 sm:p-5">
-          <h3 className="mb-1 font-display text-sm font-semibold text-slate-800">
-            WhatsApp Webhook
-          </h3>
-          <p className="mb-4 text-xs text-slate-400">
-            Bila diisi, "Bagikan ke WhatsApp" pada proyek akan mengirim pesan + kartu ringkasan
-            otomatis ke webhook ini (mis. n8n, Zapier, atau gateway WhatsApp Anda). Kosongkan untuk
-            memakai share manual (wa.me).
-          </p>
+      {tab === 'notifications' && <NotifySettings form={form} set={set} setNotif={setNotif} />}
 
-          <div className="space-y-4">
-            <Field label="URL Webhook WhatsApp">
-              <Input
-                type="url"
-                value={form.notifications?.whatsappWebhookUrl || ''}
-                onChange={(e) => setNotif('whatsappWebhookUrl', e.target.value)}
-                placeholder="https://…/webhook"
-              />
-            </Field>
+      {tab === 'documents' && <DataSettings form={form} set={set} />}
 
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-              <input
-                type="checkbox"
-                checked={Boolean(form.notifications?.whatsappEnabled)}
-                onChange={(e) => setNotif('whatsappEnabled', e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
-              />
-              <span className="text-sm text-slate-600">
-                <span className="font-medium text-slate-800">Aktifkan pengiriman otomatis</span> —
-                kirim update proyek ke webhook saat tombol WhatsApp ditekan.
-              </span>
-            </label>
-
-            <div className="rounded-lg bg-slate-50 p-3.5 text-xs text-slate-500">
-              <p className="mb-1 font-semibold text-slate-600">Format payload (POST JSON):</p>
-              <pre className="overflow-x-auto text-[11px] leading-relaxed text-slate-500">{`{
-  "text": "pesan update proyek",
-  "image": "data:image/png;base64,…",
-  "project": "Nama Proyek"
-}`}</pre>
-            </div>
-          </div>
-        </Card>
-      )}
+      {tab === 'tax' && <TaxSettings form={form} set={set} />}
     </div>
   );
 };

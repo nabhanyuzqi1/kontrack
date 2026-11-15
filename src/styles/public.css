@@ -71,3 +71,85 @@ html [data-public-mode='dark'] { --slate-400: 160 172 192; }
 [data-public-login] .text-gradient {
   background-image: linear-gradient(135deg, #6fb3ff, #a5b4fc);
 }
+
+/* ===== Glassmorphism landing ===== */
+
+/* Panel kaca. Gradasi radial putih transparan di bawah ini hanyalah
+   sorotan cahaya kaca (blur/bayangan), bukan gradasi warna konten. */
+.pub-glass {
+  position: relative;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background-color: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 12px 40px -18px rgba(15, 23, 42, 0.28),
+              inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+  --mx: -999px;
+  --my: -999px;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+/* Sorotan kursor halus, mengikuti posisi --mx/--my dari React. */
+.pub-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(360px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.5), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.pub-glass:hover::before { opacity: 1; }
+.pub-glass:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 50px -18px rgba(15, 23, 42, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+[data-public-mode='dark'] .pub-glass {
+  border-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(27, 41, 53, 0.55);
+  box-shadow: 0 12px 40px -18px rgba(0, 0, 0, 0.55),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+[data-public-mode='dark'] .pub-glass::before {
+  background-image: radial-gradient(360px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.1), transparent 60%);
+}
+[data-public-mode='dark'] .pub-glass:hover {
+  box-shadow: 0 18px 50px -18px rgba(0, 0, 0, 0.65),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Reveal saat scroll. Default tersembunyi; .is-visible diberikan oleh
+   IntersectionObserver di LandingPage.jsx. */
+.pub-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+  will-change: opacity, transform;
+}
+.pub-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Marquee metrik: bergerak terus, berhenti saat hover untuk keterbacaan. */
+.pub-marquee {
+  animation: pub-marquee-scroll 36s linear infinite;
+}
+.pub-marquee-mask:hover .pub-marquee { animation-play-state: paused; }
+@keyframes pub-marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pub-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .pub-marquee { animation: none; }
+  .pub-glass,
+  .pub-glass:hover { transform: none; transition: none; }
+}

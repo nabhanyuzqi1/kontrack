@@ -163,6 +163,9 @@ const firestore = getFirestore(FIRESTORE_DB);
 const DAILY_LIMITS = {
   image: 50, // analisis gambar transaksi (1 panggilan bisa memuat 8 gambar)
   insight: 20, // analisis keuangan Dashboard/Laporan
+  email: 30, // kirim email penagihan (nodemailer + lampiran = mahal)
+  asset: 500, // getStorageAssetDataUrl (download berkas untuk PDF)
+  whatsapp: 30, // pesan WhatsApp lewat nomor resmi Kontrack
 };
 
 /** Tanggal WIB — pemakaian direset tengah malam waktu pengguna, bukan UTC. */
@@ -201,14 +204,112 @@ const enforceDailyQuota = async (uid, kind, cost = 1) => {
   });
 
   if (used === -1) {
+    const label = {
+      image: "analisis gambar",
+      insight: "analisis keuangan",
+      email: "kirim email",
+      asset: "ambil berkas",
+      whatsapp: "kirim WhatsApp",
+    }[kind] || kind;
     throw new HttpsError(
         "resource-exhausted",
-        `Kuota AI harian Anda habis (${limit} ${kind === "image" ? "analisis gambar" : "analisis keuangan"} per hari). ` +
+        `Kuota harian Anda habis (${limit} ${label} per hari). ` +
       "Kuota disetel ulang pukul 00:00 WIB.",
     );
   }
 
   logger.info(`Kuota AI ${kind} ${uid}: ${used}/${limit}`);
+  // Sisa dikembalikan supaya pemanggil bisa menampilkan jatah tersisa.
+  return {used, limit, remaining: Math.max(0, limit - used)};
+};
+
+// ---------------------------------------------------------------------------
+// Validasi input callable
+//
+// Callable Functions v2 bisa dipanggil langsung dari klien mana pun yang punya
+// ID token — UI bukan pembatas. Batas ukuran di peramban (kompresi WebP, maks 8
+// gambar) karena itu harus diulang di sini: tanpa batas, satu permintaan bisa
+// mengirim base64 raksasa dan membakar memori function sebelum Gemini menolak.
+// ---------------------------------------------------------------------------
+
+/** Batas ukuran payload setelah di-decode dari base64 (byte). */
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // satu gambar: 6 MB (WebP hasil kompresi < 1 MB)
+const MAX_IMAGES_TOTAL_BYTES = 24 * 1024 * 1024; // delapan gambar dalam satu panggilan
+const MAX_SUMMARY_CHARS = 12000; // ringkasan metrik ~300 token; 12 KB sudah sangat longgar
+const MAX_STORAGE_ASSET_BYTES = 15 * 1024 * 1024; // kop surat / tanda tangan / lampiran PDF
+const MIME_IMAGE = /^image\/(png|jpe?g|webp|heic|heif|gif)$/i;
+
+/** Panjang base64 tanpa mengubah string (lebih murah daripada decoding). */
+const base64Bytes = (b64) => {
+  const s = String(b64);
+  const pad = s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0;
+  return Math.floor((s.length * 3) / 4) - pad;
+};
+
+/**
+ * Validasi satu gambar base64 + mimeType.
+ * Mengembalikan jumlah byte supaya pemanggil bisa menjumlahkan total.
+ */
+const assertInlineImage = (img, label = "Gambar") => {
+  if (!img || typeof img !== "object") {
+    throw new HttpsError("invalid-argument", `${label} harus berupa objek {base64String, mimeType}.`);
+  }
+  if (typeof img.base64String !== "string" || img.base64String.length === 0) {
+    throw new HttpsError("invalid-argument", `${label} tidak berisi data (base64String).`);
+  }
+  if (typeof img.mimeType !== "string" || !MIME_IMAGE.test(img.mimeType)) {
+    throw new HttpsError("invalid-argument", `${label}: mimeType hanya boleh gambar (png/jpg/webp).`);
+  }
+  // Data URL lengkap ("data:image/webp;base64,...") bukan bentuk yang dijanjikan
+  // kontrak klien; menolaknya lebih jelas daripada meneruskan string rusak ke Gemini.
+  if (img.base64String.startsWith("data:")) {
+    throw new HttpsError("invalid-argument", `${label}: kirim base64 tanpa prefiks "data:".`);
+  }
+  const bytes = base64Bytes(img.base64String);
+  if (bytes > MAX_IMAGE_BYTES) {
+    throw new HttpsError("invalid-argument", `${label} melebihi batas 6 MB setelah dikompresi.`);
+  }
+  return bytes;
+};
+
+/** Panjang teks setelah dipangkas, tanpa mengubah nilainya. */
+const assertText = (value, field, {max = 500, required = true} = {}) => {
+  if (value === undefined || value === null || value === "") {
+    if (required) throw new HttpsError("invalid-argument", `${field} wajib diisi.`);
+    return "";
+  }
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `${field} harus berupa teks.`);
+  }
+  if (value.length > max) {
+    throw new HttpsError("invalid-argument", `${field} maksimal ${max} karakter.`);
+  }
+  return value;
+};
+
+/** Satu alamat email, bentuk ringan (nodemailer yang memvalidasi sisanya). */
+const EMAIL_RE = /^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/;
+const assertEmail = (value, field, {required = true} = {}) => {
+  if (value === undefined || value === null || value === "") {
+    if (!required) return "";
+    throw new HttpsError("invalid-argument", `${field} wajib diisi.`);
+  }
+  const s = String(value).trim();
+  if (s.length > 254 || !EMAIL_RE.test(s)) {
+    throw new HttpsError("invalid-argument", `${field} bukan alamat email yang valid.`);
+  }
+  return s;
+};
+
+/** Daftar email dipisah koma (cc/replyTo). Maksimal 5 penerima. */
+const assertEmailList = (value, field) => {
+  if (!value) return "";
+  const parts = String(value).split(",").map((s) => s.trim()).filter(Boolean);
+  if (parts.length > 5) {
+    throw new HttpsError("invalid-argument", `${field} maksimal 5 alamat.`);
+  }
+  parts.forEach((p) => assertEmail(p, field));
+  return parts.join(", ");
 };
 
 /**
@@ -294,7 +395,9 @@ Aturan:
 - date: ISO 8601 bila tertera; jika tidak, kosongkan.`;
 
 exports.analyzeTransactionImageWithAI = onCall(
-    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
+    // timeout + memory: 8 gambar hingga ~24 MB harus diurai di memori sebelum
+    // dikirim ke Gemini. Batas lama (default 60 detik) memotong panggilan lambat.
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, memory: "1GiB", timeoutSeconds: 180, secrets: [geminiApiKey]},
     async (request) => {
       // Wajib login — cegah pemakaian kuota Gemini oleh pihak luar.
       if (!request.auth) {
@@ -318,6 +421,16 @@ exports.analyzeTransactionImageWithAI = onCall(
         throw new HttpsError("invalid-argument", "Maksimal 8 gambar per analisis.");
       }
 
+      // Validasi SEMUA gambar (tipe, mime, ukuran) SEBELUM kuota dipotong:
+      // permintaan cacat tidak boleh menghabiskan jatah harian pengguna.
+      let totalBytes = 0;
+      images.forEach((img, i) => {
+        totalBytes += assertInlineImage(img, `Gambar ${i + 1}`);
+      });
+      if (totalBytes > MAX_IMAGES_TOTAL_BYTES) {
+        throw new HttpsError("invalid-argument", "Total ukuran gambar melebihi 24 MB.");
+      }
+
       // Kuota dipotong SEBELUM memanggil Gemini — kalau dipotong sesudah,
       // permintaan yang gagal di tengah tetap membakar biaya tanpa tercatat.
       await enforceDailyQuota(request.auth.uid, "image", images.length);
@@ -325,9 +438,6 @@ exports.analyzeTransactionImageWithAI = onCall(
       // Satu request Gemini berisi prompt + semua gambar → hemat biaya (prompt dipakai bersama).
       const parts = [{text: PROMPT}];
       for (const img of images) {
-        if (!img.base64String || !img.mimeType) {
-          throw new HttpsError("invalid-argument", "Setiap gambar butuh base64String & mimeType.");
-        }
         parts.push({inlineData: {mime_type: img.mimeType, data: img.base64String}});
       }
 
@@ -384,29 +494,57 @@ exports.analyzeTransactionImageWithAI = onCall(
 
 /** Unduh satu URL menjadi Buffer. Mendukung URL Firebase Storage. */
 const fetchAttachment = async (url, name) => {
-  const res = await fetch(url);
+  // Batasi skema & host: hanya URL Firebase Storage yang sah. Tanpa ini, fungsi
+  // bisa dipakai sebagai SSRF untuk memanggil endpoint internal/metadata server
+  // (memakai kredensial service account function) dari lampiran yang dikirim klien.
+  let parsed;
+  try {
+    parsed = new URL(String(url));
+  } catch (e) {
+    throw new HttpsError("invalid-argument", `URL lampiran ${name} tidak valid.`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new HttpsError("invalid-argument", `URL lampiran ${name} harus https.`);
+  }
+  const host = parsed.hostname;
+  const allowedHost =
+    host === "firebasestorage.googleapis.com" ||
+    host === "storage.googleapis.com" ||
+    host.endsWith(".firebasestorage.app");
+  if (!allowedHost) {
+    throw new HttpsError("invalid-argument", `URL lampiran ${name} bukan dari Firebase Storage.`);
+  }
+
+  const res = await fetch(parsed.href);
   if (!res.ok) throw new Error(`Gagal mengunduh lampiran ${name}: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   return {filename: name || "lampiran", content: buf};
 };
 
 exports.sendInvoiceEmail = onCall(
-    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, secrets: [smtpUser, smtpPass]},
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, timeoutSeconds: 120, secrets: [smtpUser, smtpPass]},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "Anda harus login untuk mengirim email.");
       }
 
-      const {to, cc, subject, body, attachments = [], replyTo} = request.data || {};
-      if (!to || !/^[^@ ]+@[^@ ]+\.[^@ ]+$/.test(String(to).trim())) {
-        throw new HttpsError("invalid-argument", "Alamat email tujuan tidak valid.");
-      }
+      const data = request.data || {};
+      const to = assertEmail(data.to, "Alamat email tujuan");
+      const cc = assertEmailList(data.cc, "Alamat cc");
+      const replyTo = assertEmailList(data.replyTo, "Alamat reply-to");
+      const subject = assertText(data.subject === undefined ? "Penagihan" : data.subject, "Subjek", {max: 200});
+      const body = assertText(data.body, "Isi email", {max: 20000, required: false});
+      const attachments = Array.isArray(data.attachments) ? data.attachments : [];
+
       if (!smtpUser.value() || !smtpPass.value()) {
         throw new HttpsError(
             "failed-precondition",
             "SMTP belum dikonfigurasi. Pemilik perlu menyetel secret SMTP_USER dan SMTP_PASS.",
         );
       }
+
+      // Kuota harian: kirim email (SMTP + unduh lampiran) adalah operasi mahal.
+      await enforceDailyQuota(request.auth.uid, "email");
 
       // Batasi jumlah & ukuran lampiran: total maksimal ~20 MB.
       let totalBytes = 0;
@@ -434,7 +572,7 @@ exports.sendInvoiceEmail = onCall(
           to,
           cc: cc || undefined,
           replyTo: replyTo || smtpUser.value(),
-          subject: subject || "Penagihan",
+          subject,
           text: body || "",
           html: body ? `<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">${String(body).replace(/[<>]/g, "")}</div>` : undefined,
           attachments: files,
@@ -442,8 +580,10 @@ exports.sendInvoiceEmail = onCall(
         logger.info(`Email penagihan terkirim: ${info.messageId}`);
         return {messageId: info.messageId, accepted: info.accepted || [], attachmentCount: files.length};
       } catch (error) {
+        // Jangan bocorkan pesan SMTP mentah ke klien (bisa memuat detail server);
+        // detail lengkap tetap masuk Cloud Logging untuk pemilik.
         logger.error("Gagal kirim email:", error);
-        throw new HttpsError("unknown", `Gagal mengirim email: ${error.message}`);
+        throw new HttpsError("internal", "Gagal mengirim email. Periksa konfigurasi SMTP atau coba lagi.");
       }
     },
 );
@@ -493,7 +633,7 @@ Aturan:
 - workName: nama barang/jasa kena pajak dari tabel rincian.
 - date: tanggal faktur, format YYYY-MM-DD.`;
 exports.scanWphoDocument = onCall(
-    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, timeoutSeconds: 120, secrets: [geminiApiKey]},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "Anda harus login untuk memakai fitur AI.");
@@ -501,9 +641,11 @@ exports.scanWphoDocument = onCall(
 
       const apiKey = geminiApiKey.value();
       const {base64String, mimeType, kind = "wpho"} = request.data || {};
-      if (!base64String || !mimeType) {
-        throw new HttpsError("invalid-argument", "Gambar dokumen (base64String & mimeType) wajib ada.");
+      if (kind !== "wpho" && kind !== "faktur") {
+        throw new HttpsError("invalid-argument", "Jenis dokumen (kind) hanya \"wpho\" atau \"faktur\".");
       }
+      // Validasi ukuran & tipe sebelum kuota dipotong.
+      assertInlineImage({base64String, mimeType}, "Dokumen");
       const schema = kind === "faktur" ? FAKTUR_SCHEMA : WPHO_SCHEMA;
       const prompt = kind === "faktur" ? FAKTUR_PROMPT : WPHO_PROMPT;
 
@@ -605,15 +747,21 @@ exports.analyzeFinancialInsights = onCall(
       const apiKey = geminiApiKey.value();
 
       const summary = request.data?.summary;
-      if (!summary || typeof summary !== "object") {
+      if (!summary || typeof summary !== "object" || Array.isArray(summary)) {
         throw new HttpsError("invalid-argument", "Ringkasan metrik tidak ada.");
+      }
+      // Ringkasan dihitung klien: batasi ukurannya supaya satu payload raksasa
+      // tidak membakar token/biaya. Serialisasi sekali, dipakai untuk cek & kirim.
+      const summaryJson = JSON.stringify(summary);
+      if (summaryJson.length > MAX_SUMMARY_CHARS) {
+        throw new HttpsError("invalid-argument", "Ringkasan metrik terlalu besar.");
       }
 
       await enforceDailyQuota(request.auth.uid, "insight");
 
       const body = {
         contents: [{
-          parts: [{text: INSIGHT_PROMPT + JSON.stringify(summary)}],
+          parts: [{text: INSIGHT_PROMPT + summaryJson}],
         }],
         generationConfig: {
           temperature: 0.3,
@@ -743,21 +891,41 @@ exports.getStorageAssetDataUrl = onCall(
       if (!path && !url) {
         throw new HttpsError("invalid-argument", "Parameter \"path\" atau \"url\" wajib diisi.");
       }
+      if (path !== undefined && typeof path !== "string") {
+        throw new HttpsError("invalid-argument", "Parameter \"path\" harus berupa teks.");
+      }
 
       const parsed = url ? parseStorageUrl(url) : {bucket: "", path: ""};
       const objectPath = (path || parsed.path || "").replace(/^gs:\/\//, "").replace(/^\/+/, "");
 
-      // Bucket lama tetap diterima agar dokumen yang belum ditulis ulang
-      // masih bisa dibaca; selain itu selalu jatuh ke bucket Kontrack.
-      const resolvedBucket = bucket || parsed.bucket || STORAGE_BUCKET;
+      // Hanya bucket Kontrack. Sebelumnya `bucket` dari klien diteruskan apa
+      // adanya, sehingga akun login mana pun bisa memakai Admin SDK (yang
+      // melewati storage.rules) untuk membaca objek dari bucket proyek lain
+      // yang masih terjangkau service account ini.
+      if (bucket && bucket !== STORAGE_BUCKET) {
+        throw new HttpsError("permission-denied", "Bucket di luar Kontrack tidak diizinkan.");
+      }
+      const resolvedBucket = STORAGE_BUCKET;
 
       if (!objectPath) {
         throw new HttpsError("invalid-argument", "Path berkas tidak dapat ditentukan.");
       }
+      if (objectPath.length > 512) {
+        throw new HttpsError("invalid-argument", "Path berkas terlalu panjang.");
+      }
+
+      // Kuota harian: setiap panggilan membaca berkas penuh ke memori lalu
+      // mengembalikannya sebagai base64 (≈33% lebih besar) ke klien.
+      await enforceDailyQuota(request.auth.uid, "asset");
 
       try {
         const file = admin.storage().bucket(resolvedBucket).file(objectPath);
-        const [[metadata], [buffer]] = await Promise.all([file.getMetadata(), file.download()]);
+        const [metadata] = await file.getMetadata();
+        const size = Number(metadata?.size) || 0;
+        if (size > MAX_STORAGE_ASSET_BYTES) {
+          throw new HttpsError("invalid-argument", "Berkas terlalu besar untuk diambil lewat fungsi ini.");
+        }
+        const [buffer] = await file.download();
         const contentType = metadata?.contentType || guessContentType(objectPath);
 
         return {
@@ -781,38 +949,457 @@ exports.getStorageAssetDataUrl = onCall(
     },
 );
 
-/** Tambah pengguna baru ke perusahaan (admin/superadmin saja). */
+// ---------------------------------------------------------------------------
+// Email templat (undangan & pemberitahuan)
+//
+// Dulu email dikirim sebagai teks polos hasil escape, jadi undangan pengguna
+// tampak seperti log server. Template di bawah memakai tabel + gaya inline
+// (satu-satunya yang dihormati Gmail/Outlook) dan pejal tanpa gradasi/emoji.
+// ---------------------------------------------------------------------------
+
+const SITE_URL = "https://kontrack.web.app";
+
+const escapeHtml = (v) =>
+  String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+
+/**
+ * Kerangka email Kontrack. `rows` = pasangan label/nilai yang dirender sebagai
+ * tabel dua kolom agar terbaca di klien mana pun.
+ */
+const emailLayout = ({title, intro, rows = [], action = null, footer = ""}) => {
+  const rowHtml = rows
+      .filter((r) => r && r.value)
+      .map(
+          (r) => `
+        <tr>
+          <td style="padding:8px 0;color:#64748b;font-size:13px;width:150px;vertical-align:top">${escapeHtml(r.label)}</td>
+          <td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:600">${escapeHtml(r.value)}</td>
+        </tr>`,
+      )
+      .join("");
+
+  const actionHtml = action ?
+    `<tr><td style="padding:24px 0 8px">
+       <a href="${escapeHtml(action.url)}" style="background:#1d4ed8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 22px;border-radius:6px;display:inline-block">${escapeHtml(action.label)}</a>
+     </td></tr>` :
+    "";
+
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#eef2f7">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:28px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden">
+        <tr><td style="background:#0b1b33;padding:18px 24px">
+          <span style="color:#ffffff;font-size:16px;font-weight:700;letter-spacing:.02em">Kontrack</span>
+          <span style="color:#93a4bd;font-size:12px;padding-left:8px">Manajemen proyek &amp; keuangan kontraktor</span>
+        </td></tr>
+        <tr><td style="padding:26px 24px 8px">
+          <h1 style="margin:0 0 10px;font-size:18px;color:#0f172a;font-family:Arial,sans-serif">${escapeHtml(title)}</h1>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#334155;font-family:Arial,sans-serif">${escapeHtml(intro)}</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;border-top:1px solid #e6ebf3">${rowHtml}${actionHtml}</table>
+        </td></tr>
+        <tr><td style="padding:18px 24px 24px;border-top:1px solid #e6ebf3">
+          <p style="margin:0;font-size:12px;line-height:1.6;color:#64748b;font-family:Arial,sans-serif">${escapeHtml(footer || "Email ini dikirim otomatis oleh Kontrack. Jangan balas email ini.")}</p>
+        </td></tr>
+      </table>
+      <p style="margin:14px 0 0;font-size:11px;color:#8a97ab;font-family:Arial,sans-serif">Kontrack &middot; ${SITE_URL.replace("https://", "")}</p>
+    </td></tr>
+  </table>
+</body></html>`;
+};
+
+/** Transporter SMTP tunggal (Gmail App Password). */
+const mailTransporter = () => nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {user: smtpUser.value(), pass: smtpPass.value()},
+});
+
+/** SMTP dianggap siap hanya bila kedua secret berisi nilai nyata. */
+const smtpReady = () => {
+  const user = smtpUser.value() || "";
+  const pass = smtpPass.value() || "";
+  return Boolean(user && pass && !/^BELUM-DISET$/i.test(user) && !/^BELUM-DISET$/i.test(pass));
+};
+
+// ---------------------------------------------------------------------------
+// Undang pengguna
+//
+// Versi lama hanya menulis dokumen `users` tanpa akun Auth. Akibatnya orang
+// yang diundang tidak bisa login, lalu mendaftar sendiri lewat form daftar dan
+// mendapat dokumen KEDUA — akun ganda, dengan peran berbeda di dua dokumen.
+//
+// Versi ini:
+// 1. membuat akun Auth (tanpa password; pengguna memakai "lupa password" atau
+//    Google dengan email yang sama),
+// 2. memakai ULANG dokumen `users` beremail sama bila sudah ada (idempoten),
+// 3. mengirim email undangan berisi tautan masuk,
+// 4. mengembalikan `emailSent` supaya UI tidak mengklaim email terkirim bila
+//    SMTP belum disetel pemilik.
+// ---------------------------------------------------------------------------
+
 exports.addUserToCompany = onCall(
-    {region: REGION, cors: true, maxInstances: 5},
+    {region: REGION, cors: true, maxInstances: 5, secrets: [smtpUser, smtpPass]},
     async (request) => {
       const actor = authorizeRole(["admin", "superadmin"])(await authenticateUser(request));
+      const data = request.data || {};
+      const rawEmail = String(data.email || "").trim().toLowerCase();
+      const {name, role = "staff", companyId, sendEmail = true} = data;
 
-      const {email, name, role = "staff", companyId} = request.data || {};
-      if (!email) throw new HttpsError("invalid-argument", "Email wajib diisi.");
-
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(rawEmail)) {
+        throw new HttpsError("invalid-argument", "Alamat email tidak valid.");
+      }
+      if (!["admin", "staff", "viewer"].includes(role) && role !== "superadmin") {
+        throw new HttpsError("invalid-argument", "Peran tidak dikenal.");
+      }
       if (role === "superadmin" && actor.role !== "superadmin") {
         throw new HttpsError("permission-denied", "Hanya superadmin yang boleh menetapkan peran superadmin.");
       }
 
-      const existing = await firestore.collection("users").where("email", "==", email).limit(1).get();
-      if (!existing.empty) {
-        throw new HttpsError("already-exists", "Pengguna dengan email tersebut sudah ada.");
+      const displayName = String(name || "").trim() || rawEmail.split("@")[0];
+
+      // Pemakaian ulang dokumen yang sudah ada = kunci anti-akun-ganda.
+      const snap = await firestore.collection("users").where("email", "==", rawEmail).limit(1).get();
+      const existing = snap.empty ? null : snap.docs[0];
+
+      let uid = existing?.get("uid") || null;
+      let accountCreated = false;
+
+      try {
+        const account = await admin.auth().getUserByEmail(rawEmail);
+        uid = account.uid;
+      } catch (error) {
+        if (error.code !== "auth/user-not-found") throw error;
+        const created = await admin.auth().createUser({
+          email: rawEmail,
+          displayName,
+          emailVerified: false,
+        });
+        uid = created.uid;
+        accountCreated = true;
       }
 
-      const ref = firestore.collection("users").doc();
-      await ref.set({
-        email,
-        name: name || email,
+      const payload = {
+        uid,
+        email: rawEmail,
+        name: existing?.get("name") || displayName,
         role,
         ...(companyId ? {companyId} : {}),
-        createdBy: actor.uid,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: "invited",
+        invitedBy: actor.uid,
+        invitedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
 
-      await logAuditEvent("USER_CREATED", {newUserId: ref.id, email, role, performedBy: actor.uid}, request);
+      let userId;
+      if (existing) {
+        userId = existing.id;
+        if (existing.get("uid") && existing.get("uid") !== uid) {
+          throw new HttpsError(
+              "failed-precondition",
+              "Dokumen pengguna untuk email ini terikat akun lain. Periksa Pengaturan → Pengguna.",
+          );
+        }
+        await existing.ref.set(payload, {merge: true});
+      } else {
+        const ref = firestore.collection("users").doc();
+        userId = ref.id;
+        await ref.set({
+          ...payload,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
 
-      return {userId: ref.id, success: true};
+      await logAuditEvent(
+          existing ? "USER_INVITE_UPDATED" : "USER_CREATED",
+          {userId, email: rawEmail, role, accountCreated, performedBy: actor.uid},
+          request,
+      );
+
+      // Email tidak boleh menggagalkan undangan: dokumen sudah tersimpan.
+      let emailSent = false;
+      let emailError = null;
+      if (sendEmail) {
+        if (!smtpReady()) {
+          emailError = "SMTP belum disetel pemilik (secret SMTP_USER & SMTP_PASS).";
+        } else {
+          try {
+            await mailTransporter().sendMail({
+              from: `"Kontrack" <${smtpUser.value()}>`,
+              to: rawEmail,
+              replyTo: smtpUser.value(),
+              subject: "Undangan bergabung ke Kontrack",
+              text:
+                `Anda diundang bergabung ke Kontrack dengan peran ${role}.\n` +
+                `Masuk di ${SITE_URL}/login menggunakan email ini ` +
+                `(pilih "Lupa password" untuk membuat kata sandi, atau masuk dengan Google).`,
+              html: emailLayout({
+                title: "Undangan bergabung ke Kontrack",
+                intro: `Anda diundang untuk bekerja di Kontrack, aplikasi manajemen proyek dan keuangan kontraktor.`,
+                rows: [
+                  {label: "Nama", value: existing?.get("name") || displayName},
+                  {label: "Email", value: rawEmail},
+                  {label: "Peran", value: role},
+                  {label: "Diundang oleh", value: actor.email || actor.uid},
+                ],
+                action: {label: "Buka Kontrack", url: `${SITE_URL}/login`},
+                footer: accountCreated ?
+                  "Akun Anda sudah dibuat. Gunakan menu \"Lupa password\" di halaman masuk untuk membuat kata sandi, atau masuk memakai Google dengan email yang sama." :
+                  "Akun Anda sudah ada di Kontrack. Silakan masuk seperti biasa.",
+              }),
+            });
+            emailSent = true;
+          } catch (error) {
+            logger.error("Gagal mengirim email undangan:", error);
+            emailError = "Email undangan gagal dikirim.";
+          }
+        }
+      }
+
+      return {userId, uid, reused: Boolean(existing), accountCreated, emailSent, emailError, success: true};
+    },
+);
+
+// ---------------------------------------------------------------------------
+// Pemberitahuan email
+//
+// Notifikasi di dalam aplikasi hanya terlihat kalau orangnya membuka aplikasi.
+// Function ini mengirim ringkasan perubahan (invoice baru, status berubah,
+// proyek, pengguna) ke alamat email yang dipilih administrator. Isi pesan
+// disusun di sini, bukan dipercaya dari klien, agar tidak bisa dipakai
+// mengirim teks bebas ke alamat sembarang.
+// ---------------------------------------------------------------------------
+
+const NOTIFY_KINDS = {
+  invoice: "Invoice penagihan",
+  payment: "Pembayaran diterima",
+  project: "Proyek",
+  user: "Akun pengguna",
+  tax: "Pajak",
+};
+
+exports.notifyUsers = onCall(
+    {region: REGION, cors: true, maxInstances: 5, secrets: [smtpUser, smtpPass]},
+    async (request) => {
+      const actor = authorizeRole(["admin", "superadmin"])(await authenticateUser(request));
+      const data = request.data || {};
+      const kind = String(data.kind || "");
+      if (!NOTIFY_KINDS[kind]) {
+        throw new HttpsError("invalid-argument", "Jenis pemberitahuan tidak dikenal.");
+      }
+      if (!smtpReady()) {
+        return {sent: 0, skipped: 0, reason: "SMTP belum disetel pemilik."};
+      }
+
+      const subject = String(data.subject || NOTIFY_KINDS[kind]).slice(0, 120);
+      const summary = String(data.summary || "").slice(0, 1200);
+      const url = String(data.url || "").slice(0, 300);
+      // Penerima bisa dikirim bebas oleh klien. Dibatasi ke email pengguna
+      // Kontrack yang sudah terdaftar: tanpa itu, akun login mana pun yang
+      // berperan admin bisa memakai identitas domain perusahaan untuk
+      // mengirim pesan ke alamat luar (spam/phishing atas nama Kontrack).
+      const requested = Array.isArray(data.to) ? data.to.slice(0, 25) : [];
+      if (requested.length === 0) {
+        throw new HttpsError("invalid-argument", "Tidak ada penerima.");
+      }
+      const usersSnap = await firestore.collection("users").get();
+      const knownEmails = new Set(
+          usersSnap.docs
+              .map((d) => String(d.get("email") || "").trim().toLowerCase())
+              .filter(Boolean),
+      );
+      const recipients = requested
+          .map((r) => String(r || "").trim().toLowerCase())
+          .filter((r) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r) && knownEmails.has(r));
+      if (recipients.length === 0) {
+        throw new HttpsError("invalid-argument", "Penerima bukan pengguna terdaftar Kontrack.");
+      }
+
+      // Kuota harian: satu panggilan bisa mengirim sampai 25 email.
+      await enforceDailyQuota(actor.uid, "email", recipients.length);
+
+      const transporter = mailTransporter();
+      let sent = 0;
+      let skipped = 0;
+
+      for (const raw of recipients) {
+        const to = String(raw || "").trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+          skipped += 1;
+          continue;
+        }
+        try {
+          await transporter.sendMail({
+            from: `"Kontrack" <${smtpUser.value()}>`,
+            to,
+            replyTo: smtpUser.value(),
+            subject: `[Kontrack] ${subject}`,
+            text: `${summary}\n\n${url ? `Buka: ${SITE_URL}${url}\n` : ""}`,
+            html: emailLayout({
+              title: subject,
+              intro: summary || NOTIFY_KINDS[kind],
+              rows: [
+                {label: "Jenis", value: NOTIFY_KINDS[kind]},
+                {label: "Dari", value: actor.email || "Kontrack"},
+              ],
+              action: url ? {label: "Lihat di Kontrack", url: `${SITE_URL}${url}`} : null,
+            }),
+          });
+          sent += 1;
+        } catch (error) {
+          logger.error(`Gagal notifikasi ke ${to}:`, error);
+          skipped += 1;
+        }
+      }
+
+      await logAuditEvent("NOTIFY_USERS", {kind, sent, skipped, performedBy: actor.uid}, request);
+      return {sent, skipped};
+    },
+);
+
+// ---------------------------------------------------------------------------
+// WhatsApp (gateway server-side)
+//
+// Aplikasi mengirim lewat nomor resmi Kontrack, bukan nomor pribadi pengguna.
+// Dua mode didukung, dipilih otomatis dari secret yang tersedia:
+//   WA_GATEWAY_URL  — gateway tidak resmi (whatsapp-web.js / Baileys) yang
+//                     dijalankan pemilik di VPS. Request: POST JSON
+//                     {to: "62812...", message: "...", token?: "..."}.
+//   WA_TOKEN + WA_PHONE_ID — WhatsApp Cloud API resmi (graph.facebook.com).
+// Bila keduanya kosong, function melaporkan "belum disetel" dan tidak
+// mengarang hasil kirim.
+// ---------------------------------------------------------------------------
+
+const waGatewayUrl = defineSecret("WA_GATEWAY_URL");
+const waGatewayToken = defineSecret("WA_GATEWAY_TOKEN");
+const waToken = defineSecret("WA_TOKEN");
+const waPhoneId = defineSecret("WA_PHONE_ID");
+
+/** Normalisasi nomor Indonesia ke format 62... tanpa spasi/tanda. */
+/**
+ * Baca secret WhatsApp dengan aman.
+ *
+ * `defineSecret().value()` MELEMPAR bila secret belum pernah disetel, sehingga
+ * pemanggilan langsung akan mematikan function pada instalasi baru. Di sini
+ * ketiadaan secret dianggap "belum disetel" (string kosong), bukan kegagalan.
+ */
+const readSecret = (param) => {
+  try {
+    const value = String(param.value() || "").trim();
+    return /^BELUM-DISET$/i.test(value) ? "" : value;
+  } catch (error) {
+    return "";
+  }
+};
+
+const normalizeWaNumber = (raw) => {
+  const digits = String(raw || "").replace(/[^\d]/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("62")) return digits;
+  if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+  if (digits.startsWith("8")) return `62${digits}`;
+  return digits;
+};
+
+exports.sendWhatsApp = onCall(
+    // Secret WA WAJIB terdaftar di sini, kalau tidak nilainya tidak pernah
+    // disuntikkan ke function. Secret dibuat dengan placeholder "BELUM-DISET"
+    // (sama seperti SMTP) supaya deploy tidak gagal sebelum pemilik menyetel
+    // nilai aslinya; readSecret + cek placeholder memperlakukannya sebagai kosong.
+    {region: REGION, cors: true, maxInstances: 5, secrets: [waGatewayUrl, waGatewayToken, waToken, waPhoneId]},
+    async (request) => {
+      const actor = authorizeRole(["admin", "superadmin"])(await authenticateUser(request));
+      const data = request.data || {};
+      const to = normalizeWaNumber(data.to);
+      const message = String(data.message || "").slice(0, 2000);
+
+      if (!to || to.length < 10) {
+        throw new HttpsError("invalid-argument", "Nomor WhatsApp tidak valid.");
+      }
+      if (!message.trim()) {
+        throw new HttpsError("invalid-argument", "Isi pesan kosong.");
+      }
+
+      // Batas harian per pengguna: mencegah nomor resmi dipakai membanjiri kontak.
+      const quota = await enforceDailyQuota(actor.uid, "whatsapp", 1);
+
+      const gateway = readSecret(waGatewayUrl);
+      const officialToken = readSecret(waToken);
+      const officialPhone = readSecret(waPhoneId);
+
+      if (!gateway && !(officialToken && officialPhone)) {
+        return {sent: false, configured: false, reason: "Gateway WhatsApp belum disetel pemilik."};
+      }
+
+      // Gateway adalah URL yang DIKONFIGURASI PEMILIK lewat secret, bukan input
+      // klien — tapi tetap diverifikasi https supaya salah setel tidak
+      // mengirim pesan ke skema tak aman.
+      if (gateway && !/^https:\/\//i.test(gateway)) {
+        logger.error("WA_GATEWAY_URL bukan https — pengiriman dibatalkan.");
+        throw new HttpsError("failed-precondition", "Gateway WhatsApp harus memakai https.");
+      }
+
+      try {
+        if (gateway) {
+          const res = await fetch(gateway, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(waGatewayToken.value() ? {"X-Api-Token": waGatewayToken.value()} : {}),
+            },
+            body: JSON.stringify({to, message, sender: "kontrack"}),
+          });
+          const text = await res.text();
+          if (!res.ok) throw new Error(`gateway ${res.status}: ${text.slice(0, 200)}`);
+          await logAuditEvent("WA_SENT", {to, mode: "gateway", performedBy: actor.uid}, request);
+          return {sent: true, configured: true, mode: "gateway", remaining: quota.remaining};
+        }
+
+        const res = await fetch(`https://graph.facebook.com/v20.0/${officialPhone}/messages`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json", Authorization: `Bearer ${officialToken}`},
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to,
+            type: "text",
+            text: {body: message},
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error?.message || `cloud api ${res.status}`);
+        await logAuditEvent("WA_SENT", {to, mode: "cloud", performedBy: actor.uid}, request);
+        return {sent: true, configured: true, mode: "cloud", remaining: quota.remaining};
+      } catch (error) {
+        // Detail penyedia (token salah, nomor diblokir) hanya ke log; klien
+        // menerima pesan umum supaya tidak ada info internal yang bocor.
+        logger.error("Gagal kirim WhatsApp:", error);
+        throw new HttpsError("internal", "Gagal mengirim WhatsApp. Periksa konfigurasi gateway atau coba lagi.");
+      }
+    },
+);
+
+// ---------------------------------------------------------------------------
+// Keadaan kanal pemberitahuan
+//
+// Halaman Pengaturan perlu tahu kanal mana yang benar-benar siap, tanpa harus
+// mengirim pesan percobaan. Function ini hanya melaporkan ada/tidaknya secret;
+// nilai secret tidak pernah dikembalikan.
+// ---------------------------------------------------------------------------
+
+exports.notifyChannels = onCall(
+    {region: REGION, cors: true, maxInstances: 5, secrets: [smtpUser, smtpPass, waGatewayUrl, waToken, waPhoneId]},
+    async (request) => {
+      authorizeRole(["admin", "superadmin"])(await authenticateUser(request));
+      const gateway = readSecret(waGatewayUrl);
+      const cloud = readSecret(waToken) && readSecret(waPhoneId);
+      return {
+        email: smtpReady(),
+        whatsapp: Boolean(gateway) || Boolean(cloud),
+        whatsappMode: gateway ? "gateway" : cloud ? "cloud" : null,
+      };
     },
 );
 
@@ -824,6 +1411,9 @@ exports.updateUserRole = onCall(
 
       const {userId, role, email} = request.data || {};
       if (!role) throw new HttpsError("invalid-argument", "Peran baru wajib diisi.");
+      if (!["admin", "staff", "viewer"].includes(role) && role !== "superadmin") {
+        throw new HttpsError("invalid-argument", "Peran tidak dikenal.");
+      }
 
       if (role === "superadmin" && actor.role !== "superadmin") {
         throw new HttpsError("permission-denied", "Hanya superadmin yang boleh menetapkan peran superadmin.");

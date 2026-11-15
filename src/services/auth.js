@@ -53,22 +53,74 @@ export const signInUser = async (email, password) => {
   }
 };
 
+/**
+ * Klaim dokumen `users` yang dibuat lebih dulu oleh administrator.
+ *
+ * Akun ganda dulu muncul begini: admin mengundang `budi@pt.co` (dokumen users
+ * tanpa uid), lalu Budi mendaftar sendiri lewat form daftar. Pendaftaran selalu
+ * membuat dokumen BARU, sehingga satu orang punya dua dokumen — dan yang dibaca
+ * saat login hanya dokumen pertama, kadang yang masih 'viewer'.
+ *
+ * Karena itu pendaftaran mencari dokumen beremail sama yang belum punya uid dan
+ * mengisinya, bukan menambah dokumen. Bila dokumen sudah punya uid lain, email
+ * itu memang milik akun lain: hentikan pemakaian dokumen tersebut.
+ */
+const claimInvitedUserDoc = async (user, name) => {
+  const usersRef = collection(db, 'users');
+  const snap = await withTimeout(
+    getDocs(query(usersRef, where('email', '==', user.email))),
+    8000,
+    null
+  );
+
+  const existing = snap?.docs?.[0] || null;
+  if (existing) {
+    const data = existing.data();
+    if (data.uid && data.uid !== user.uid) {
+      console.warn('Dokumen users sudah terikat uid lain, tidak diklaim:', existing.id);
+      return null;
+    }
+    await setDoc(
+      existing.ref,
+      {
+        uid: user.uid,
+        name: data.name || (name || '').trim() || user.email,
+        claimedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+    return { id: existing.id, ...data, uid: user.uid };
+  }
+
+  const ref = doc(collection(db, 'users'));
+  const fresh = {
+    uid: user.uid,
+    email: user.email,
+    name: (name || '').trim() || user.email,
+    role: 'staff',
+    createdAt: new Date().toISOString()
+  };
+  await setDoc(ref, fresh);
+  return { id: ref.id, ...fresh };
+};
+
 // Daftar akun baru (email/password): buat user auth + dokumen `users`
 // berperan 'staff' — administrator menaikkan peran lewat Pengaturan.
 export const signUpUser = async (email, password, name) => {
   const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  let profile = null;
   try {
-    await setDoc(doc(collection(db, 'users')), {
-      email: user.email,
-      name: (name || '').trim() || user.email,
-      role: 'staff',
-      createdAt: new Date().toISOString()
-    });
+    profile = await claimInvitedUserDoc(user, name);
   } catch (err) {
     // Akun auth sudah terbuat; dokumen profil gagal — jangan bikin login macet.
     console.error('Gagal membuat dokumen profil pengguna:', err);
   }
-  return { uid: user.uid, email: user.email, name: (name || '').trim() || user.email, role: 'staff' };
+  return {
+    uid: user.uid,
+    email: user.email,
+    name: profile?.name || (name || '').trim() || user.email,
+    role: profile?.role || 'staff'
+  };
 };
 
 /**
@@ -101,8 +153,27 @@ export const signInWithGoogle = async () => {
     };
   }
 
-  // Pengguna baru → daftarkan dengan peran paling terbatas
+  // Pengguna baru → pakai dokumen undangan bila ada (jangan bikin akun ganda),
+  // kalau tidak ada baru daftarkan dengan peran paling terbatas.
+  const claimed = await claimInvitedUserDoc(user, user.displayName || '');
+  if (claimed) {
+    await setDoc(
+      doc(db, 'users', claimed.id),
+      { photoURL: user.photoURL || '', provider: 'google' },
+      { merge: true }
+    );
+    return {
+      uid: user.uid,
+      email: user.email,
+      name: claimed.name || user.displayName || user.email,
+      role: claimed.role || 'staff',
+      photoURL: user.photoURL || '',
+      docId: claimed.id
+    };
+  }
+
   const newUser = {
+    uid: user.uid,
     email: user.email,
     name: user.displayName || user.email,
     role: 'staff',

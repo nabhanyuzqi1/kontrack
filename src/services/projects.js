@@ -42,6 +42,16 @@ export const addProject = async (projectData, userId = null, userEmail = null) =
       value: Number(projectData.value),
       taxRate: Number(projectData.taxRate) || 11,
       paidAmount: Number(projectData.paidAmount) || 0,
+      // Field baru Unit 1: pastikan bentuk numerik konsisten di Firestore
+      ...(projectData.retentionPct !== undefined && projectData.retentionPct !== null
+        ? { retentionPct: Number(projectData.retentionPct) }
+        : {}),
+      ...(projectData.retentionMonths !== undefined && projectData.retentionMonths !== null
+        ? { retentionMonths: Number(projectData.retentionMonths) }
+        : {}),
+      ...(projectData.terminCount !== undefined && projectData.terminCount !== null
+        ? { terminCount: Number(projectData.terminCount) }
+        : {}),
       status: projectData.status || 'akan-datang',
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
@@ -93,6 +103,12 @@ export const updateProject = async (projectId, updates, userId = null, userEmail
     if (dataToUpdate.paidAmount !== undefined) {
       dataToUpdate.paidAmount = Number(dataToUpdate.paidAmount);
     }
+    // Field baru Unit 1: sama seperti di addProject, hanya bila dikirim
+    ['retentionPct', 'retentionMonths', 'terminCount'].forEach((field) => {
+      if (dataToUpdate[field] !== undefined && dataToUpdate[field] !== null) {
+        dataToUpdate[field] = Number(dataToUpdate[field]);
+      }
+    });
     
     await updateDoc(projectRef, dataToUpdate);
     invalidate(CACHE_KEYS.PROJECTS);

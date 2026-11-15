@@ -102,8 +102,75 @@ export const getNextInvoiceNumber = async () => {
 };
 
 export const updateInvoice = noop;
-export const getAllClients = async () => [];
-export const getClientMap = async () => ({});
+
+// Klien contoh untuk pratinjau: proyek terkait lewat `partner` (bentuk data lama),
+// invoice terkait lewat `clientId` (bentuk data baru) — kedua jalur join ikut teruji.
+const clients = [
+  {
+    id: 'c1',
+    client_name: 'Dinas PUPR Katingan',
+    clientType: 'Instansi',
+    npwp: '01.234.567.8-901.000',
+    address: 'Jl. Pemuda No. 12, Kasongan',
+    city: 'Kasongan',
+    province: 'Kalimantan Tengah',
+    postalCode: '74413',
+    phone: '0536-22145',
+    email: 'pupr@katingankab.go.id',
+    contactPerson: 'Ir. Hadi Susanto',
+    contactPosition: 'PPK Kegiatan Jalan',
+    contactPhone: '0812-5100-7788',
+    notes: 'Pembayaran termin mengikuti SPK: 30/40/25/5.'
+  },
+  {
+    id: 'c2',
+    client_name: 'Pemerintah Desa Baun Bango',
+    clientType: 'Instansi',
+    npwp: '02.345.678.9-902.000',
+    address: 'Jl. Desa Baun Bango RT 2',
+    city: 'Kamipang',
+    province: 'Kalimantan Tengah',
+    postalCode: '74462',
+    phone: '0536-30011',
+    email: 'pemdes@baunbango.desa.id',
+    contactPerson: 'Rahmadi',
+    contactPosition: 'Kepala Desa',
+    contactPhone: '0813-4900-1122'
+  },
+  {
+    id: 'c3',
+    client_name: 'Pemerintah Kabupaten Kotim',
+    clientType: 'Instansi',
+    npwp: '03.456.789.0-903.000',
+    address: 'Jl. Jend. Sudirman Km 3,5',
+    city: 'Sampit',
+    province: 'Kalimantan Tengah',
+    postalCode: '74322',
+    phone: '0531-21100',
+    email: '',
+    contactPerson: 'Drs. Supian',
+    contactPosition: 'Kabid Cipta Karya',
+    contactPhone: '0812-7700-4455'
+  },
+  {
+    id: 'c4',
+    client_name: 'CV Mitra Borneo',
+    clientType: 'CV',
+    npwp: '04.567.890.1-904.000',
+    address: 'Jl. Pelita Raya No. 8',
+    city: 'Sampit',
+    province: 'Kalimantan Tengah',
+    postalCode: '74312',
+    phone: '0531-33890',
+    email: 'admin@mitraborneo.co.id',
+    contactPerson: 'Yanto',
+    contactPosition: 'Direktur',
+    contactPhone: '0811-5500-9900'
+  }
+];
+
+export const getAllClients = async () => clients;
+export const getClientMap = async () => Object.fromEntries(clients.map((c) => [c.id, c]));
 export const clientDisplayName = (c) => c?.client_name || c?.name || 'Tanpa nama';
 export const addClient = noop;
 export const updateClient = noop;
@@ -171,7 +238,12 @@ export const withTimeout = (p) => p;
 // pratinjau gagal dengan "Failed to resolve module specifier".
 export const generateFullReportPDF = noopSync;
 export const generateTransactionReport = noopSync;
-export const generateInvoicePDF = noopSync;
+export const generateInvoicePDF = async () => ({
+  // Blob PDF minimal (header %PDF) supaya PdfPreview bisa dirender di pratinjau
+  // tanpa menjalankan jsPDF sungguhan.
+  blob: new Blob(['%PDF-1.4\n% pratinjau\n'], { type: 'application/pdf' }),
+  fileName: 'Invoice_pratinjau.pdf'
+});
 export const buildInvoiceNumber = () => `PREVIEW-${Date.now()}`;
 export const shareProjectWhatsAppRich = noopSync;
 export const buildFinancialSummary = () => ({});
@@ -194,3 +266,13 @@ export const INVOICE_DOC_LABELS = {
 };
 export const uploadInvoiceDocument = async () => ({ url: 'https://example.invalid/doc.pdf', name: 'doc.pdf' });
 export const reviseInvoice = async () => ({ revision: 1, invoiceNumber: 'INV-001/PEB/11/2026 Rev.1' });
+export const markCoretaxExported = noop;
+
+// services/notify — dipakai NotifySettings (Pengaturan) & NotificationCenter
+export const getNotifyChannels = async () => ({ email: true, whatsapp: false, whatsappMode: null });
+export const notifyByEmail = async () => ({ sent: 1, skipped: 0 });
+export const sendWhatsApp = async () => ({ sent: false, configured: false, reason: 'Gateway WhatsApp belum disetel pemilik.' });
+
+// dipakai invoice (share WhatsApp)
+export const buildInvoiceWhatsApp = () => ({ url: 'https://wa.me/0', text: '' });
+export const sendInvoiceWhatsApp = async () => ({ ok: true });

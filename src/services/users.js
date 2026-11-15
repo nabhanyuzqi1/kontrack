@@ -34,10 +34,11 @@ export const getAllUsers = async () =>
  * Function yang membuat akun Auth + dokumen user, sehingga password tidak
  * pernah melewati aplikasi ini.
  */
-export const inviteUser = async ({ email, name, role }) => {
+export const inviteUser = async ({ email, name, role, sendEmail = true }) => {
   const fn = httpsCallable(legacyFunctions(), 'addUserToCompany');
-  const res = await fn({ email, name, role });
+  const res = await fn({ email, name, role, sendEmail });
   invalidate(CACHE_KEY);
+  // { userId, reused, accountCreated, emailSent, emailError }
   return res?.data;
 };
 

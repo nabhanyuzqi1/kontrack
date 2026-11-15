@@ -90,7 +90,7 @@ const loadImage = async (urlOrDataUrl) => {
 
 /**
  * @param {Object} invoice
- *   number, dueDate, poNumber, pkNumber, wphoNumber, taxInvoiceNumber,
+ *   number, dueDate, poNumber, spkNumber, pkNumber, wphoNumber,
  *   billTo {name, address}, franco, shippedVia, paymentTerm,
  *   items [{description, unit, qty, unitPrice, amount}],
  *   ppnRate, pphRate, paymentNote, cityDate (Date), signatory {name, title}
@@ -118,9 +118,9 @@ const normalizeInvoice = (inv) => {
     dueDate: inv.dueDate,
     cityDate: inv.issueDate,
     poNumber: inv.poNumber,
+    spkNumber: inv.spkNumber,
     pkNumber: inv.pkNumber,
     wphoNumber: inv.wphoNumber,
-    taxInvoiceNumber: inv.taxInvoiceNumber,
     billTo: {
       name: inv.clientName || client.client_name || client.name || '',
       address: clientAddress,
@@ -143,7 +143,11 @@ const normalizeInvoice = (inv) => {
           ],
     ppnRate: 11,
     pphRate: Number(inv.pphRate) || 0,
-    // DPP tidak ditampilkan di PDF (mengikuti template PT PEB) → dpp null
+    // DPP Nilai Lain (11/12 × subtotal) ditampilkan bila tersedia; hitung mundur
+    // dari PPN bila dokumen lama tidak menyimpannya.
+    dppNilaiLain: inv.dppNilaiLain ?? (inv.pajak11 ? Math.round((inv.pajak11 * 12) / 11) : null),
+    netProceeds: inv.netProceeds,
+    bankAccount: inv.bankAccount,
     totals: { subtotal, dpp: null, ppn: inv.pajak11 || 0, pph: inv.taxDeductedAmount || 0, grandTotal: inv.grandTotal || 0 },
     useDppNilaiLain: false,
     paymentNote: inv.paymentNote,
@@ -151,7 +155,7 @@ const normalizeInvoice = (inv) => {
   };
 };
 
-export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => {
+export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO, { download = true } = {}) => {
   const invoice = normalizeInvoice(rawInvoice);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.width; // 210
@@ -237,15 +241,18 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
     ay += 4.5;
   });
 
-  // Meta (label : value)
+  // Meta (label : value) — hanya yang relevan untuk penagihan.
+  // Kode billing, NTPN, status CoreTax, dan nomor faktur pajak sengaja TIDAK
+  // dicetak: itu urusan dokumen pajak, bukan surat tagihan ke klien.
   const metaRows = [
     ['Invoice No', invoice.number],
+    ['Tanggal', formatDateShort(invoice.date || invoice.cityDate)],
     ['Jatuh Tempo', formatDateShort(invoice.dueDate)],
-    ['PO / PK', invoice.poNumber],
+    ['PO', invoice.poNumber],
+    ['SPK / Kontrak', invoice.spkNumber],
     ['PK No.', invoice.pkNumber],
-    ['No. WPHO', invoice.wphoNumber],
-    ['No. Faktur Pajak', invoice.taxInvoiceNumber]
-  ];
+    ['No. WPHO', invoice.wphoNumber]
+  ].filter(([, val]) => val);
   doc.setFontSize(9);
   let my = y;
   const metaLabelW = 34;
@@ -322,13 +329,15 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
   let grandTotal;
   if (invoice.totals) {
     ({ subtotal, ppn, pph, grandTotal } = invoice.totals);
-    dpp = invoice.useDppNilaiLain ? invoice.totals.dpp : null;
+    dpp = invoice.totals.dpp ?? invoice.dppNilaiLain ?? null;
   } else {
     subtotal = items.reduce((s, it) => s + rowAmount(it), 0);
     ppn = (subtotal * ppnRate) / 100;
     pph = (subtotal * pphRate) / 100;
     grandTotal = subtotal + ppn;
+    dpp = invoice.dppNilaiLain ?? null;
   }
+  const netProceeds = invoice.netProceeds ?? (grandTotal - (pph || 0));
 
   // Terbilang kiri
   doc.setFont('helvetica', 'normal');
@@ -341,10 +350,11 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
   const boxX = pageW / 2 + 6;
   const boxW = mR - boxX;
   const totalRows = [['Subtotal', subtotal]];
-  if (dpp != null && ppnRate > 0) totalRows.push(['DPP Nilai Lain', dpp]);
+  if (dpp != null && Number(dpp) > 0) totalRows.push(['DPP Nilai Lain', dpp]);
   if (ppnRate > 0) totalRows.push([`PPN ${ppnRate}%`, ppn]);
-  if (pphRate > 0) totalRows.push([`PPh ${pphRate}%`, -pph]);
+  if (pphRate > 0 && pph > 0) totalRows.push([`PPh ${pphRate}%`, -pph]);
   totalRows.push(['Grand Total', grandTotal]);
+  if (pph > 0) totalRows.push(['Netto Diterima', netProceeds]);
 
   const boxPadY = 4;
   const rowH = 8;
@@ -354,8 +364,9 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
   doc.rect(boxX, y - 2, boxW, boxH);
 
   let ty = y - 2 + boxPadY + 5;
+  const grandIdx = totalRows.findIndex(([label]) => label === 'Grand Total');
   totalRows.forEach(([label, val], idx) => {
-    const isGrand = idx === totalRows.length - 1;
+    const isGrand = idx === grandIdx;
     doc.setFont('helvetica', isGrand ? 'bold' : 'normal');
     doc.setFontSize(isGrand ? 10.5 : 9.5);
     doc.setTextColor(...INK);
@@ -366,12 +377,26 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
 
   y = Math.max(y + terbilangText.length * 4.5, y - 2 + boxH) + 12;
 
-  // ---------- NOTE TRANSFER ----------
+  // ---------- REKENING TUJUAN + CATATAN PEMBAYARAN ----------
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...INK);
+  const bankLines = [];
+  const bank = invoice.bankAccount || company.bankAccount || null;
   const note = invoice.paymentNote || INVOICE_DEFAULTS.paymentNote;
-  doc.text(doc.splitTextToSize(note, pageW / 2 + 10), mL, y);
+  // Catatan bawaan sudah memuat rekening; jangan cetak dua kali bila rekening
+  // eksplisit tidak ada.
+  if (bank) {
+    const bankText = [bank.bankName || bank.bank, bank.accountNumber || bank.number, bank.accountName || bank.holder]
+      .filter(Boolean)
+      .join(' · ');
+    if (bankText) bankLines.push(`Rekening tujuan: ${bankText}`);
+  }
+  if (note) bankLines.push(note);
+  if (bankLines.length) {
+    doc.text(doc.splitTextToSize(bankLines.join('\n'), pageW / 2 + 10), mL, y);
+    y += bankLines.length * 4.5 + 4;
+  }
 
   // ---------- TANDA TANGAN (kanan) ----------
   const sig = invoice.signatory || company.signatory || {};
@@ -403,7 +428,15 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO) => 
   // ---------- SIMPAN ----------
   const safeClient = (invoice.billTo?.name || 'invoice').replace(/[^a-z0-9]/gi, '_');
   const safeNo = (invoice.number || '').replace(/[^a-z0-9]/gi, '_');
-  doc.save(`Invoice_${safeClient}_${safeNo}.pdf`);
+  const fileName = `Invoice_${safeClient}_${safeNo}.pdf`;
+
+  // `download: false` dipakai pratinjau in-app: dokumen dikembalikan sebagai blob
+  // supaya tidak ada unduhan otomatis; tombol Unduh di PdfPreview yang menyimpan.
+  if (download === false) {
+    return { blob: doc.output('blob'), fileName };
+  }
+  doc.save(fileName);
+  return { blob: doc.output('blob'), fileName };
 };
 
 export default generateInvoicePDF;

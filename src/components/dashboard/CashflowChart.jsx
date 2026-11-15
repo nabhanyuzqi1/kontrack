@@ -2,7 +2,7 @@
 // Grafik arus kas 6 bulan terakhir — pemasukan vs pengeluaran.
 // Sengaja ringkas: dashboard menjawab "bagaimana kondisi kas saya?",
 // analisis mendalam ada di halaman Laporan.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,22 +11,60 @@ import {
   LineElement,
   PointElement,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import { Card, CardHeader } from '../ui/Card';
 import { formatCurrency } from '../../utils/formatters';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
-const compact = (v) =>
-  new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+// Token CSS dibaca dari <html> supaya grafik ikut preset brand & mode.
+const cssToken = (name, fallback) => {
+  if (typeof window === 'undefined') return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!raw) return fallback;
+  const parts = raw.split(/\s+/).map(Number);
+  return parts.length === 3 && parts.every((n) => !isNaN(n)) ? `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})` : fallback;
+};
+
+// Sumbu Y ringkas: juta/miliar.
+const axisRupiah = (value) => {
+  const n = Number(value) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `Rp${(n / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 1 })} M`;
+  if (abs >= 1e6) return `Rp${(n / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`;
+  if (abs >= 1e3) return `Rp${Math.round(n / 1e3).toLocaleString('id-ID')} rb`;
+  return `Rp${n.toLocaleString('id-ID')}`;
+};
+
+// Tooltip rupiah penuh.
+const fullRupiah = (value) => `Rp${(Number(value) || 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`;
 
 const CashflowChart = ({ transactions = [], months = 6 }) => {
   const [mode, setMode] = useState('line');
+  const [theme, setTheme] = useState(
+    () => (typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') || 'light' : 'light')
+  );
+
+  // Pantau mode terang/gelap: warna teks & grid harus berubah agar tetap terbaca.
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setTheme(root.getAttribute('data-theme') || 'light');
+    const obs = new MutationObserver(sync);
+    obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+
+  const dark = theme === 'dark';
+  // Label sumbu/mode gelap memakai slate-600 (186 196 210): slate-500 masih
+  // terasa pudar pada teks 11px di atas #181A1F.
+  const tickColor = dark ? 'rgb(186, 196, 210)' : 'rgb(100, 116, 139)';
+  const legendColor = dark ? 'rgb(214, 221, 232)' : 'rgb(71, 85, 105)';
+  const gridColor = dark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(100, 116, 139, 0.16)';
+
   const { labels, income, expense, net } = useMemo(() => {
     const buckets = [];
     const now = new Date();
@@ -63,6 +101,11 @@ const CashflowChart = ({ transactions = [], months = 6 }) => {
 
   const hasData = income.some((v) => v > 0) || expense.some((v) => v > 0);
 
+  // Warna solid dari token (tanpa gradasi). fill:false supaya tidak ada
+  // bidang ber-gradasi di bawah garis.
+  const emerald = cssToken('--emerald-500', 'rgb(16, 185, 129)');
+  const red = cssToken('--red-500', 'rgb(239, 68, 68)');
+
   const data = {
     labels,
     datasets:
@@ -71,38 +114,40 @@ const CashflowChart = ({ transactions = [], months = 6 }) => {
             {
               label: 'Pemasukan',
               data: income,
-              borderColor: 'rgba(16, 185, 129, 1)',
-              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+              borderColor: emerald,
+              backgroundColor: emerald,
               pointRadius: 3,
-              pointBackgroundColor: 'rgba(16, 185, 129, 1)',
-              tension: 0.35,
-              fill: true
+              pointBackgroundColor: emerald,
+              borderWidth: 2,
+              tension: 0.3,
+              fill: false
             },
             {
               label: 'Pengeluaran',
               data: expense,
-              borderColor: 'rgba(239, 68, 68, 1)',
-              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              borderColor: red,
+              backgroundColor: red,
               pointRadius: 3,
-              pointBackgroundColor: 'rgba(239, 68, 68, 1)',
-              tension: 0.35,
-              fill: true
+              pointBackgroundColor: red,
+              borderWidth: 2,
+              tension: 0.3,
+              fill: false
             }
           ]
         : [
             {
               label: 'Pemasukan',
               data: income,
-              backgroundColor: 'rgba(16, 185, 129, 0.85)',
-              borderRadius: 5,
-              maxBarThickness: 26
+              backgroundColor: emerald,
+              borderRadius: 4,
+              maxBarThickness: 24
             },
             {
               label: 'Pengeluaran',
               data: expense,
-              backgroundColor: 'rgba(239, 68, 68, 0.75)',
-              borderRadius: 5,
-              maxBarThickness: 26
+              backgroundColor: red,
+              borderRadius: 4,
+              maxBarThickness: 24
             }
           ]
   };
@@ -110,28 +155,35 @@ const CashflowChart = ({ transactions = [], months = 6 }) => {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
         position: 'bottom',
-        labels: { usePointStyle: true, pointStyleWidth: 8, boxHeight: 8, padding: 14 }
+        labels: { usePointStyle: true, pointStyleWidth: 8, boxHeight: 8, padding: 14, color: legendColor }
       },
       tooltip: {
-        backgroundColor: '#0b1220',
-        padding: 12,
-        cornerRadius: 10,
+        backgroundColor: dark ? '#1c1f25' : '#0b1220',
+        titleColor: dark ? 'rgb(248, 250, 252)' : '#e2e8f0',
+        bodyColor: dark ? 'rgb(203, 213, 225)' : '#cbd5e1',
+        padding: 10,
+        cornerRadius: 8,
         callbacks: {
-          label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`
+          label: (ctx) => `${ctx.dataset.label}: ${fullRupiah(ctx.parsed.y)}`
         }
       }
     },
     scales: {
       y: {
         beginAtZero: true,
-        grid: { color: 'rgba(148,163,184,0.12)' },
+        grid: { color: gridColor, drawTicks: false },
         border: { display: false },
-        ticks: { callback: (v) => compact(v), font: { size: 11 } }
+        ticks: { callback: (v) => axisRupiah(v), font: { size: 11 }, color: tickColor, maxTicksLimit: 6 }
       },
-      x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11 } } }
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: { font: { size: 11 }, color: tickColor }
+      }
     }
   };
 
@@ -141,7 +193,7 @@ const CashflowChart = ({ transactions = [], months = 6 }) => {
         title={`Arus Kas ${months} Bulan Terakhir`}
         action={
           <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-white/10">
+            <div className="flex rounded-lg border border-slate-200 p-0.5">
               {[
                 ['line', 'Garis'],
                 ['bar', 'Batang']

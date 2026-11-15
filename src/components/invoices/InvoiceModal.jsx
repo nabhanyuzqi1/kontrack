@@ -1,12 +1,12 @@
 // src/components/invoices/InvoiceModal.jsx
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Plus, Trash2, FileDown, ScanLine, Loader2, FileSearch, Paperclip } from 'lucide-react';
+import { Plus, Trash2, ScanLine, Loader2, FileSearch, Paperclip } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Field, Input, Textarea, Label } from '../ui/Field';
 import { formatCurrency } from '../../utils/formatters';
 import { terbilang } from '../../utils/terbilang';
-import { generateInvoicePDF, buildInvoiceNumber } from '../../utils/invoiceGenerator';
+import { buildInvoiceNumber } from '../../utils/invoiceGenerator';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from '../../utils/companyConfig';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
 import {

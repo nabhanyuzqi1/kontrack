@@ -1,10 +1,11 @@
 // src/components/invoices/InvoicesPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
+import { ReceiptText, Search, FileText, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import TaxDocsModal from './TaxDocsModal';
 import CoretaxExportModal from './CoretaxExportModal';
 import InvoiceDetailModal from './InvoiceDetailModal';
 import InvoiceModal from './InvoiceModal';
+import PdfPreview from '../ui/PdfPreview';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -51,6 +52,7 @@ const InvoicesPage = () => {
   const [showCoretax, setShowCoretax] = useState(false);
   const [company, setCompany] = useState(null);
   const [detailInvoice, setDetailInvoice] = useState(null);
+  const [pdfPreview, setPdfPreview] = useState(null);
   const [editInvoice, setEditInvoice] = useState(null);
   const [reviseMode, setReviseMode] = useState(false);
 
@@ -129,13 +131,14 @@ const InvoicesPage = () => {
     client: clientMap[inv.clientId] || inv.client || null
   });
 
-  const handleDownloadQuick = async (inv) => {
+  const handlePreviewQuick = async (inv) => {
     setBusyId(inv.id);
     try {
       const settings = await getCompanySettings();
-      await generateInvoicePDF(withDisplayNames(inv), mergeCompanyInfo(settings));
+      const { blob, fileName } = await generateInvoicePDF(withDisplayNames(inv), mergeCompanyInfo(settings), { download: false });
+      setPdfPreview({ blob, fileName });
     } catch (err) {
-      console.error('Gagal unduh PDF:', err);
+      console.error('Gagal membuat pratinjau PDF:', err);
       alert('Gagal membuat PDF. Coba lagi.');
     } finally {
       setBusyId(null);
@@ -337,9 +340,9 @@ const InvoicesPage = () => {
 
                 {/* Aksi cepat — stopPropagation agar klik tidak membuka detail */}
                 <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                  <Button variant="secondary" size="sm" onClick={() => handleDownloadQuick(inv)} disabled={busy}>
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                    PDF
+                  <Button variant="secondary" size="sm" onClick={() => handlePreviewQuick(inv)} disabled={busy}>
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                    Lihat PDF
                   </Button>
                   <Button variant="secondary" size="sm" onClick={() => setTaxDocsInvoice(withDisplayNames(inv))} disabled={busy}>
                     <Landmark className="h-4 w-4" />
@@ -383,6 +386,16 @@ const InvoicesPage = () => {
           invoice={taxDocsInvoice}
           onClose={() => setTaxDocsInvoice(null)}
           onSaved={() => load({ silent: true })}
+        />
+      )}
+
+      {pdfPreview && (
+        <PdfPreview
+          isOpen
+          onClose={() => setPdfPreview(null)}
+          blob={pdfPreview.blob}
+          fileName={pdfPreview.fileName}
+          title="Pratinjau Invoice"
         />
       )}
 
