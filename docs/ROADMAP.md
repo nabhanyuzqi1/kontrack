@@ -377,3 +377,38 @@ Pajak diperiksa ulang; 390px tanpa overflow. `npm run check` + `npm run build` h
 Catatan data: invoice lama tidak menyimpan `taxPeriod`, jadi masa pajak
 diturunkan dari `issueDate`. Kalau suatu saat faktur dibuat untuk masa sebelumnya,
 isi `taxPeriod` agar tidak salah masa.
+
+## 2026-11-15 — Form proyek berbagian & pratinjau PDF invoice
+
+Diverifikasi sendiri (laporan subagent terpotong, tidak dipercaya begitu saja):
+
+- `ProjectModal.jsx`: 8 bagian (Ringkasan Nilai, Identitas, Kontrak & Mitra,
+  Nilai & Pajak, Jadwal, Termin & Retensi, Berkas, Catatan). Diuji di harness:
+  isi nilai Rp1.100.000.000 → DPP 11/12 Rp1.008.333.333, PPN 11%
+  Rp110.916.667, total Rp1.210.916.667, retensi 5% Rp55.000.000. Validasi
+  tanggal menolak simpan dengan pesan spesifik. Dialog `z:100`, portal ke body,
+  mulai y=17 di atas header (111), 390px tanpa overflow.
+- `PdfPreview.jsx`: tombol "Lihat PDF" membuka pratinjau `blob:` + Unduh terpisah.
+
+Perbaikan tambahan hasil pengujian:
+
+- **`utils/invoiceGenerator.js` tidak lagi mengimpor Firebase.** Panggilan
+  `getStorageAssetDataUrl` dipindah ke `services/assets.js` dan disuntikkan
+  sebagai opsi (`resolveAssetDataUrl`). Modul `utils/` harus murni, dan ini juga
+  membuat generator bisa dijalankan di Node untuk diuji.
+- **"Kepada Yth. -"**: `normalizeInvoice` membuang `billTo` kiriman pemanggil dan
+  hanya membaca `client`/`clientName`. Sekarang `billTo` diutamakan. Ditemukan
+  karena PDF dijalankan sungguhan dan teksnya dibaca dengan `pdftotext`.
+- **Harness tidak lagi memalsukan generator PDF.** Shim mengembalikan Blob 21
+  byte, sehingga pratinjau tampak "berhasil" tanpa PDF nyata. Pola
+  `utils/invoiceGenerator` dikeluarkan dari daftar TAILS; shim hanya menyediakan
+  `fetchAssetDataUrl` yang melempar (gambar kop dilewati, PDF tetap tergenerate).
+
+Bukti nyata: PDF 10.934-13.883 byte, `%PDF-1.3/1.4`, isi lengkap (kop, klien,
+SPK/PK/WPHO, item, DPP/PPN/Grand Total/Netto, rekening, tanda tangan) dan TIDAK
+memuat NTPN, kode billing, CoreTax, maupun nomor faktur pajak. Di browser:
+generate 153ms, blob bisa di-fetch utuh. Build live `index-D5xZjxjh.js`.
+
+Catatan harness: merender iframe PDF membuat tab headless macet (`Runtime.evaluate`
+timeout). Itu artefak viewer headless, bukan bug aplikasi — diuji dengan generator
+dipanggil langsung, tanpa iframe.

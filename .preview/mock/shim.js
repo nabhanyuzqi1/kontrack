@@ -276,3 +276,10 @@ export const sendWhatsApp = async () => ({ sent: false, configured: false, reaso
 // dipakai invoice (share WhatsApp)
 export const buildInvoiceWhatsApp = () => ({ url: 'https://wa.me/0', text: '' });
 export const sendInvoiceWhatsApp = async () => ({ ok: true });
+
+// dipakai generator PDF untuk mengambil kop/tanda tangan dari Storage.
+// Di harness tidak ada token Storage; generator asli melewati gambar bila ini
+// mengembalikan null (catch di loadImage), jadi PDF tetap tergenerate.
+export const fetchAssetDataUrl = async () => {
+  throw new Error('Harness: pengambilan aset Storage dilewati.');
+};

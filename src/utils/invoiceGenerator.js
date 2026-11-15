@@ -5,8 +5,6 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { httpsCallable } from 'firebase/functions';
-import { legacyFunctions } from '../services/functionsRegion';
 import { formatCurrency } from './formatters';
 import { terbilang } from './terbilang';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from './companyConfig';
@@ -43,7 +41,10 @@ const imageSize = (dataUrl) =>
 // Prioritas: data URL tersimpan (tidak butuh CORS sama sekali). Bila hanya ada
 // URL Storage, coba fetch — ini yang memerlukan CORS bucket aktif.
 // Mengembalikan null bila gagal agar invoice tetap tergenerate tanpa gambar.
-const loadImage = async (urlOrDataUrl) => {
+//
+// `resolveAssetDataUrl` opsional: fungsi I/O dari luar (services/assets.js).
+// Tanpa itu, gambar lewat Storage dilewati dan PDF tetap tergenerate.
+const loadImage = async (urlOrDataUrl, resolveAssetDataUrl) => {
   const url = urlOrDataUrl;
   if (!url) return null;
 
@@ -72,16 +73,14 @@ const loadImage = async (urlOrDataUrl) => {
 
   // 2) Fallback: Cloud Function `getStorageAssetDataUrl` (sudah ter-deploy di
   //    project ini) mengambilkan berkas dari Storage lalu mengembalikan data URL,
-  //    sehingga tidak terhalang CORS browser.
+  //    sehingga tidak terhalang CORS browser. Fungsi I/O-nya disuntikkan
+  //    pemanggil (`fetchAssetDataUrl` di services/assets.js) supaya modul ini
+  //    tetap murni dan bisa dijalankan di Node.
+  if (!resolveAssetDataUrl) return null;
   try {
-    const fn = httpsCallable(legacyFunctions(), 'getStorageAssetDataUrl');
-    const res = await fn({ url });
-    const dataUrl = res?.data?.dataUrl || res?.data?.data || res?.data;
-    if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
-      const { w, h } = await imageSize(dataUrl);
-      return { dataUrl, w, h };
-    }
-    throw new Error('Respons function tidak berisi data URL');
+    const dataUrl = await resolveAssetDataUrl(url);
+    const { w, h } = await imageSize(dataUrl);
+    return { dataUrl, w, h };
   } catch (e) {
     console.warn('Kop surat/tanda tangan tak dapat dimuat:', e?.message || e);
     return null;
@@ -121,10 +120,18 @@ const normalizeInvoice = (inv) => {
     spkNumber: inv.spkNumber,
     pkNumber: inv.pkNumber,
     wphoNumber: inv.wphoNumber,
+    // `billTo` yang sudah disiapkan pemanggil (hasil enrich UI dengan nama klien)
+    // harus diutamakan. Sebelumnya jalur ini hanya membaca `client`/`clientName`,
+    // sehingga invoice yang membawa `billTo` sendiri tercetak "Kepada Yth. -".
     billTo: {
-      name: inv.clientName || client.client_name || client.name || '',
-      address: clientAddress,
-      npwp: client.npwp || ''
+      name:
+        (inv.billTo && inv.billTo.name) ||
+        inv.clientName ||
+        client.client_name ||
+        client.name ||
+        '',
+      address: (inv.billTo && inv.billTo.address) || clientAddress,
+      npwp: (inv.billTo && inv.billTo.npwp) || client.npwp || ''
     },
     franco: inv.franco || '-',
     shippedVia: inv.shippedVia || '-',
@@ -155,7 +162,11 @@ const normalizeInvoice = (inv) => {
   };
 };
 
-export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO, { download = true } = {}) => {
+export const generateInvoicePDF = async (
+  rawInvoice,
+  company = COMPANY_INFO,
+  { download = true, resolveAssetDataUrl = null } = {}
+) => {
   const invoice = normalizeInvoice(rawInvoice);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.width; // 210
@@ -165,7 +176,7 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO, { d
 
   // ---------- HEADER ----------
   let headerBottom;
-  const letterhead = await loadImage(company.letterheadDataUrl || company.letterheadUrl);
+  const letterhead = await loadImage(company.letterheadDataUrl || company.letterheadUrl, resolveAssetDataUrl);
 
   if (letterhead) {
     // Letterhead PNG (logo + identitas) sebagai banner, jaga rasio
@@ -409,7 +420,7 @@ export const generateInvoicePDF = async (rawInvoice, company = COMPANY_INFO, { d
 
   // Gambar tanda tangan (bila ada) di atas nama penanda tangan.
   // Jarak diberi ruang lebih agar tanda tangan tidak menempel ke nama.
-  const signature = await loadImage(company.signatureDataUrl || company.signatureUrl);
+  const signature = await loadImage(company.signatureDataUrl || company.signatureUrl, resolveAssetDataUrl);
   if (signature && signature.w) {
     const sigW = 38;
     const sigH = Math.min((signature.h / signature.w) * sigW, 22);

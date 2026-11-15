@@ -18,7 +18,10 @@ const shimFs = fileURLToPath(new URL('./mock/shim.js', import.meta.url))
 const TAILS = [
   new RegExp('services/[^/]+(' + BS + '.[cm]?jsx?)?$'),
   new RegExp('hooks/(useAuth|useProjects|useTransactions)(' + BS + '.[cm]?jsx?)?$'),
-  new RegExp('utils/(pdfGenerator|invoiceGenerator|sharing|projectImage)(' + BS + '.[cm]?jsx?)?$'),
+  new RegExp('utils/(pdfGenerator|sharing|projectImage)(' + BS + '.[cm]?jsx?)?$'),
+  // `utils/invoiceGenerator` SENGAJA tidak dialihkan: generator PDF harus diuji
+  // asli di harness, bukan tiruan — dulu shim-nya mengembalikan Blob 21 byte
+  // sehingga pratinjau "berhasil" padahal tidak ada PDF sungguhan.
   // ProjectDetail mengimpor doc/getDoc langsung dari firebase/firestore (bukan
   // lewat services). Alihkan juga modul itu supaya pratinjau tidak menyentuh
   // Firestore sungguhan; hanya dipakai di harness, tidak di src/.

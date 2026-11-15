@@ -25,6 +25,7 @@ import { Badge } from '../ui/Badge';
 import { Field, Input, Textarea } from '../ui/Field';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { generateInvoicePDF } from '../../utils/invoiceGenerator';
+import { fetchAssetDataUrl } from '../../services/assets';
 import PdfPreview from '../ui/PdfPreview';
 import { generateShippingLabel } from '../../utils/shippingLabel';
 import {
@@ -107,7 +108,7 @@ const InvoiceDetailModal = ({
     setDownloading(true);
     try {
       const settings = await getCompanySettings();
-      const { blob, fileName } = await generateInvoicePDF(inv, mergeCompanyInfo(settings), { download: false });
+      const { blob, fileName } = await generateInvoicePDF(inv, mergeCompanyInfo(settings), { download: false, resolveAssetDataUrl: fetchAssetDataUrl });
       setPdfPreview({ blob, fileName });
     } catch (err) {
       console.error('Gagal membuat pratinjau PDF:', err);

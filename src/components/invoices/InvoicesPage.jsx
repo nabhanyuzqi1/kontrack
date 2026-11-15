@@ -31,6 +31,7 @@ import {
   BILLING_STAGES
 } from '../../services/invoices';
 import { generateInvoicePDF } from '../../utils/invoiceGenerator';
+import { fetchAssetDataUrl } from '../../services/assets';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
 import { getClientMap, clientDisplayName } from '../../services/clients';
 import { getAllProjects } from '../../services/projects';
@@ -135,7 +136,7 @@ const InvoicesPage = () => {
     setBusyId(inv.id);
     try {
       const settings = await getCompanySettings();
-      const { blob, fileName } = await generateInvoicePDF(withDisplayNames(inv), mergeCompanyInfo(settings), { download: false });
+      const { blob, fileName } = await generateInvoicePDF(withDisplayNames(inv), mergeCompanyInfo(settings), { download: false, resolveAssetDataUrl: fetchAssetDataUrl });
       setPdfPreview({ blob, fileName });
     } catch (err) {
       console.error('Gagal membuat pratinjau PDF:', err);
