@@ -3,7 +3,7 @@
 Sumber tunggal status pekerjaan. **Perbarui setiap menyelesaikan sesuatu**, supaya
 agen/sesi berikutnya tidak mengulang yang sudah selesai.
 
-Diperbarui: 2026-11-14
+Diperbarui: 2026-11-15
 
 Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.md`
 (dua berkas itu sudah dihapus karena isinya mulai saling bertentangan).
@@ -11,6 +11,27 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 ---
 
 ## Sudah selesai
+
+### Batch b18d8ea (2026-11-15)
+- Perbaikan `)}` bocor di daftar proyek (sisa ternary lama di ProjectList).
+- Kartu grid proyek didesain ulang: datar satu tingkat, tanpa panel kotak-dalam-kotak.
+- Baris tabel proyek sekarang klik-able penuh → membuka detail proyek.
+- Drawer detail invoice: layout dua kolom di desktop agar muat satu viewport.
+- Form invoice: tombol utama "Simpan Draft" (tidak lagi otomatis generate PDF);
+  PDF tetap tersedia dari detail invoice.
+- Cloud Function baru `scanWphoDocument` (asia-southeast2): scan dokumen WPHO/BAST
+  (nomor BA, nilai, nama pekerjaan, tanggal, kontrak/PK) dan Faktur Pajak
+  (nomor faktur). Tombol scan di form invoice mengisi field otomatis; item
+  pekerjaan mengambil nilai WPHO (masih bisa diubah manual).
+- Export CoreTax: opsi kode transaksi 04 (DPP Nilai Lain, PMK 131/2024).
+- PDF laporan proyek: tabel baru "Rincian per Kategori" (porsi per kategori,
+  tidak terpotong — tableWidth fix).
+- Share WhatsApp: kini menyertakan rincian pengeluaran per kategori (5 teratas).
+- Laporan: retensi kini menghormati field `retentionPct` bila ada.
+- Semua angka laporan (piutang termin, retensi, uang masuk/keluar, laba, PPN
+  atas kontrak) dihitung dari Firestore asli — tidak ada mock; PR: alur scan
+  WPHO end-to-end dengan login pemilik belum diuji.
+
 
 ### Fondasi
 - Migrasi CRA → Vite 5
