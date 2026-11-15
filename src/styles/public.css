@@ -1,0 +1,45 @@
+/* src/styles/public.css — permukaan publik (landing `/`, login `/login`)
+ *
+ * MASALAH yang diselesaikan berkas ini: skala `slate` di globals.css di-remap
+ * mengikuti mode APLIKASI (`[data-theme]` di <html>). Landing memakai mode
+ * lokal sendiri (localStorage `kontrack-public-mode`), sehingga mode aplikasi
+ * gelap + landing terang menghasilkan `text-slate-900` = nyaris putih di atas
+ * panel putih (teks hilang), dan sebaliknya.
+ *
+ * Perbaikan: akar halaman publik memakai `data-public-mode="light|dark"`
+ * (bukan data-theme), dan seluruh token slate/emerald/amber di dalamnya
+ * dipatok ulang ke nilai mode itu. Jadi warna teks selalu mengikuti permukaan
+ * yang benar-benar dirender, apa pun mode aplikasi. Layout tidak diubah.
+ */
+
+[data-public-mode] {
+  --slate-50: 246 248 251;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 100 116 139;
+  --slate-500: 71 85 105;
+  --slate-600: 51 65 85;
+  --slate-700: 30 41 59;
+  --slate-800: 15 23 42;
+  --slate-900: 8 14 28;
+  --slate-950: 4 8 18;
+  --emerald-500: 16 185 129;
+  --emerald-600: 5 150 105;
+  --amber-50: 255 251 235;
+  --amber-200: 253 230 138;
+  --amber-300: 252 211 77;
+  --amber-800: 146 64 14;
+  --amber-900: 120 53 15;
+  color-scheme: light;
+}
+
+[data-public-mode='dark'] {
+  --slate-400: 160 172 192;
+  color-scheme: dark;
+}
+[data-public-mode='dark'] .text-teal-700,
+[data-public-mode='dark'] .text-teal-800 { color: #5eead4; }
+[data-public-mode='dark'] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: #34434d; }
+[data-public-login] { color-scheme: dark; }
+[data-public-login] svg rect { fill: #3358f4; }

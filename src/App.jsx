@@ -1,10 +1,11 @@
 // src/App.jsx
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { onAuthStateChange } from './services/auth';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './components/auth/LoginPage';
 import LandingPage from './components/landing/LandingPage';
+import PublicInfoPage from './components/legal/PublicInfoPage';
 import Dashboard from './components/dashboard/Dashboard';
 import ProjectList from './components/projects/ProjectList';
 import ProjectDetail from './components/projects/ProjectDetail';
@@ -40,6 +41,12 @@ const RequireAuth = ({ user, children }) => {
   return children;
 };
 
+// Tujuan selalu berasal dari path lokal; query dan hash tautan lama dipertahankan.
+const LegacyRedirect = () => {
+  const { pathname, search, hash } = useLocation();
+  return <Navigate to={`/app${pathname}${search}${hash}`} replace />;
+};
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,92 +78,71 @@ function App() {
   }
 
   const isAdmin = currentUser?.role === 'admin';
+  const home = isAdmin ? '/app' : '/app/projects';
+  // Halaman admin: tamu ke login, anggota dikembalikan ke daftar proyek mereka.
+  const adminOnly = (page) => (currentUser
+    ? isAdmin ? page : <Navigate to="/app/projects" replace />
+    : <Navigate to="/login" replace />);
 
   return (
     <Router>
       <Routes>
-        {/* Landing page publik di akar; pengguna yang sudah masuk dialihkan ke app */}
-        <Route
-          path="/welcome"
-          element={
-            currentUser ? <Navigate to={isAdmin ? '/' : '/projects'} replace /> : <LandingPage />
-          }
-        />
-
-        {/* Halaman login berdiri sendiri (dark, tanpa shell aplikasi) */}
+        {/* Akar selalu landing, termasuk untuk pengguna yang sudah masuk */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/welcome" element={<Navigate to="/" replace />} />
+        <Route path="/privacy" element={<PublicInfoPage page="privacy" />} />
+        <Route path="/terms" element={<PublicInfoPage page="terms" />} />
+        <Route path="/support" element={<PublicInfoPage page="support" />} />
         <Route
           path="/login"
           element={
-            currentUser ? (
-              <Navigate to={isAdmin ? '/' : '/projects'} replace />
-            ) : (
-              <LoginPage onUserLogin={setCurrentUser} />
-            )
+            loading ? <SplashScreen /> : currentUser
+              ? <Navigate to={home} replace />
+              : <LoginPage onUserLogin={setCurrentUser} />
           }
         />
 
-        {/* Semua halaman lain memakai shell sidebar */}
+        {/* URL lama: dialihkan utuh ke /app agar tautan dan bookmark tetap hidup */}
+        {['projects', 'reports', 'invoices', 'tax-invoices', 'clients', 'settings'].map((p) => (
+          <Route key={p} path={`/${p}/*`} element={<LegacyRedirect />} />
+        ))}
+
+        {/* Shell aplikasi */}
         <Route
-          path="*"
-          element={
+          path="/app/*"
+          element={loading ? <SplashScreen /> : (
             <AppLayout currentUser={currentUser}>
               <Routes>
                 <Route
-                  path="/"
+                  index
                   element={
                     <RequireAuth user={currentUser}>
-                      {isAdmin ? (
-                        <Dashboard currentUser={currentUser} />
-                      ) : (
-                        <Navigate to="/projects" replace />
-                      )}
+                      {isAdmin ? <Dashboard currentUser={currentUser} /> : <Navigate to="/app/projects" replace />}
                     </RequireAuth>
                   }
                 />
                 <Route
-                  path="/projects"
-                  element={
-                    <RequireAuth user={currentUser}>
-                      <ProjectList currentUser={currentUser} />
-                    </RequireAuth>
-                  }
+                  path="projects"
+                  element={<RequireAuth user={currentUser}><ProjectList currentUser={currentUser} /></RequireAuth>}
                 />
-                {/* Terbuka via link langsung — jalur share ke mitra */}
-                <Route path="/projects/:id" element={<ProjectDetail currentUser={currentUser} />} />
+                {/* Terbuka lewat tautan langsung — jalur share ke mitra (ganti share-token di Fase 2) */}
+                <Route path="projects/:id" element={<ProjectDetail currentUser={currentUser} />} />
                 <Route
-                  path="/reports"
-                  element={
-                    <RequireAuth user={currentUser}>
-                      <Reports currentUser={currentUser} />
-                    </RequireAuth>
-                  }
+                  path="reports"
+                  element={<RequireAuth user={currentUser}><Reports currentUser={currentUser} /></RequireAuth>}
                 />
-                <Route
-                  path="/invoices"
-                  element={isAdmin ? <InvoicesPage /> : <Navigate to="/login" replace />}
-                />
-                <Route
-                  path="/tax-invoices"
-                  element={isAdmin ? <TaxInvoicesPage /> : <Navigate to="/login" replace />}
-                />
-                <Route
-                  path="/clients"
-                  element={isAdmin ? <ClientsPage /> : <Navigate to="/login" replace />}
-                />
-                <Route
-                  path="/settings"
-                  element={
-                    isAdmin ? <SettingsPage currentUser={currentUser} /> : <Navigate to="/login" replace />
-                  }
-                />
-                <Route
-                  path="*"
-                  element={<Navigate to={currentUser ? (isAdmin ? '/' : '/projects') : '/login'} replace />}
-                />
+                <Route path="invoices" element={adminOnly(<InvoicesPage />)} />
+                <Route path="tax-invoices" element={adminOnly(<TaxInvoicesPage />)} />
+                <Route path="clients" element={adminOnly(<ClientsPage />)} />
+                <Route path="settings" element={adminOnly(<SettingsPage currentUser={currentUser} />)} />
+                <Route path="*" element={<Navigate to={currentUser ? home : '/login'} replace />} />
               </Routes>
             </AppLayout>
-          }
+          )}
         />
+
+        {/* Path tak dikenal dikembalikan ke landing, bukan ke halaman kosong */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

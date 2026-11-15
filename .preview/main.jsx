@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import AppLayout from '../src/components/layout/AppLayout.jsx';
 import ProjectList from '../src/components/projects/ProjectList.jsx';
 import Reports from '../src/components/reports/Reports.jsx';
@@ -9,12 +9,15 @@ import ClientsPage from '../src/components/clients/ClientsPage.jsx';
 import InvoicesPage from '../src/components/invoices/InvoicesPage.jsx';
 import TaxInvoicesPage from '../src/components/invoices/TaxInvoicesPage.jsx';
 import SettingsPage from '../src/components/settings/SettingsPage.jsx';
+import ProjectDetail from '../src/components/projects/ProjectDetail.jsx';
+import { projects } from './mock/data.js';
 import '../src/styles/globals.css';
 
 // Pratinjau seluruh halaman supaya audit kontras/overlap mencakup aplikasi
 // sebenarnya, bukan cuma halaman yang kebetulan sudah ada di sini.
 const PAGES = [
   { key: 'projects', label: 'Proyek', el: <ProjectList /> },
+  { key: 'project-detail', label: 'Detail Proyek', el: null },
   { key: 'reports', label: 'Laporan', el: <Reports /> },
   { key: 'dashboard', label: 'Dashboard', el: <Dashboard /> },
   { key: 'clients', label: 'Klien', el: <ClientsPage /> },
@@ -54,7 +57,16 @@ const Harness = () => {
             </button>
           ))}
         </div>
-        {React.cloneElement(active.el, { currentUser: user })}
+        {/* ProjectDetail membaca id dari useParams, bukan prop: harus dirender
+            lewat Route agar jalur detail proyek (dan hook-nya) benar-benar diuji. */}
+        {active.key === 'project-detail' ? (
+          <Routes location={{ pathname: '/projects/p1' }}>
+            <Route path="/projects/:id" element={<ProjectDetail currentUser={user} />} />
+            <Route path="*" element={<ProjectDetail currentUser={user} />} />
+          </Routes>
+        ) : (
+          React.cloneElement(active.el, { currentUser: user })
+        )}
       </AppLayout>
     </MemoryRouter>
   );

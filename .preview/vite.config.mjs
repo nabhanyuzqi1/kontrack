@@ -18,7 +18,11 @@ const shimFs = fileURLToPath(new URL('./mock/shim.js', import.meta.url))
 const TAILS = [
   new RegExp('services/[^/]+(' + BS + '.[cm]?jsx?)?$'),
   new RegExp('hooks/(useAuth|useProjects|useTransactions)(' + BS + '.[cm]?jsx?)?$'),
-  new RegExp('utils/(pdfGenerator|invoiceGenerator|sharing|projectImage)(' + BS + '.[cm]?jsx?)?$')
+  new RegExp('utils/(pdfGenerator|invoiceGenerator|sharing|projectImage)(' + BS + '.[cm]?jsx?)?$'),
+  // ProjectDetail mengimpor doc/getDoc langsung dari firebase/firestore (bukan
+  // lewat services). Alihkan juga modul itu supaya pratinjau tidak menyentuh
+  // Firestore sungguhan; hanya dipakai di harness, tidak di src/.
+  new RegExp('firebase/firestore')
 ];
 
 const shimPlugin = {

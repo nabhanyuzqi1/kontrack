@@ -75,6 +75,57 @@ const ProjectDetail = ({ currentUser }) => {
   const [sortBy, setSortBy] = useState('date');
   const [catFilter, setCatFilter] = useState('all');
 
+  // Semua useMemo WAJIB di atas early return: kalau hook dipanggil setelah
+  // `if (loading) return`, jumlah hook berubah antar render dan React
+  // melempar error #310 (Rendered more hooks than during the previous render).
+  const categories = useMemo(() => {
+    const map = {};
+    transactions.forEach((t) => {
+      const k = t.category || 'Lainnya';
+      if (!map[k]) map[k] = { category: k, income: 0, expense: 0, count: 0 };
+      map[k][t.type === 'income' ? 'income' : 'expense'] += Number(t.amount) || 0;
+      map[k].count++;
+    });
+    return Object.values(map).sort((a, b) => b.income + b.expense - (a.income + a.expense));
+  }, [transactions]);
+
+  const filteredTxns = useMemo(() => {
+    let list = transactions;
+    if (catFilter !== 'all') list = list.filter((t) => (t.category || 'Lainnya') === catFilter);
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          (t.description || '').toLowerCase().includes(s) ||
+          (t.category || '').toLowerCase().includes(s)
+      );
+    }
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === 'category') return (a.category || '').localeCompare(b.category || '');
+      if (sortBy === 'amount') return (Number(b.amount) || 0) - (Number(a.amount) || 0);
+      return String(b.date || '').localeCompare(String(a.date || '')); // default: terbaru
+    });
+    return sorted;
+  }, [transactions, search, sortBy, catFilter]);
+
+  // Reminder retensi: dihitung dari tanggal BA terakhir (sinkron dengan invoice).
+  const retentionInfo = useMemo(() => {
+    const lastBA = invoices
+      .map((i) => i.issueDate)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    if (!lastBA) return null;
+    const baDate = new Date(lastBA);
+    if (isNaN(baDate.getTime())) return null;
+    const due = new Date(baDate);
+    due.setMonth(due.getMonth() + RETENTION_MONTHS);
+    const today = new Date();
+    const diffDays = Math.ceil((due - today) / 86400000);
+    return { baDate: lastBA, dueDate: due, diffDays };
+  }, [invoices]);
+
   useEffect(() => {
     if (id) {
       loadProjectData();
@@ -161,7 +212,7 @@ const ProjectDetail = ({ currentUser }) => {
   };
 
   const copyProjectLink = () => {
-    const link = `${window.location.origin}/projects/${project.id}`;
+    const link = `${window.location.origin}/app/projects/${project.id}`;
     navigator.clipboard
       .writeText(link)
       .then(() => alert('Link proyek berhasil disalin!'))
@@ -187,7 +238,7 @@ const ProjectDetail = ({ currentUser }) => {
         icon={FileText}
         title={error || 'Proyek tidak ditemukan'}
         action={
-          <Link to="/projects">
+          <Link to="/app/projects">
             <Button variant="secondary">
               <ArrowLeft className="h-4 w-4" />
               Kembali ke Daftar Proyek
@@ -204,39 +255,6 @@ const ProjectDetail = ({ currentUser }) => {
   const paidAmount = project.paidAmount || 0;
   const isAdmin = currentUser && currentUser.role === 'admin';
 
-  // --- Rekap transaksi per kategori ---
-  const categories = useMemo(() => {
-    const map = {};
-    transactions.forEach((t) => {
-      const k = t.category || 'Lainnya';
-      if (!map[k]) map[k] = { category: k, income: 0, expense: 0, count: 0 };
-      map[k][t.type === 'income' ? 'income' : 'expense'] += Number(t.amount) || 0;
-      map[k].count++;
-    });
-    return Object.values(map).sort((a, b) => b.income + b.expense - (a.income + a.expense));
-  }, [transactions]);
-
-  const filteredTxns = useMemo(() => {
-    let list = transactions;
-    if (catFilter !== 'all') list = list.filter((t) => (t.category || 'Lainnya') === catFilter);
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter(
-        (t) =>
-          (t.description || '').toLowerCase().includes(s) ||
-          (t.category || '').toLowerCase().includes(s)
-      );
-    }
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      if (sortBy === 'category') return (a.category || '').localeCompare(b.category || '');
-      if (sortBy === 'amount') return (Number(b.amount) || 0) - (Number(a.amount) || 0);
-      // default: tanggal terbaru
-      return String(b.date || '').localeCompare(String(a.date || ''));
-    });
-    return sorted;
-  }, [transactions, search, sortBy, catFilter]);
-
   // --- Arsip berkas: dokumen proyek + dokumen tiap invoice ---
   const projectDocs = project.documents || {};
   const invoiceDocEntries = invoices.flatMap((inv) =>
@@ -247,28 +265,11 @@ const ProjectDetail = ({ currentUser }) => {
     }))
   );
 
-  // --- Reminder retensi: dari tanggal BA terakhir ---
-  const retentionInfo = useMemo(() => {
-    const lastBA = invoices
-      .map((i) => i.issueDate)
-      .filter(Boolean)
-      .sort()
-      .pop();
-    if (!lastBA) return null;
-    const baDate = new Date(lastBA);
-    if (isNaN(baDate.getTime())) return null;
-    const due = new Date(baDate);
-    due.setMonth(due.getMonth() + RETENTION_MONTHS);
-    const today = new Date();
-    const diffDays = Math.ceil((due - today) / 86400000);
-    return { baDate: lastBA, dueDate: due, diffDays };
-  }, [invoices]);
-
   return (
     <div className="animate-fade-in">
       {currentUser && (
         <Link
-          to="/projects"
+          to="/app/projects"
           className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-700"
         >
           <ArrowLeft className="h-4 w-4" />

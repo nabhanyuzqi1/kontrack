@@ -5,6 +5,21 @@
 // kurang, Vite gagal me-resolve modul dan halaman tampil KOSONG tanpa pesan:
 // persis kegagalan yang harness ini ada untuk menangkap.
 import { projects, transactions, invoices } from './data.js';
+import { compareInvoices } from '../../src/utils/invoiceNormalization.js';
+
+export const sortInvoiceList = (list, { sortBy = 'date', direction = 'desc', projectNameOf } = {}) =>
+  [...list].sort((a, b) => compareInvoices(a, b, sortBy, direction, projectNameOf));
+export const signUpUser = async () => ({ role: 'staff', name: 'Preview' });
+export const generateProjectPDF = () => {};
+export const generateProjectSummaryImage = () => '';
+
+// Mock doc/getDoc: ProjectDetail mengimpor keduanya langsung dari
+// 'firebase/firestore' (dialihkan ke shim lewat vite.config.mjs).
+export const doc = (_db, collection, id) => ({ collection, id });
+export const getDoc = async (ref) => ({
+  exists: () => Boolean(ref.id && projects.find((p) => p.id === ref.id)),
+  data: () => projects.find((p) => p.id === ref.id) || {}
+});
 
 const noop = async () => {};
 const noopSync = () => {};

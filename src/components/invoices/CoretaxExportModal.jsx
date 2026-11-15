@@ -10,7 +10,8 @@ import {
   downloadCoretaxXml,
   validateForCoretax,
   CORETAX_SERVICE_CODES,
-  CORETAX_UNITS,
+  unitsForOpt,
+  DEFAULT_UNIT_FOR_OPT,
   TRX_CODES,
   GOODSERVICE_OPT
 } from '../../utils/coretaxXml';
@@ -18,16 +19,17 @@ import {
 const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
   const [selected, setSelected] = useState(() => new Set(invoices.map((i) => i.id)));
   const [code, setCode] = useState('010000');
-  const [unit, setUnit] = useState('UM.0018');
+  const [opt, setOpt] = useState(GOODSERVICE_OPT.JASA);
+  // Satuan mengikuti jenis: jasa memakai daftar jasa (default UM.0030 "Kegiatan"),
+  // barang memakai daftar barang. UM.0018 hanya sah untuk barang.
+  const [unit, setUnit] = useState(DEFAULT_UNIT_FOR_OPT[GOODSERVICE_OPT.JASA]);
   // Default 04 — PT PEB menerbitkan faktur dengan DPP Nilai Lain (PMK 131/2024).
   const [trxCode, setTrxCode] = useState('04');
-  const [opt, setOpt] = useState(GOODSERVICE_OPT.JASA);
-
+  const units = unitsForOpt(opt);
+  const safeUnit = units.some((u) => u.code === unit) ? unit : DEFAULT_UNIT_FOR_OPT[opt];
   const chosen = useMemo(() => invoices.filter((i) => selected.has(i.id)), [invoices, selected]);
-  const issues = useMemo(() => validateForCoretax(chosen, company), [chosen, company]);
-  // Peringatan tidak memblokir unduhan: pengguna tetap bisa mengunduh lalu
-  // melengkapi NPWP di CoreTax. Yang diblokir hanya bila tidak ada faktur dipilih.
-  const canExport = chosen.length > 0;
+  const issues = useMemo(() => validateForCoretax(chosen, company, { unit: safeUnit, opt }), [chosen, company, safeUnit, opt]);
+  const canExport = chosen.length > 0 && issues.length === 0;
 
   const toggle = (id) =>
     setSelected((prev) => {
@@ -73,8 +75,8 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
             </Select>
           </Field>
           <Field label="Satuan">
-            <Select value={unit} onChange={(e) => setUnit(e.target.value)}>
-              {CORETAX_UNITS.map((u) => (
+            <Select value={safeUnit} onChange={(e) => setUnit(e.target.value)}>
+              {units.map((u) => (
                 <option key={u.code} value={u.code}>
                   {u.code} — {u.label}
                 </option>
@@ -108,7 +110,7 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3.5">
             <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-amber-800">
               <TriangleAlert className="h-4 w-4" />
-              Perlu dilengkapi (XML tetap bisa diunduh)
+              Lengkapi data wajib sebelum ekspor
             </p>
             <ul className="list-inside list-disc space-y-0.5 text-xs text-amber-700">
               {issues.slice(0, 6).map((it, i) => (
@@ -151,7 +153,7 @@ const CoretaxExportModal = ({ isOpen, onClose, invoices, company }) => {
                   </p>
                 </div>
                 <span className="tnum shrink-0 text-xs font-semibold text-slate-600">
-                  {formatCurrency(inv.totals?.grandTotal || inv.grandTotal || 0)}
+                  {formatCurrency(inv.grandTotal ?? inv.totals?.grandTotal ?? 0)}
                 </span>
               </label>
             ))}

@@ -258,7 +258,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
             {clients !== null && clients.length === 0 && (
               <p className="mt-1 text-xs text-slate-500">
                 Belum ada klien.{' '}
-                <Link to="/clients" className="font-medium text-brand-700 hover:underline">
+                <Link to="/app/clients" className="font-medium text-brand-700 hover:underline">
                   Tambah klien dulu
                 </Link>
                 .

@@ -2,7 +2,7 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 
-const ProtectedRoute = ({ children, user, requiredRole = null, redirectTo = '/projects' }) => {
+const ProtectedRoute = ({ children, user, requiredRole = null, redirectTo = '/app/projects' }) => {
   // If no user is logged in, redirect
   if (!user) {
     return <Navigate to={redirectTo} replace />;

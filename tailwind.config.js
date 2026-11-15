@@ -163,13 +163,27 @@ export default {
         // Kilau melintas untuk skeleton loader
         shimmer: {
           '100%': { transform: 'translateX(100%)' }
+        },
+        // Perpindahan halaman: masuk lembut dari bawah, durasi pendek supaya
+        // tidak terasa lambat saat pengguna berpindah menu berulang.
+        'page-in': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' }
+        },
+        'reveal-up': {
+          from: { opacity: '0', transform: 'translateY(16px)' },
+          to: { opacity: '1', transform: 'translateY(0)' }
         }
       },
       animation: {
-        'fade-in': 'fade-in 0.25s ease-out',
-        'slide-up': 'slide-up 0.3s ease-out',
-        'scale-in': 'scale-in 0.2s ease-out',
-        'slide-in-right': 'slide-in-right 0.25s ease-out',
+        // Kurva eksplisit (bukan 'ease-out' bawaan) supaya gerakan tidak
+        // berhenti mendadak: cubic-bezier lebih halus di awal dan akhir.
+        'fade-in': 'fade-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'slide-up': 'slide-up 0.38s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'scale-in': 'scale-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'slide-in-right': 'slide-in-right 0.34s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'page-in': 'page-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'reveal-up': 'reveal-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
         shimmer: 'shimmer 1.6s infinite'
       }
     }

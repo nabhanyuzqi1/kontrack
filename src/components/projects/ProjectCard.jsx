@@ -34,13 +34,13 @@ const ProjectCard = ({ project, onEdit, onDelete, currentUser }) => {
   const copyProjectLink = (e) => {
     stop(e);
     navigator.clipboard
-      .writeText(`${window.location.origin}/projects/${project.id}`)
+      .writeText(`${window.location.origin}/app/projects/${project.id}`)
       .then(() => alert('Link proyek berhasil disalin!'))
       .catch((err) => console.error('Failed to copy:', err));
   };
 
   return (
-    <Link to={`/projects/${project.id}`} className="group block h-full">
+    <Link to={`/app/projects/${project.id}`} className="group block h-full">
       <article className="flex h-full flex-col glass-2 glass-hover p-5 hover:border-brand-300">
         {/* Kepala: judul + status */}
         <div className="flex items-start justify-between gap-3">

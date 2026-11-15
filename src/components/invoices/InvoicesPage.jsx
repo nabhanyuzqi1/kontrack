@@ -1,6 +1,6 @@
 // src/components/invoices/InvoicesPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight } from 'lucide-react';
+import { ReceiptText, Search, FileDown, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import TaxDocsModal from './TaxDocsModal';
 import CoretaxExportModal from './CoretaxExportModal';
 import InvoiceDetailModal from './InvoiceDetailModal';
@@ -20,6 +20,7 @@ import {
   setInvoiceStatus,
   deleteInvoice,
   markInvoicePaid,
+  sortInvoiceList,
   taxDocsProgress,
   isPpnCair,
   billingStageLabel,
@@ -42,6 +43,7 @@ const InvoicesPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
   const [statusFilter, setStatusFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all');
   const [busyId, setBusyId] = useState(null);
@@ -105,20 +107,10 @@ const InvoicesPage = () => {
       }
       return true;
     });
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      if (sortBy === 'amount') return (Number(b.grandTotal) || 0) - (Number(a.grandTotal) || 0);
-      if (sortBy === 'number')
-        return String(a.invoiceNumber || '').localeCompare(String(b.invoiceNumber || ''), 'id');
-      if (sortBy === 'project')
-        return projectNameOf(a).localeCompare(projectNameOf(b), 'id');
-      if (sortBy === 'status')
-        return String(a.status || '').localeCompare(String(b.status || '')) ||
-          String(b.issueDate || '').localeCompare(String(a.issueDate || ''));
-      return String(b.issueDate || '').localeCompare(String(a.issueDate || '')); // tanggal terbaru
-    });
-    return sorted;
-  }, [invoices, statusFilter, stageFilter, search, sortBy, clientMap, projectMap]);
+    // Tanggal dibandingkan sebagai waktu (Timestamp maupun string), bukan teks:
+    // urutan teks membuat dokumen bertanggal Timestamp jatuh ke posisi acak.
+    return sortInvoiceList(list, { sortBy, direction: sortDir, projectNameOf });
+  }, [invoices, statusFilter, stageFilter, search, sortBy, sortDir, clientMap, projectMap]);
 
   const stats = useMemo(() => {
     const active = invoices.filter((i) => i.status !== INVOICE_STATUS.VOID);
@@ -239,13 +231,25 @@ const InvoicesPage = () => {
             <option key={t} value={t}>{billingStageLabel(t)}</option>
           ))}
         </Select>
-        <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          <option value="date">Urutkan: tanggal</option>
-          <option value="amount">Urutkan: nominal</option>
-          <option value="number">Urutkan: no. invoice</option>
-          <option value="project">Urutkan: proyek</option>
-          <option value="status">Urutkan: status</option>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="min-w-0 flex-1">
+            <option value="date">Urutkan: tanggal</option>
+            <option value="amount">Urutkan: nominal</option>
+            <option value="number">Urutkan: no. invoice</option>
+            <option value="project">Urutkan: proyek</option>
+            <option value="status">Urutkan: status</option>
+          </Select>
+          <Button
+            variant="secondary"
+            onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+            title={sortDir === 'desc' ? 'Urutan menurun (terbaru/terbesar dulu). Klik untuk menaik.' : 'Urutan menaik (terlama/terkecil dulu). Klik untuk menurun.'}
+            aria-label={sortDir === 'desc' ? 'Urutan menurun, ubah ke menaik' : 'Urutan menaik, ubah ke menurun'}
+            className="shrink-0"
+          >
+            {sortDir === 'desc' ? <ArrowDownWideNarrow className="h-4 w-4" /> : <ArrowUpNarrowWide className="h-4 w-4" />}
+            <span className="hidden sm:inline">{sortDir === 'desc' ? 'Turun' : 'Naik'}</span>
+          </Button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -368,7 +372,7 @@ const InvoicesPage = () => {
         <CoretaxExportModal
           isOpen={showCoretax}
           onClose={() => setShowCoretax(false)}
-          invoices={filtered.length > 0 ? filtered : invoices}
+          invoices={(filtered.length > 0 ? filtered : invoices).map(withDisplayNames)}
           company={company}
         />
       )}

@@ -444,6 +444,31 @@
     background: #1c1f25;
   }
 
+/* Transisi halaman: elemen halaman masuk dengan fade + geser tipis.
+   Dipasang lewat kelas, bukan animasi global, supaya modal/drawer tidak ikut. */
+.page-enter {
+  animation: page-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Hormati preferensi sistem: pengguna yang minta gerak minimal tidak boleh
+   dipaksa animasi. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Perpindahan warna mode gelap/terang: halus, tapi tidak menunda interaksi. */
+html.theme-transition,
+html.theme-transition * {
+  transition: background-color 0.32s ease, border-color 0.32s ease, color 0.22s ease !important;
+}
+
 @media print {
   .no-print {
     display: none !important;

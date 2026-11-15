@@ -239,6 +239,7 @@ Selesai:
 - Form proyek: No. SPK/Kontrak dan No. PK terpisah + upload masing-masing; form invoice otomatis terisi dari proyek (`spkNumber`/`pkNumber`).
 - Detail proyek: rekap transaksi per kategori (pemasukan/pengeluaran), cari + urut (tanggal/nominal/kategori), kartu info/nilai/progress didesain ulang, arsip berkas proyek+invoice, reminder retensi 3 bulan sejak BA terakhir.
 - Daftar invoice: sortir nominal/nomor/proyek/status.
+- Invoice: urut naik/turun memakai waktu (Timestamp/string); adapter baca-only menormalkan alias legacy tanpa menulis Firestore; ekspor CoreTax single/massal memakai satuan sesuai jenis dan memblokir data wajib yang kosong.
 - TaxDocsModal: tombol Scan faktur pajak (AI isi nomor+tanggal, berkas ke arsip).
 - Dashboard: grafik arus kas garis (toggle garis/batang), analisis AI berdampingan grafik + riwayat analisis tersimpan (localStorage `kontrack-ai-insight-history`).
 - Login: daftar akun baru email/password (`signUpUser`, role staff) + link ke landing page `/welcome`.
@@ -248,3 +249,20 @@ Belum terverifikasi (butuh owner):
 - Email penagihan nyata menunggu secret SMTP asli.
 - Scan faktur/WPHO end-to-end dengan Gemini sungguhan; data Firestore asli.
 
+
+## Batch landing/routing/migrasi (2026-11-15, lanjutan 32ccfec)
+
+Selesai dan terverifikasi di live `kontrack.web.app`:
+- **Routing**: `/` = landing publik (juga saat login), aplikasi di `/app/*`, `/login` tetap. `App.jsx`, `ProtectedRoute`, sidebar, kartu/tabel proyek, dan tautan berbagi sudah memakai `/app`. URL lama (`/projects|reports|invoices|tax-invoices|clients|settings`) dialihkan utuh (query+hash) ke `/app/...`; dibuktikan `/projects?x=1` → `/login`. Halaman publik `/privacy`, `/terms`, `/support` merespons 200.
+- **Landing v2**: layout korporat dua kolom, mode terang/gelap sendiri (`kontrack-public-mode`, diisolasi lewat `public.css` + `data-public-mode` agar remap slate aplikasi tidak menghapus teks), contoh antarmuka berlabel SIMULASI, konten masalah→solusi (jeda kas, arsip penagihan, retensi/pajak). Tanpa emoji dan tanpa gradasi.
+- **Login**: latar/panel/input pejal, mesh gradient dihapus, kontras teks dan tautan diperbaiki, tautan jelas ke `/` dan halaman legal.
+- **Detail proyek React #310**: seluruh hook dipindah ke atas early return; dibuktikan di harness `.preview` dengan rute `/projects/:id` (halaman ter-render penuh, tanpa error).
+- **Header**: `sticky` tanpa padding atas (celah tembus hilang); terukur `top:0`, lebar penuh, `overflow-x: 0` pada 390px.
+- **Transisi**: `page-in` per rute (`main` ber-key `pathname`), kurva `cubic-bezier(0.22,1,0.36,1)`, dan `prefers-reduced-motion`.
+- **Cache**: uji Node membuktikan dedup in-flight, hit TTL, `invalidate`/`primeCache` menang atas query lama yang telat selesai, dan pemulihan error sinkron.
+- **Migrasi Firestore (SUDAH DIJALANKAN)**: `scripts/audit-firestore-data.mjs` + `scripts/migrate-invoice-items.mjs`. Cadangan mentah 323 dokumen di `~/Kontrack-backup/audit-20261115/`. Ditambahkan `invoiceItems` dan `subtotal` untuk 21 invoice lama (sebelumnya 11 tanpa item sehingga ekspor CoreTax menganggap "tanpa item/nilai"). Hanya penambahan field, memakai precondition `updateTime`. Verifikasi: 323 → 323 dokumen, ID identik, 0 field lama hilang/berubah, 0 nilai finansial berubah, jumlah grandTotal Rp1.831.726.560,64 identik, 21/21 invoice kini punya item + subtotal. Satu catatan: `INV-003/PEB/10/2025` DPP historisnya selisih 4 rupiah dari rumus 11/12 (nilai dokumen dipertahankan).
+
+Belum terverifikasi (butuh owner):
+- Impor XML CoreTax ke portal DJP (kode satuan jasa `UM.0030` belum diuji di sistem DJP).
+- Tampilan data asli di balik login: preview memakai mock.
+- 5 proyek tanpa `pkNumber` dan 2 proyek tanpa nomor kontrak — sengaja tidak diisi otomatis karena butuh data pemilik.

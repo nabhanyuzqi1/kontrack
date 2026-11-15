@@ -43,27 +43,27 @@ import { getAllInvoices, INVOICE_STATUS } from '../../services/invoices';
 import { PROJECT_STATUS } from '../../utils/constants';
 
 const navItems = (isAdmin) => [
-  ...(isAdmin ? [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }] : []),
-  { to: '/projects', label: 'Proyek', icon: FolderKanban },
+  ...(isAdmin ? [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true }] : []),
+  { to: '/app/projects', label: 'Proyek', icon: FolderKanban },
   ...(isAdmin
     ? [
-        { to: '/invoices', label: 'Invoice', icon: ReceiptText },
-        { to: '/tax-invoices', label: 'Pajak', icon: Landmark },
-        { to: '/clients', label: 'Klien', icon: Users }
+        { to: '/app/invoices', label: 'Invoice', icon: ReceiptText },
+        { to: '/app/tax-invoices', label: 'Pajak', icon: Landmark },
+        { to: '/app/clients', label: 'Klien', icon: Users }
       ]
     : []),
-  { to: '/reports', label: 'Laporan', icon: BarChart3 },
-  ...(isAdmin ? [{ to: '/settings', label: 'Pengaturan', icon: Settings }] : [])
+  { to: '/app/reports', label: 'Laporan', icon: BarChart3 },
+  ...(isAdmin ? [{ to: '/app/settings', label: 'Pengaturan', icon: Settings }] : [])
 ];
 
 // Navigasi bawah ponsel — 4 tujuan utama + tombol "Lainnya".
 const bottomNavItems = (isAdmin) => [
   ...(isAdmin
-    ? [{ to: '/', label: 'Beranda', icon: LayoutDashboard, end: true }]
-    : [{ to: '/projects', label: 'Proyek', icon: FolderKanban }]),
-  ...(isAdmin ? [{ to: '/projects', label: 'Proyek', icon: FolderKanban }] : []),
-  ...(isAdmin ? [{ to: '/invoices', label: 'Invoice', icon: ReceiptText }] : []),
-  { to: '/reports', label: 'Laporan', icon: BarChart3 }
+    ? [{ to: '/app', label: 'Beranda', icon: LayoutDashboard, end: true }]
+    : [{ to: '/app/projects', label: 'Proyek', icon: FolderKanban }]),
+  ...(isAdmin ? [{ to: '/app/projects', label: 'Proyek', icon: FolderKanban }] : []),
+  ...(isAdmin ? [{ to: '/app/invoices', label: 'Invoice', icon: ReceiptText }] : []),
+  { to: '/app/reports', label: 'Laporan', icon: BarChart3 }
 ];
 
 const IconButton = ({ label, onClick, children, badge = false, className = '' }) => (
@@ -301,7 +301,7 @@ const AppLayout = ({ currentUser, children }) => {
               tone: 'red',
               title: p.name,
               desc: `Terlambat ${Math.abs(days)} hari dari tenggat`,
-              to: `/projects/${p.id}`
+              to: `/app/projects/${p.id}`
             });
           } else if (days <= 14) {
             items.push({
@@ -310,7 +310,7 @@ const AppLayout = ({ currentUser, children }) => {
               tone: 'amber',
               title: p.name,
               desc: days === 0 ? 'Tenggat hari ini' : `Tenggat dalam ${days} hari`,
-              to: `/projects/${p.id}`
+              to: `/app/projects/${p.id}`
             });
           }
         });
@@ -325,7 +325,7 @@ const AppLayout = ({ currentUser, children }) => {
               tone: 'brand',
               title: inv.clientName || inv.recipient || 'Invoice',
               desc: `Invoice ${inv.invoiceNumber || inv.number || ''} menunggu pembayaran`,
-              to: '/invoices'
+              to: '/app/invoices'
             });
           });
         invoices
@@ -342,7 +342,7 @@ const AppLayout = ({ currentUser, children }) => {
               tone: 'emerald',
               title: 'PPN belum disetor',
               desc: `Invoice ${inv.invoiceNumber || inv.number || ''} sudah dibayar, PPN belum ditandai disetor`,
-              to: '/tax-invoices'
+              to: '/app/tax-invoices'
             });
           });
       }
@@ -382,17 +382,34 @@ const AppLayout = ({ currentUser, children }) => {
   const handleSignOut = async () => {
     try {
       await signOutUser();
-      navigate('/projects');
+      navigate('/app/projects');
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
+    // setState per event scroll membuat React re-render puluhan kali per detik
+    // (terasa bergetar). Cukup satu pemeriksaan per frame, dan hanya berubah
+    // saat melewati ambang.
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      setScrolled((prev) => {
+        const next = window.scrollY > 8;
+        return prev === next ? prev : next;
+      });
+    };
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(check);
+    };
+    check();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, []);
 
   const focusSearch = () => {
@@ -405,36 +422,41 @@ const AppLayout = ({ currentUser, children }) => {
   // memperbarui ?q=. Dari halaman lain, Enter dulu yang berpindah ke Proyek —
   // mengetik di sini tidak boleh membuang pengguna dari halaman yang sedang dibaca.
   const onSearchChange = (value) => {
-    if (location.pathname !== '/projects') return;
+    if (location.pathname !== '/app/projects') return;
     const next = new URLSearchParams(location.search);
     if (value.trim()) next.set('q', value);
     else next.delete('q');
-    navigate(`/projects?${next.toString()}`, { replace: true });
+    navigate(`/app/projects?${next.toString()}`, { replace: true });
   };
 
   const submitSearch = (value) => {
     const q = value.trim();
     if (!q) return;
-    navigate(`/projects?q=${encodeURIComponent(q)}`);
+    navigate(`/app/projects?q=${encodeURIComponent(q)}`);
     setSearchOpen(false);
   };
 
   return (
     <div className="min-h-screen">
-      {/* ===== Header kaca dua tingkat ===== */}
-      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-4 sm:pt-4">
+      {/* ===== Header kaca dua tingkat =====
+          Sticky tanpa padding atas: padding di elemen sticky meninggalkan celah
+          kosong yang membuat konten terlihat menembus header saat digulir.
+          Jarak ke tepi layar dibuat dengan padding DI DALAM container. */}
+      <header className="sticky top-0 z-40 px-3 sm:px-4">
         {/* overflow-hidden sengaja TIDAK dipakai di container header: panel
             notifikasi/bantuan/akun menjorok keluar dari kotak, dan overflow
             akan memotongnya. Sudut bawah dipotong per-tingkat di baris nav. */}
         <div
-          className={`mx-auto max-w-[1400px] rounded-[18px] transition-colors duration-200 ${
-            scrolled ? 'header-solid border border-slate-200/70 dark:border-white/10' : 'glass-1'
+          className={`mx-auto mt-3 max-w-[1400px] rounded-[18px] border transition-[background-color,box-shadow,border-color] duration-300 ease-out sm:mt-4 ${
+            scrolled
+              ? 'header-solid border-slate-200/70 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.35)] dark:border-white/10'
+              : 'glass-1 border-transparent'
           }`}
         >
           {/* Tingkat 1 — baris utilitas */}
           <div className="flex h-[52px] items-center gap-2 px-3 sm:gap-3 sm:px-5">
             <Link
-              to={isAdmin ? '/' : '/projects'}
+              to={isAdmin ? '/app' : '/app/projects'}
               className="flex shrink-0 items-center gap-2"
               aria-label="Kontrack"
             >
@@ -531,7 +553,7 @@ const AppLayout = ({ currentUser, children }) => {
                       desc="Catat RAB, SPK, dan progres pembayaran. Klik kartu proyek untuk detail termin."
                       onClick={() => {
                         setOpenMenu(null);
-                        navigate('/projects');
+                        navigate('/app/projects');
                       }}
                     />
                     <PopoverItem
@@ -540,7 +562,7 @@ const AppLayout = ({ currentUser, children }) => {
                       desc="Terbitkan invoice, tandai pembayaran, lalu kelola faktur dan setoran PPN di CoreTax."
                       onClick={() => {
                         setOpenMenu(null);
-                        navigate('/invoices');
+                        navigate('/app/invoices');
                       }}
                     />
                     <PopoverItem
@@ -549,7 +571,7 @@ const AppLayout = ({ currentUser, children }) => {
                       desc="Posisi kontrak, arus kas per periode, laporan pajak bulanan, dan analisis tahunan."
                       onClick={() => {
                         setOpenMenu(null);
-                        navigate('/reports');
+                        navigate('/app/reports');
                       }}
                     />
                     <PopoverItem
@@ -558,7 +580,7 @@ const AppLayout = ({ currentUser, children }) => {
                       desc="Identitas perusahaan dan pengaturan hanya bisa diubah oleh admin."
                       onClick={() => {
                         setOpenMenu(null);
-                        navigate('/settings');
+                        navigate('/app/settings');
                       }}
                     />
                   </div>
@@ -591,7 +613,7 @@ const AppLayout = ({ currentUser, children }) => {
                       desc="Identitas, tema, dan pengguna"
                       onClick={() => {
                         setOpenMenu(null);
-                        navigate('/settings');
+                        navigate('/app/settings');
                       }}
                     />
                     <PopoverItem
@@ -637,7 +659,7 @@ const AppLayout = ({ currentUser, children }) => {
           />
           <div className="absolute inset-y-0 right-0 flex w-[86%] max-w-xs flex-col gap-4 overflow-y-auto glass-1 rounded-none p-4 animate-slide-up">
             <div className="flex items-center justify-between">
-              <Link to={isAdmin ? '/' : '/projects'} className="flex items-center gap-2">
+              <Link to={isAdmin ? '/app' : '/app/projects'} className="flex items-center gap-2">
                 <LogoMark className="h-7 w-7" />
                 <span className="font-display text-sm font-bold uppercase tracking-[0.14em] text-slate-800">
                   Kontrack
@@ -678,7 +700,7 @@ const AppLayout = ({ currentUser, children }) => {
             <div className="mt-auto space-y-3">
               {isAdmin && (
                 <Link
-                  to="/projects"
+                  to="/app/projects"
                   onClick={() => setMobileOpen(false)}
                   className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-medium text-white"
                 >
@@ -697,7 +719,9 @@ const AppLayout = ({ currentUser, children }) => {
       )}
 
       {/* ===== Konten utama ===== */}
-      <main className="mx-auto max-w-[1400px] px-3 pb-24 pt-4 sm:px-4 sm:pb-8 sm:pt-5">
+      {/* key per rute: konten diremount saat pindah halaman sehingga animasi
+          page-in diputar ulang; ErrorBoundary ikut direset per rute. */}
+      <main key={location.pathname} className="page-enter mx-auto max-w-[1400px] px-3 pb-24 pt-4 sm:px-4 sm:pb-8 sm:pt-5">
         <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
       </main>
 

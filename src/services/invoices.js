@@ -18,14 +18,13 @@ import {
   getDoc,
   updateDoc,
   deleteDoc,
-  query,
-  orderBy,
   arrayUnion
 } from 'firebase/firestore';
 import { db, storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cached, invalidate, CACHE_KEYS } from './cache';
 import { addTransaction } from './transactions';
+import { normalizeInvoice, compareInvoices } from '../utils/invoiceNormalization';
 
 const COLLECTION = 'invoices';
 
@@ -126,18 +125,19 @@ export const addInvoice = async (data) => {
   return docRef.id;
 };
 
+export const sortInvoiceList = (list, { sortBy = 'date', direction = 'desc', projectNameOf } = {}) =>
+  [...list].sort((a, b) => compareInvoices(a, b, sortBy, direction, projectNameOf));
+
 export const getAllInvoices = async () =>
   cached(CACHE_KEYS.INVOICES, async () => {
-    // orderBy issueDate desc; fallback tanpa order bila field campur/absen.
-    let snapshot;
-    try {
-      snapshot = await getDocs(query(collection(db, COLLECTION), orderBy('issueDate', 'desc')));
-    } catch (e) {
-      snapshot = await getDocs(collection(db, COLLECTION));
-    }
+    // Tanpa orderBy: nilai tanggal bercampur Timestamp/string dan sebagian
+    // dokumen lama tidak punya field itu — orderBy mengecualikannya diam-diam.
+    // Urutan akhir ditentukan compareInvoices. Dokumen lama dinormalkan saat
+    // dibaca saja; tidak ada penulisan balik (migrasi terpisah).
+    const snapshot = await getDocs(collection(db, COLLECTION));
     const list = [];
-    snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
-    return list;
+    snapshot.forEach((d) => list.push(normalizeInvoice({ id: d.id, ...d.data() })));
+    return sortInvoiceList(list, { sortBy: 'date', direction: 'desc' });
   });
 
 // Invoice terbayar terkunci: tidak boleh diedit/dihapus (rekam jejak audit),

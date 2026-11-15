@@ -40,12 +40,18 @@ const notify = (key, data) => {
   });
 };
 
-const runFetcher = async (key, fetcher) => {
-  const p = (async () => {
+const runFetcher = (key, fetcher) => {
+  // Tunda fetcher satu microtask agar lemparan sinkron juga melewati cleanup,
+  // dan promise sudah terdaftar sebelum fetcher bisa memanggil cache lagi.
+  const p = Promise.resolve().then(async () => {
     try {
-      const data = await withTimeout(fetcher(), FETCH_TIMEOUT);
-      store.set(key, { data, at: Date.now() });
-      notify(key, data);
+      const data = await withTimeout(Promise.resolve().then(fetcher), FETCH_TIMEOUT);
+      // Invalidasi/prime selama query berjalan membatalkan hak query lama
+      // untuk menimpa data yang lebih baru.
+      if (inflight.get(key) === p) {
+        store.set(key, { data, at: Date.now() });
+        notify(key, data);
+      }
       return data;
     } catch (e) {
       const stale = store.get(key);
@@ -55,11 +61,9 @@ const runFetcher = async (key, fetcher) => {
       }
       throw e;
     } finally {
-      // Wajib dibersihkan walau gagal — kalau tidak, permintaan macet akan
-      // "menular" ke semua kunjungan berikutnya dan tidak pernah bisa dicoba ulang.
-      inflight.delete(key);
+      if (inflight.get(key) === p) inflight.delete(key);
     }
-  })();
+  });
   inflight.set(key, p);
   return p;
 };
@@ -90,7 +94,9 @@ export const cached = async (key, fetcher, ttl = DEFAULT_TTL) => {
   // SWR: data basi tetap dipakai seketika; penyegaran berjalan di belakang.
   // Pelanggan subscribe() akan menerima data baru begitu selesai.
   if (hit) {
-    runFetcher(key, fetcher); // sengaja tidak ditunggu
+    runFetcher(key, fetcher).catch((e) => {
+      console.warn(`[cache] ${key} gagal disegarkan.`, e?.message || e);
+    }); // invalidasi dapat menghapus fallback ketika penyegaran masih berjalan
     return hit.data;
   }
 
@@ -109,15 +115,20 @@ export const subscribe = (key, cb) => {
 
 /** Hapus satu kunci atau semua kunci berawalan tertentu. */
 export const invalidate = (prefix) => {
-  if (!prefix) {
-    store.clear();
-    return;
-  }
-  [...store.keys()].filter((k) => k.startsWith(prefix)).forEach((k) => store.delete(k));
+  const keys = new Set([...store.keys(), ...inflight.keys()]);
+  keys.forEach((key) => {
+    if (!prefix || key.startsWith(prefix)) {
+      store.delete(key);
+      inflight.delete(key);
+    }
+  });
 };
 
 /** Perbarui isi cache tanpa query (mis. setelah menyimpan data). */
-export const primeCache = (key, data) => store.set(key, { data, at: Date.now() });
+export const primeCache = (key, data) => {
+  inflight.delete(key);
+  store.set(key, { data, at: Date.now() });
+};
 
 export const CACHE_KEYS = {
   PROJECTS: 'projects:all',

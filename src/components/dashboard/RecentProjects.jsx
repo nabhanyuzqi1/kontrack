@@ -12,7 +12,7 @@ const RecentProjects = ({ projects }) => (
       title="Proyek Terbaru"
       action={
         <Link
-          to="/projects"
+          to="/app/projects"
           className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 transition-colors hover:text-brand-700"
         >
           Lihat Semua
@@ -31,7 +31,7 @@ const RecentProjects = ({ projects }) => (
           {projects.map((project) => (
             <Link
               key={project.id}
-              to={`/projects/${project.id}`}
+              to={`/app/projects/${project.id}`}
               className="flex items-center justify-between gap-4 rounded-lg px-3 py-3.5 transition-colors hover:bg-slate-50"
             >
               <div className="min-w-0">

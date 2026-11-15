@@ -63,7 +63,7 @@ export const buildProjectWhatsAppMessage = (project, transactions = [], company 
   }
   rows.push('');
   rows.push(line);
-  rows.push(`🔗 Detail: ${window.location.origin}/projects/${project.id}`);
+  rows.push(`🔗 Detail: ${window.location.origin}/app/projects/${project.id}`);
 
   return rows.join('\n').trim();
 };
@@ -132,7 +132,7 @@ export const shareProjectWhatsAppRich = async (project, transactions, company, i
 };
 
 export const copyProjectLink = (projectId) => {
-  const link = `${window.location.origin}/projects/${projectId}`;
+  const link = `${window.location.origin}/app/projects/${projectId}`;
   
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(link)

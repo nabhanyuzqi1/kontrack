@@ -50,3 +50,6 @@ functions/.env.*
 Thumbs.db
 # source function produksi hasil unduhan (tinjau dulu sebelum commit)
 functions-live/
+
+# esbuild di MSYS menafsirkan --outfile=/dev/null sebagai berkas nyata
+dev/

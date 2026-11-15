@@ -6,6 +6,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   FileDown,
+  FileCode2,
   Landmark,
   PenLine,
   Send,
@@ -37,6 +38,7 @@ import {
 } from '../../services/invoices';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
 import { sendInvoiceEmail, buildBillingEmailContent } from '../../services/email';
+import CoretaxExportModal from './CoretaxExportModal';
 
 const statusTone = { draft: 'slate', sent: 'blue', paid: 'emerald', void: 'red' };
 
@@ -67,6 +69,8 @@ const InvoiceDetailModal = ({
 }) => {
   const [tab, setTab] = useState('detail');
   const [downloading, setDownloading] = useState(false);
+  const [coretaxOpen, setCoretaxOpen] = useState(false);
+  const [companyForCoretax, setCompanyForCoretax] = useState(null);
   const [uploading, setUploading] = useState(null);
 
   // Form email penagihan
@@ -108,6 +112,12 @@ const InvoiceDetailModal = ({
     } finally {
       setDownloading(false);
     }
+  };
+
+  const handleExportCoretax = async () => {
+    const settings = await getCompanySettings().catch(() => null);
+    setCompanyForCoretax(mergeCompanyInfo(settings || {}));
+    setCoretaxOpen(true);
   };
 
   const openEmail = async () => {
@@ -226,6 +236,10 @@ const InvoiceDetailModal = ({
                 Edit
               </Button>
             )}
+            <Button variant="secondary" size="sm" onClick={handleExportCoretax}>
+              <FileCode2 className="h-4 w-4" />
+              Export CoreTax
+            </Button>
             <Button size="sm" onClick={handleDownload} loading={downloading}>
               <FileDown className="h-4 w-4" />
               Unduh PDF
@@ -455,6 +469,14 @@ const InvoiceDetailModal = ({
       )}
     </Modal>
 
+    {coretaxOpen && (
+      <CoretaxExportModal
+        isOpen
+        onClose={() => setCoretaxOpen(false)}
+        invoices={[{ ...inv, invoiceItems: items, client: inv.client || { client_name: inv.clientName } }]}
+        company={companyForCoretax}
+      />
+    )}
     {labelOpen && (
       <Modal
         isOpen

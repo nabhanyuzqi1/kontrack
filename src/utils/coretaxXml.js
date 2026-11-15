@@ -31,15 +31,68 @@ export const TRX_CODES = [
   { code: '04', label: '04 — DPP Nilai Lain (PMK 131/2024)' }
 ];
 
-// Satuan CoreTax. Faktur PT PEB memakai satuan yang tampil sebagai "Kegiatan".
-// UM.0001 diambil dari TaxInvoiceTemplate.xml resmi; kode lain HARUS dicocokkan
-// dengan daftar satuan di akun CoreTax Anda sebelum unggah massal.
-export const CORETAX_UNITS = [
-  { code: 'UM.0018', label: 'Kegiatan (dipakai faktur PT PEB)' },
-  { code: 'UM.0001', label: 'UM.0001 (dari template resmi)' },
-  { code: 'UM.0021', label: 'Paket' },
-  { code: 'UM.0033', label: 'Unit' }
+// Satuan ukur Coretax DJP — daftar RESMI, dipisah per jenis barang (A) dan
+// jasa (B). Coretax menolak satuan yang tidak termasuk kelompok jenisnya:
+// "Satuan = UM.0018 tidak tersedia untuk Jenis Barang/Jasa = B" terjadi karena
+// UM.0018 (Unit) hanya ada di kelompok BARANG.
+// Sumber: daftar satuan ukur Coretax DJP (PER-11/PJ/2025 Lampiran D) dan
+// worksheet REF pada ConverterEfakturCoretax v1.6 resmi pajak.go.id.
+export const CORETAX_UNITS_GOODS = [
+  { code: 'UM.0001', label: 'Metrik Ton' },
+  { code: 'UM.0002', label: 'Wet Ton' },
+  { code: 'UM.0003', label: 'Kilogram' },
+  { code: 'UM.0004', label: 'Gram' },
+  { code: 'UM.0005', label: 'Karat' },
+  { code: 'UM.0006', label: 'Kiloliter' },
+  { code: 'UM.0007', label: 'Liter' },
+  { code: 'UM.0008', label: 'Barrel' },
+  { code: 'UM.0009', label: 'MMBTU' },
+  { code: 'UM.0010', label: 'Ampere' },
+  { code: 'UM.0011', label: 'Sentimeter Kubik' },
+  { code: 'UM.0012', label: 'Meter Persegi' },
+  { code: 'UM.0013', label: 'Meter' },
+  { code: 'UM.0014', label: 'Inci' },
+  { code: 'UM.0015', label: 'Sentimeter' },
+  { code: 'UM.0016', label: 'Yard' },
+  { code: 'UM.0017', label: 'Lusin' },
+  { code: 'UM.0018', label: 'Unit' },
+  { code: 'UM.0019', label: 'Set' },
+  { code: 'UM.0020', label: 'Lembar' },
+  { code: 'UM.0021', label: 'Piece' },
+  { code: 'UM.0022', label: 'Boks' },
+  { code: 'UM.0036', label: 'Drum' },
+  { code: 'UM.0037', label: 'Karton' },
+  { code: 'UM.0033', label: 'Lainnya (barang)' }
 ];
+
+export const CORETAX_UNITS_SERVICES = [
+  { code: 'UM.0023', label: 'Tahun' },
+  { code: 'UM.0024', label: 'Bulan' },
+  { code: 'UM.0025', label: 'Minggu' },
+  { code: 'UM.0026', label: 'Hari' },
+  { code: 'UM.0027', label: 'Jam' },
+  { code: 'UM.0028', label: 'Menit' },
+  { code: 'UM.0029', label: 'Persen' },
+  { code: 'UM.0030', label: 'Kegiatan' },
+  { code: 'UM.0031', label: 'Bahan / Material' },
+  { code: 'UM.0033', label: 'Lainnya (jasa) / Laporan' }
+];
+
+// Default per jenis: jasa konstruksi ditagih per "Kegiatan" (UM.0030) —
+// inilah satuan yang tercetak pada faktur PT PEB. UM.0018 tidak valid untuk B.
+export const DEFAULT_UNIT_FOR_OPT = {
+  [GOODSERVICE_OPT.JASA]: 'UM.0030',
+  [GOODSERVICE_OPT.BARANG]: 'UM.0018'
+};
+
+export const unitsForOpt = (opt) =>
+  opt === GOODSERVICE_OPT.BARANG ? CORETAX_UNITS_GOODS : CORETAX_UNITS_SERVICES;
+
+export const isValidUnitForOpt = (unit, opt) =>
+  unitsForOpt(opt).some((u) => u.code === unit);
+
+// Daftar gabungan untuk pemanggil lama.
+export const CORETAX_UNITS = [...CORETAX_UNITS_SERVICES, ...CORETAX_UNITS_GOODS];
 
 const esc = (v) =>
   String(v ?? '')
@@ -111,11 +164,15 @@ export const buildCoretaxXml = (invoices, company, options = {}) => {
   const {
     opt = GOODSERVICE_OPT.JASA,
     code = '010000',
-    unit = 'UM.0018', // tampil "Kegiatan" pada faktur PT PEB
+    unit = DEFAULT_UNIT_FOR_OPT[opt],
     trxCode = '01',
     vatRate = 12, // DPP Nilai Lain 11/12 × 12% = efektif 11%
     sellerBranch = '000000'
   } = options;
+
+  // Jaring pengaman: satuan dari UI lama bisa saja tidak valid untuk jenis ini
+  // (mis. UM.0018 untuk jasa) — Coretax akan menolak seluruh berkas.
+  const safeUnit = isValidUnitForOpt(unit, opt) ? unit : DEFAULT_UNIT_FOR_OPT[opt];
 
   const sellerTin = cleanTin(company?.npwp);
   const sellerIdtku = toIdtku(company?.npwp, sellerBranch);
@@ -130,7 +187,7 @@ export const buildCoretaxXml = (invoices, company, options = {}) => {
     );
     const fallbackAmount = inv.totals?.subtotal ?? inv.subtotal ?? inv.grandTotal;
     const list = (items.length ? items : [{ description: inv.projectName, amount: fallbackAmount }])
-      .map((item) => buildGoodService(item, { opt, code, unit, useDppNilaiLain, vatRate }))
+      .map((item) => buildGoodService(item, { opt, code, unit: safeUnit, useDppNilaiLain, vatRate }))
       .join('\n');
 
     return [
@@ -183,9 +240,16 @@ export const downloadCoretaxXml = (invoices, company, options = {}) => {
 };
 
 // Validasi sebelum ekspor — kembalikan daftar masalah (kosong = siap).
-export const validateForCoretax = (invoices, company) => {
+export const validateForCoretax = (invoices, company, options = {}) => {
+  const opt = options.opt || GOODSERVICE_OPT.JASA;
+  const unit = options.unit || DEFAULT_UNIT_FOR_OPT[opt];
   const issues = [];
   if (!cleanTin(company?.npwp)) issues.push('NPWP perusahaan belum diisi di Pengaturan.');
+  if (!isValidUnitForOpt(unit, opt)) {
+    issues.push(
+      `Satuan ${unit} tidak tersedia untuk jenis ${opt === GOODSERVICE_OPT.JASA ? 'B (jasa)' : 'A (barang)'} — diganti otomatis ke ${DEFAULT_UNIT_FOR_OPT[opt]}.`
+    );
+  }
   invoices.forEach((inv) => {
     const no = inv.invoiceNumber || inv.number || '(tanpa nomor)';
     const client = inv.client || {};

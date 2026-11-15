@@ -4,6 +4,8 @@ import { ShieldCheck, Zap, LineChart } from 'lucide-react';
 import { signInUser, signUpUser, signInWithGoogle } from '../../services/auth';
 import Logo from '../brand/Logo';
 import Button from '../ui/Button';
+// Warna publik dipisahkan dari mode aplikasi.
+import '../../styles/public.css';
 
 const errorMessages = {
   'auth/invalid-email': 'Email tidak valid',
@@ -23,8 +25,15 @@ const highlights = [
   { icon: ShieldCheck, text: 'Data proyek aman, akses berbasis peran' }
 ];
 
-const darkInput =
-  'w-full rounded-lg border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50';
+// Latar halaman login sengaja SELALU gelap (#070c18 = navy-950). Karena itu
+// setiap warna di sini literal untuk permukaan gelap, bukan kelas `slate-*`
+// yang nilainya ikut mode aplikasi: mode terang akan membuat label jadi gelap
+// dan hilang di atas latar navy.
+const loginInput =
+  'w-full rounded-lg border border-white/15 bg-[#0b1220] px-3.5 py-2.5 text-sm text-white placeholder:text-[#8b96ab] transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50';
+
+const labelClass = 'mb-1.5 block text-sm font-medium text-[#cfd7e6]';
+const secondaryLink = 'text-[#a3aec2] underline decoration-white/25 underline-offset-2 transition-colors hover:text-white';
 
 const LoginPage = ({ onUserLogin }) => {
   const [email, setEmail] = useState('');
@@ -42,7 +51,7 @@ const LoginPage = ({ onUserLogin }) => {
     try {
       const user = await signInWithGoogle();
       onUserLogin(user);
-      navigate(user.role === 'admin' ? '/' : '/projects');
+      navigate(user.role === 'admin' ? '/app' : '/app/projects');
     } catch (err) {
       if (err?.code === 'auth/popup-closed-by-user') {
         setError('');
@@ -66,7 +75,7 @@ const LoginPage = ({ onUserLogin }) => {
         ? await signUpUser(email, password, name)
         : await signInUser(email, password);
       onUserLogin(user);
-      navigate(user.role === 'admin' ? '/' : '/projects');
+      navigate(user.role === 'admin' ? '/app' : '/app/projects');
     } catch (err) {
       setError(errorMessages[err.code] || 'Terjadi kesalahan saat masuk. Coba lagi.');
     } finally {
@@ -75,25 +84,22 @@ const LoginPage = ({ onUserLogin }) => {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-navy-950">
-      {/* Latar futuristik: mesh gradient + grid */}
-      <div className="pointer-events-none absolute inset-0 bg-auth-mesh" />
-      <div className="pointer-events-none absolute inset-0 bg-grid-glow" />
+    <div data-public-login className="relative min-h-screen overflow-hidden bg-navy-950">
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col lg:flex-row lg:items-center lg:gap-16 lg:px-8">
         {/* Panel branding */}
         <div className="flex flex-1 flex-col justify-center px-6 pb-8 pt-10 lg:px-0 lg:py-0">
-          <Logo dark className="mb-8" />
+          <Link to="/" aria-label="Kontrack, halaman utama" className="mb-8 self-start"><Logo dark /></Link>
           <h1 className="max-w-md font-display text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
-            Kendalikan proyek dan keuangan <span className="text-gradient">dalam satu platform</span>
+            Kendalikan proyek dan keuangan <span className="text-[#a1b4fe]">dalam satu platform</span>
           </h1>
-          <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
+          <p className="mt-4 max-w-md text-sm leading-relaxed text-[#a3aec2]">
             Kontrack membantu kontraktor memantau nilai proyek, pembayaran, dan arus kas — dari SPK
             pertama sampai serah terima.
           </p>
           <ul className="mt-8 hidden space-y-4 lg:block">
             {highlights.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 text-sm text-slate-300">
+              <li key={text} className="flex items-center gap-3 text-sm text-[#cfd7e6]">
                 <span className="rounded-lg bg-brand-600/20 p-2 text-brand-300 ring-1 ring-inset ring-brand-500/30">
                   <Icon className="h-4 w-4" />
                 </span>
@@ -105,18 +111,18 @@ const LoginPage = ({ onUserLogin }) => {
 
         {/* Kartu form login */}
         <div className="flex flex-1 items-center justify-center px-6 pb-12 lg:px-0 lg:pb-0">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-xl">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111a33] p-6 sm:p-8 shadow-2xl">
             <h2 className="font-display text-xl font-semibold text-white">
               {signup ? 'Daftar Akun Baru' : 'Masuk ke Kontrack'}
             </h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-[#a3aec2]">
               {signup ? 'Buat akun Kontrack dengan email dan password' : 'Gunakan akun yang terdaftar di organisasi Anda'}
             </p>
 
             <form onSubmit={handleSubmit} className="mt-7 space-y-5">
               {signup && (
                 <div>
-                  <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-slate-300">
+                  <label htmlFor="name" className={labelClass}>
                     Nama lengkap
                   </label>
                   <input
@@ -124,7 +130,7 @@ const LoginPage = ({ onUserLogin }) => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className={darkInput}
+                    className={loginInput}
                     placeholder="Nama Anda"
                     autoComplete="name"
                     required
@@ -133,7 +139,7 @@ const LoginPage = ({ onUserLogin }) => {
                 </div>
               )}
               <div>
-                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-300">
+                <label htmlFor="email" className={labelClass}>
                   Email
                 </label>
                 <input
@@ -141,7 +147,7 @@ const LoginPage = ({ onUserLogin }) => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={darkInput}
+                  className={loginInput}
                   placeholder="nama@perusahaan.com"
                   autoComplete="email"
                   required
@@ -150,7 +156,7 @@ const LoginPage = ({ onUserLogin }) => {
               </div>
 
               <div>
-                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-300">
+                <label htmlFor="password" className={labelClass}>
                   Password
                 </label>
                 <input
@@ -158,7 +164,7 @@ const LoginPage = ({ onUserLogin }) => {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={darkInput}
+                  className={loginInput}
                   placeholder="••••••••"
                   autoComplete="current-password"
                   required
@@ -167,12 +173,12 @@ const LoginPage = ({ onUserLogin }) => {
               </div>
 
               {error && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-[#fca5a5]">
                   {error}
                 </div>
               )}
 
-              <Button type="submit" variant="gradient" size="lg" loading={loading} className="w-full">
+              <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
                 {loading ? 'Memproses…' : signup ? 'Daftar' : 'Masuk'}
               </Button>
             </form>
@@ -180,7 +186,7 @@ const LoginPage = ({ onUserLogin }) => {
             {/* Pemisah + masuk dengan Google */}
             <div className="my-5 flex items-center gap-3">
               <span className="h-px flex-1 bg-white/10" />
-              <span className="text-xs text-slate-500">atau</span>
+              <span className="text-xs text-[#a3aec2]">atau</span>
               <span className="h-px flex-1 bg-white/10" />
             </div>
 
@@ -188,7 +194,7 @@ const LoginPage = ({ onUserLogin }) => {
               type="button"
               onClick={handleGoogle}
               disabled={googleLoading || loading}
-              className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-[#1a2340] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
             >
               <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -212,16 +218,23 @@ const LoginPage = ({ onUserLogin }) => {
             </button>
 
             <p className="mt-4 text-xs">
-              <Link to="/welcome" className="text-slate-500 hover:text-slate-300">
+              <Link to="/" className={secondaryLink}>
                 ← Kembali ke halaman utama
               </Link>
             </p>
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <p className="mt-2 text-xs text-[#a3aec2]">
+              <Link to="/privacy" className="hover:text-[#cfd7e6]">Kebijakan Privasi</Link>
+              <span className="px-2 text-[#a3aec2]">·</span>
+              <Link to="/terms" className="hover:text-[#cfd7e6]">Syarat Layanan</Link>
+              <span className="px-2 text-[#a3aec2]">·</span>
+              <Link to="/support" className="hover:text-[#cfd7e6]">Bantuan</Link>
+            </p>
+            <p className="mt-3 text-xs leading-relaxed text-[#a3aec2]">
               {signup ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
               <button
                 type="button"
                 onClick={() => { setSignup(!signup); setError(''); }}
-                className="font-medium text-brand-400 hover:text-brand-300"
+                className="font-medium text-[#a1b4fe] hover:text-white"
               >
                 {signup ? 'Masuk di sini' : 'Daftar sekarang'}
               </button>
