@@ -53,3 +53,6 @@ functions-live/
 
 # esbuild di MSYS menafsirkan --outfile=/dev/null sebagai berkas nyata
 dev/
+
+# build sementara dari esbuild (jangan di-commit)
+tmp/
