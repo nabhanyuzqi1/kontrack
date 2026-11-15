@@ -1,6 +1,6 @@
 // src/components/invoices/InvoiceModal.jsx
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Plus, Trash2, FileDown } from 'lucide-react';
+import { Plus, Trash2, FileDown, ScanLine, Loader2, FileSearch } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Field, Input, Textarea, Label } from '../ui/Field';
@@ -18,6 +18,7 @@ import {
   billingStageLabel
 } from '../../services/invoices';
 import { getAllClients, clientDisplayName } from '../../services/clients';
+import { scanWphoDocument } from '../../services/ai';
 import { Select } from '../ui/Field';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -184,6 +185,63 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
   );
 
   const [generating, setGenerating] = useState(false);
+  const [scanningWpho, setScanningWpho] = useState(false);
+  const [scanningFaktur, setScanningFaktur] = useState(false);
+
+  // Scan WPHO/BAST: isi nomor WPHO + item pekerjaan (nilai & deskripsi) otomatis.
+  const handleScanWpho = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setScanningWpho(true);
+    try {
+      const doc = await scanWphoDocument(file);
+      if (!doc) throw new Error('empty');
+      if (doc.wphoNumber) setWphoNumber(doc.wphoNumber);
+      if (doc.date) setCityDate(String(doc.date).slice(0, 10));
+      if (doc.contractNumber && !pkNumber) setPkNumber(doc.contractNumber);
+      if (doc.pkNumber && !pkNumber) setPkNumber(doc.pkNumber);
+      if (doc.workName || doc.amount) {
+        setItems((prev) => {
+          const next = [...prev];
+          const target = next[0] || { description: '', unit: 'Unit', qty: '100%', unitPrice: '', amount: '' };
+          const amt = Math.round(Number(doc.amount) || 0);
+          next[0] = {
+            ...target,
+            description: doc.workName || target.description,
+            // Nilai WPHO mengisi Amount; unitPrice ikut supaya PDF & XML konsisten.
+            unitPrice: target.unitPrice || String(amt || ''),
+            amount: String(amt || target.amount || '')
+          };
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error('Scan WPHO gagal:', err);
+      alert('Gagal memindai WPHO. Periksa koneksi atau coba lagi.');
+    } finally {
+      setScanningWpho(false);
+    }
+  };
+
+  // Scan Faktur Pajak: isi nomor faktur otomatis (bisa dilakukan nanti).
+  const handleScanFaktur = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setScanningFaktur(true);
+    try {
+      const doc = await scanWphoDocument(file, 'faktur');
+      if (!doc) throw new Error('empty');
+      if (doc.taxInvoiceNumber) setTaxInvoiceNumber(doc.taxInvoiceNumber);
+      if (doc.date) setCityDate(String(doc.date).slice(0, 10));
+    } catch (err) {
+      console.error('Scan faktur gagal:', err);
+      alert('Gagal memindai faktur pajak. Periksa koneksi atau coba lagi.');
+    } finally {
+      setScanningFaktur(false);
+    }
+  };
 
   const handleGenerate = useCallback(async () => {
     if (!clientId) {
@@ -228,12 +286,11 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
         ...(editing ? {} : { status: 'draft' })
       };
 
-      // Simpan record dulu (agar muncul di daftar Invoice), lalu generate PDF
+      // Simpan sebagai draft — PDF tidak dibuat otomatis; tersedia di detail invoice.
       if (editing) {
         await updateInvoice(invoice.id, payload);
       } else {
         await addInvoice(payload);
-        await generateInvoicePDF(payload, company);
       }
       onSuccess?.();
       onClose?.();
@@ -263,8 +320,7 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
             Batal
           </Button>
           <Button onClick={handleGenerate} loading={generating}>
-            <FileDown className="h-4 w-4" />
-            {generating ? 'Menyimpan…' : editing ? 'Simpan Perubahan' : 'Generate PDF'}
+            {generating ? 'Menyimpan…' : editing ? 'Simpan Perubahan' : 'Simpan Draft'}
           </Button>
         </>
       }
@@ -314,11 +370,29 @@ const InvoiceModal = ({ isOpen, onClose, onSuccess, project, invoice }) => {
             <Field label="PK No.">
               <Input value={pkNumber} onChange={(e) => setPkNumber(e.target.value)} placeholder="SLM/PK-HO/TEK/11/3/2026" />
             </Field>
-            <Field label="No. WPHO">
-              <Input value={wphoNumber} onChange={(e) => setWphoNumber(e.target.value)} placeholder="SLM/WP/2605/00165" />
+            <Field label="No. WPHO / BAST">
+              <div className="flex gap-1.5">
+                <Input value={wphoNumber} onChange={(e) => setWphoNumber(e.target.value)} placeholder="SLM/WP/2611/00449" />
+                <label
+                  title="Pindai dokumen WPHO/BAST (AI)"
+                  className="flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 px-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-700"
+                >
+                  {scanningWpho ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleScanWpho} disabled={scanningWpho} />
+                </label>
+              </div>
             </Field>
             <Field label="No. Faktur Pajak">
-              <Input value={taxInvoiceNumber} onChange={(e) => setTaxInvoiceNumber(e.target.value)} placeholder="-" />
+              <div className="flex gap-1.5">
+                <Input value={taxInvoiceNumber} onChange={(e) => setTaxInvoiceNumber(e.target.value)} placeholder="04002600477969058" />
+                <label
+                  title="Pindai faktur pajak (AI)"
+                  className="flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 px-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-700"
+                >
+                  {scanningFaktur ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4" />}
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleScanFaktur} disabled={scanningFaktur} />
+                </label>
+              </div>
             </Field>
             <Field label="Termin">
               <Select value={billingStage} onChange={(e) => setBillingStage(e.target.value)}>

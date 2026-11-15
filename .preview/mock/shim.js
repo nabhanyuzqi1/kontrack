@@ -42,6 +42,14 @@ export const deleteTransaction = noop;
 export const uploadTransactionImage = async () => 'https://example.invalid/bukti.webp';
 export const validateImageFile = () => true;
 export const analyzeTransactionImages = async () => ({ transactions: [] });
+export const scanWphoDocument = async () => ({
+  wphoNumber: 'SLM/WP/2611/00449',
+  amount: 39710000,
+  workName: 'BAK KOMPOSTING AFD XVI BLOK O078 KBN 5 (25 M2)',
+  date: '2026-11-03',
+  contractNumber: 'SLM/CR/2512/00835',
+  pkNumber: 'SLM/PK-HO/TEK/37/7/2026'
+});
 
 // --- Invoice & dokumen pajak ---
 export const getAllInvoices = async () => invoices;

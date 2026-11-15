@@ -368,6 +368,102 @@ exports.analyzeTransactionImageWithAI = onCall(
 );
 
 // ---------------------------------------------------------------------------
+// Scan dokumen WPHO / BAST (Berita Acara Hasil Kerja / BAST kontraktor).
+// Ekstrak nomor BA, nilai pekerjaan, nama pekerjaan, tanggal, dan referensi
+// kontrak/PK — dipakai form invoice untuk mengisi otomatis item pekerjaan.
+// ---------------------------------------------------------------------------
+
+const WPHO_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    wphoNumber: {type: "STRING", description: "Nomor BA/WPHO, kosongkan bila tak ada"},
+    amount: {type: "NUMBER", description: "Nilai total pekerjaan (Jumlah), angka murni tanpa pemisah"},
+    workName: {type: "STRING", description: "Nama/uraian pekerjaan"},
+    date: {type: "STRING", description: "Tanggal BA, ISO 8601, kosongkan bila tak ada"},
+    contractNumber: {type: "STRING", description: "Nomor kontrak, kosongkan bila tak ada"},
+    pkNumber: {type: "STRING", description: "Nomor PK, kosongkan bila tak ada"},
+  },
+  required: ["wphoNumber", "amount", "workName"],
+};
+
+// Skema untuk foto/scan Faktur Pajak (e-Faktur/CoreTax).
+const FAKTUR_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    taxInvoiceNumber: {type: "STRING", description: "Kode dan nomor seri faktur pajak, kosongkan bila tak ada"},
+    amount: {type: "NUMBER", description: "Harga jual/penggantian/termin (Rp), angka murni tanpa pemisah"},
+    workName: {type: "STRING", description: "Nama barang/jasa kena pajak"},
+    date: {type: "STRING", description: "Tanggal faktur, ISO 8601, kosongkan bila tak ada"},
+  },
+  required: ["taxInvoiceNumber", "amount", "workName"],
+};
+
+const WPHO_PROMPT = `Ekstrak data dari dokumen WPHO/BAST (Berita Acara Hasil Kerja) kontraktor.
+Aturan:
+- wphoNumber: nomor BA/WPHO (bukan nomor kontrak).
+- amount: nilai "Jumlah"/"Total" pekerjaan (SEBELUM PPN), angka murni tanpa titik/koma desimal.
+- workName: nama pekerjaan dari kolom Kegiatan/Keterangan.
+- date: tanggal BA (Tanggal BA), format YYYY-MM-DD.`;
+
+const FAKTUR_PROMPT = `Ekstrak data dari Faktur Pajak (e-Faktur/CoreTax).
+Aturan:
+- taxInvoiceNumber: "Kode dan Nomor Seri Faktur Pajak".
+- amount: "Harga Jual / Penggantian / Uang Muka / Termin" (Rp), angka murni tanpa pemisah.
+- workName: nama barang/jasa kena pajak dari tabel rincian.
+- date: tanggal faktur, format YYYY-MM-DD.`;
+exports.scanWphoDocument = onCall(
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, secrets: [geminiApiKey]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Anda harus login untuk memakai fitur AI.");
+      }
+
+      const apiKey = geminiApiKey.value();
+      const {base64String, mimeType, kind = "wpho"} = request.data || {};
+      if (!base64String || !mimeType) {
+        throw new HttpsError("invalid-argument", "Gambar dokumen (base64String & mimeType) wajib ada.");
+      }
+      const schema = kind === "faktur" ? FAKTUR_SCHEMA : WPHO_SCHEMA;
+      const prompt = kind === "faktur" ? FAKTUR_PROMPT : WPHO_PROMPT;
+
+      // Scan WPHO dihitung ke kuota gambar yang sama dengan analisis transaksi.
+      await enforceDailyQuota(request.auth.uid, "image", 1);
+
+      const requestBody = {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {text: prompt},
+              {inlineData: {mime_type: mimeType, data: base64String}},
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          topK: 1,
+          topP: 1,
+          maxOutputTokens: 512,
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          thinkingConfig: {thinkingBudget: 0},
+        },
+      };
+
+      logger.info("Scan dokumen WPHO via Gemini.");
+
+      try {
+        const text = await callGemini(requestBody, apiKey, "scanWphoDocument");
+        return {document: JSON.parse(text)};
+      } catch (error) {
+        if (error instanceof HttpsError) throw error;
+        logger.error("Kesalahan memanggil Gemini (scanWphoDocument):", error);
+        throw new HttpsError("unknown", "Terjadi kesalahan saat memindai dokumen.");
+      }
+    },
+);
+
+// ---------------------------------------------------------------------------
 // Analisis keuangan berbasis AI (untuk Dashboard & Laporan)
 //
 // HEMAT TOKEN: klien mengirim RINGKASAN metrik yang sudah dihitung di sisi

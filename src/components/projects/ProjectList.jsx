@@ -239,7 +239,6 @@ const ProjectList = ({ currentUser }) => {
             onDelete={isAdmin ? handleDeleteProject : null}
             currentUser={currentUser}
           />
-        )}
       )}
 
       {showProjectModal && isAdmin && (

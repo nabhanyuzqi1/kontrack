@@ -40,6 +40,26 @@ export const buildProjectWhatsAppMessage = (project, transactions = [], company 
     rows.push(`• Pemasukan: ${formatCurrency(income)}`);
     rows.push(`• Pengeluaran: ${formatCurrency(expense)}`);
     rows.push(`• Saldo: ${formatCurrency(income - expense)}`);
+
+    // Rincian per kategori (maks. 5 teratas tiap arah) — informasi tanpa banjir teks.
+    const byCategory = (type) => {
+      const map = {};
+      transactions
+        .filter((t) => t.type === type && t.amount)
+        .forEach((t) => {
+          map[t.category || 'Lainnya'] = (map[t.category || 'Lainnya'] || 0) + (Number(t.amount) || 0);
+        });
+      return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    };
+    const pengeluaran = byCategory('expense');
+    if (pengeluaran.length > 0) {
+      rows.push('');
+      rows.push('*Pengeluaran per Kategori*');
+      pengeluaran.forEach(([kat, amt]) => {
+        const pct = expense > 0 ? ((amt / expense) * 100).toFixed(1) : '0';
+        rows.push(`• ${kat}: ${formatCurrency(amt)} (${pct}%)`);
+      });
+    }
   }
   rows.push('');
   rows.push(line);

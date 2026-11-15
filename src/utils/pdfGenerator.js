@@ -270,7 +270,65 @@ export const generateProjectPDF = (project, transactions = []) => {
   });
   
   yPos = doc.lastAutoTable.finalY + 15;
-  
+
+  // Rincian per kategori — agregat otomatis dari transaksi, dikelompokkan
+  // masuk/keluar, diurut dari nominal terbesar.
+  const categoryTotals = {};
+  transactions.forEach((t) => {
+    if (!t.amount) return;
+    const key = `${t.type === 'income' ? 'Masuk' : 'Keluar'}|${t.category || 'Lainnya'}`;
+    categoryTotals[key] = (categoryTotals[key] || 0) + (Number(t.amount) || 0);
+  });
+  const categoryRows = Object.entries(categoryTotals)
+    .map(([key, amount]) => {
+      const [jenis, kat] = key.split('|');
+      return { jenis, kat, amount };
+    })
+    .sort((a, b) => b.amount - a.amount);
+
+  if (categoryRows.length > 0) {
+    if (yPos > 195) {
+      doc.addPage();
+      yPos = addHeader(doc, 'LAPORAN PROYEK (Lanjutan)', true);
+    }
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RINCIAN PER KATEGORI', 105, yPos, { align: 'center' });
+    yPos += 8;
+
+    const catIncome = categoryRows.filter((r) => r.jenis === 'Masuk').reduce((s, r) => s + r.amount, 0);
+    const catExpense = categoryRows.filter((r) => r.jenis === 'Keluar').reduce((s, r) => s + r.amount, 0);
+    const catData = categoryRows.map((r) => {
+      const base = r.jenis === 'Masuk' ? catIncome : catExpense;
+      return [r.jenis, r.kat, base ? ((r.amount / base) * 100).toFixed(1) + '%' : '0%', formatCurrency(r.amount)];
+    });
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Jenis', 'Kategori', 'Porsi', 'Jumlah']],
+      body: catData,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9,
+        halign: 'center'
+      },
+      styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
+      columnStyles: {
+        0: { cellWidth: 30, halign: 'center' },
+        1: { cellWidth: 60, halign: 'left' },
+        2: { cellWidth: 25, halign: 'center' },
+        3: { cellWidth: 45, halign: 'right' }
+      },
+      margin: { left: 35 },
+      tableWidth: 160
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  }
+
   // Project Description
   if (project.description) {
     if (yPos > 200) {

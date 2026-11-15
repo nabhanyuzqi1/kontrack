@@ -127,3 +127,17 @@ export const analyzeTransactionImage = async (file, userId) => {
     throw new Error(error.message || 'Terjadi kesalahan saat menganalisis gambar. Coba lagi.');
   }
 };
+
+// Scan dokumen: WPHO/BAST (kind="wpho") atau Faktur Pajak (kind="faktur").
+// Kompresi dilakukan sekali; hasilnya yang dikirim ke Gemini (hemat token vision).
+export const scanWphoDocument = async (file, kind = 'wpho') => {
+  const compressed = await compressImage(file);
+  const dataUrl = await fileToBase64(compressed);
+  const fn = httpsCallable(aiFunctions(), 'scanWphoDocument');
+  const response = await fn({
+    base64String: dataUrl.split(',')[1],
+    mimeType: compressed.type || 'image/jpeg',
+    kind,
+  });
+  return response.data?.document || null;
+};

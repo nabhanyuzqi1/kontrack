@@ -128,10 +128,19 @@ const Reports = ({ currentUser }) => {
 
     // Piutang termin (belum tertagih) dan retensi yang ditahan pemberi kerja —
     // dua penyebab utama jeda arus kas kontraktor, jadi keduanya tampil di depan.
+    // Retensi pakai retentionPct bila tersedia; jika tidak, sisa nilai kontrak
+    // proyek berstatus retensi adalah pendekatan terbaiknya.
     const outstanding = Math.max(totalValue - totalPaid, 0);
     const retention = projectList
       .filter((p) => p.status === PROJECT_STATUS.RETENSI)
-      .reduce((sum, p) => sum + Math.max((p.value || 0) - (p.paidAmount || 0), 0), 0);
+      .reduce(
+        (sum, p) =>
+          sum +
+          (p.retentionPct != null
+            ? ((p.value || 0) * (Number(p.retentionPct) || 0)) / 100
+            : Math.max((p.value || 0) - (p.paidAmount || 0), 0)),
+        0
+      );
 
     const incomeTxns = transactionList.filter((t) => inRange(t) && t.type === 'income');
     const expenseTxns = transactionList.filter((t) => inRange(t) && t.type === 'expense');

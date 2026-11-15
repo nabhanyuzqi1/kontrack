@@ -3,7 +3,7 @@
 // angka rata kanan dengan tabular numerals, status dan tenggat mudah discan
 // vertikal. Ini default daftar proyek; grid kartu tetap tersedia lewat toggle.
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Link2, PenLine, Trash2, AlertCircle } from 'lucide-react';
 import {
   formatCurrency,
@@ -16,6 +16,7 @@ const shortDate = (d) =>
   new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' });
 
 const ProjectTable = ({ project, onEdit, onDelete, currentUser }) => {
+  const navigate = useNavigate();
   const progress = calculateProjectProgress(project);
   const daysLeft = calculateDaysLeft(project.endDate);
   const value = Number(project.value) || 0;
@@ -37,7 +38,10 @@ const ProjectTable = ({ project, onEdit, onDelete, currentUser }) => {
   };
 
   return (
-    <tr className="group cursor-pointer border-b border-slate-200/60 transition-colors last:border-0 hover:bg-slate-100/50 dark:border-white/5 dark:hover:bg-white/[0.04]">
+    <tr
+      onClick={() => navigate(`/projects/${project.id}`)}
+      className="group cursor-pointer border-b border-slate-200/60 transition-colors last:border-0 hover:bg-slate-100/50 dark:border-white/5 dark:hover:bg-white/[0.04]"
+    >
       {/* Proyek + mitra */}
       <td className="max-w-[260px] px-3 py-2.5 sm:px-4">
         <Link to={`/projects/${project.id}`} className="block">

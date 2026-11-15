@@ -23,11 +23,12 @@ export const CORETAX_SERVICE_CODES = [
 ];
 
 // Kode transaksi: 01 = kepada selain pemungut PPN; 02 = kepada pemungut bendaharawan;
-// 03 = kepada pemungut selain bendaharawan (BUMN dll).
+// 03 = kepada pemungut selain bendaharawan (BUMN dll); 04 = DPP nilai lain (PMK 131/2024).
 export const TRX_CODES = [
   { code: '01', label: '01 — Kepada selain pemungut PPN (swasta)' },
   { code: '02', label: '02 — Kepada pemungut bendaharawan' },
-  { code: '03', label: '03 — Kepada pemungut selain bendaharawan (BUMN)' }
+  { code: '03', label: '03 — Kepada pemungut selain bendaharawan (BUMN)' },
+  { code: '04', label: '04 — DPP Nilai Lain (PMK 131/2024)' }
 ];
 
 // Satuan CoreTax. Faktur PT PEB memakai satuan yang tampil sebagai "Kegiatan".
