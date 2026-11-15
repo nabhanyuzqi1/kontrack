@@ -206,7 +206,7 @@ const UsersTab = ({ currentUser }) => {
     if (!window.confirm(`Hapus akses untuk ${user.email}?`)) return;
     setBusyId(user.id);
     try {
-      await removeUser(user.id);
+      await removeUser(user.id, user.email);
       await load();
     } catch (err) {
       alert('Gagal menghapus pengguna.');

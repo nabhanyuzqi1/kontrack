@@ -1,16 +1,20 @@
 rules_version = '2';
 
-// Kontrack — Firestore Security Rules (Fase 0, single-tenant PT PEB)
+// Kontrack — Firestore Security Rules (Fase 1, single-tenant PT PEB)
 //
-// Tujuan v1: MENUTUP AKSES ANONIM (lubang terbesar) tanpa merusak
-// aplikasi live (kontrack.web.app) yang berbagi project Firebase ini.
+// Sebelumnya berkas ini berakhir dengan
+//   match /{document=**} { allow read, write: if signedIn(); }
+// sehingga SEMUA blok di atasnya tidak berarti: rules dievaluasi OR, satu
+// `allow` yang lolos sudah meloloskan permintaan. Akibatnya user login bisa
+// menaikkan `role` miliknya sendiri dan menol kuota AI (`ai_usage`).
+// Catch-all itu dihapus total; tiap koleksi didaftarkan eksplisit.
 //
-// Batasan yang disadari (diperbaiki di Fase 2 multi-tenant + custom claims):
-// - Role admin belum bisa dicek di rules (dokumen `users` di-query by email,
-//   bukan keyed by uid) → semua user terautentikasi dianggap tim internal.
-// - `projects` masih public-read untuk fitur share link ke mitra →
-//   diganti share-token di Fase 2.
-// - Catch-all untuk koleksi milik versi live yang tidak terdaftar di sini.
+// Batasan yang disadari (Fase 2 multi-tenant + custom claims):
+// - Peran belum bisa dicek di rules: dokumen `users` di-query lewat field
+//   `email`, bukan keyed by uid. Semua user terautentikasi diperlakukan sebagai
+//   tim internal; pembedaan peran ditegakkan di Cloud Function.
+// - `projects` masih public-read untuk tautan berbagi ke mitra. Semua field
+//   proyek ikut terbaca; pengganti yang benar adalah share-token.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -18,44 +22,51 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Proyek: public-read (share link mitra via WhatsApp), tulis wajib login.
-    match /projects/{projectId} {
-      allow read: if true;
-      allow create, update, delete: if signedIn();
-    }
+    // ---- Koleksi operasional: baca/tulis wajib login -------------------
+    // Didaftarkan satu per satu supaya tidak ada koleksi "nyasar" yang
+    // tiba-tiba terbuka hanya karena tidak disebut.
 
-    // Transaksi: berisi pengeluaran internal (material, upah) — wajib login.
-    // Halaman share mitra menampilkan proyek tanpa transaksi bila anonim.
     match /transactions/{txnId} {
       allow read, write: if signedIn();
     }
 
-    // Invoice + dokumen pajak: internal — wajib login.
     match /invoices/{invoiceId} {
       allow read, write: if signedIn();
     }
 
-    // Pengaturan perusahaan: read publik (branding/tema dipakai halaman login
-    // versi live sebelum autentikasi), tulis wajib login.
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if signedIn();
+    match /clients/{clientId} {
+      allow read, write: if signedIn();
     }
 
-    // Data user & role: baca wajib login; tulis hanya via Console/Admin SDK
-    // (mencegah user menaikkan role-nya sendiri).
-    // CATATAN: catch-all di bawah tetap mengizinkan tulis oleh user login —
-    // lihat batasan di header. Match ini menjadi efektif penuh setelah
-    // catch-all dihapus di Fase 2.
+    match /projects/{projectId} {
+      // Public-read disengaja: tautan berbagi proyek ke mitra dibuka tanpa
+      // login. Transaksi tetap tertutup, jadi mitra tidak melihat biaya.
+      allow read: if true;
+      allow create, update, delete: if signedIn();
+    }
+
+    // ---- Koleksi peka ---------------------------------------------------
+
+    // Profil pengguna. Membaca wajib login (aplikasi mencari peran lewat email).
+    // Menulis: HANYA dokumen sendiri, dan hanya field profil.
+    //
+    // `role` tidak boleh berubah dari klien, tetapi pendaftaran pertama harus
+    // boleh membuatnya (dokumen belum ada → request.resource.data.role ==
+    // 'staff'). Tanpa pengecualian create ini, signup email/password dan login
+    // Google pertama akan gagal.
     match /users/{userId} {
       allow read: if signedIn();
-      allow write: if false;
+      allow create: if signedIn()
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == 'staff';
+      allow update: if signedIn()
+        && resource.data.email == request.auth.token.email
+        && request.resource.data.role == resource.data.role;
+      allow delete: if false;
     }
 
-    // Penghitung kuota AI harian. HARUS tertutup dari klien: kalau pengguna
-    // bisa menulis ke sini, dia tinggal menol-kan penghitungnya sendiri dan
-    // batas harian jadi hiasan. Hanya Admin SDK (Cloud Function) yang menulis,
-    // dan Admin SDK memang melewati rules.
+    // Penghitung kuota AI harian. Kalau klien bisa menulis ke sini, batas
+    // harian tinggal dinol-kan sendiri. Hanya Admin SDK (melewati rules).
     match /ai_usage/{docId} {
       allow read, write: if false;
     }
@@ -66,11 +77,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Catch-all SEMENTARA: koleksi lain yang dipakai versi live
-    // (clients, price items, dll.) — wajib login, tidak lagi publik.
-    // Fase 2: hapus blok ini dan daftarkan tiap koleksi secara eksplisit.
+    // Pengaturan perusahaan: read publik karena branding/tema dipakai halaman
+    // sebelum autentikasi. Tulis wajib login.
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    // ---- Sisanya tertutup ----------------------------------------------
+    // Koleksi baru yang belum terdaftar harus ditambahkan eksplisit di atas.
+    // Blok ini menutup semuanya, bukan membukanya.
     match /{document=**} {
-      allow read, write: if signedIn();
+      allow read, write: if false;
     }
   }
 }

@@ -3,7 +3,7 @@
 // Pembuatan akun & perubahan peran memakai Cloud Function yang SUDAH ter-deploy
 // (addUserToCompany, updateUserRole) agar konsisten dengan Kontrack lama.
 
-import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { legacyFunctions } from './functionsRegion';
 import { db } from './firebase';
@@ -42,19 +42,36 @@ export const inviteUser = async ({ email, name, role, sendEmail = true }) => {
   return res?.data;
 };
 
-/** Ubah peran lewat Cloud Function `updateUserRole` (fallback: tulis langsung). */
+/**
+ * Ubah peran lewat Cloud Function `updateUserRole`.
+ *
+ * Tidak ada fallback tulis langsung ke `users`: rules sengaja menolak perubahan
+ * `role` dari klien (itu jalur eskalasi hak akses). Kegagalan function harus
+ * dilaporkan, bukan ditambal dengan penulisan yang pasti ditolak.
+ */
 export const changeUserRole = async (userId, role, email) => {
+  const fn = httpsCallable(legacyFunctions(), 'updateUserRole');
   try {
-    const fn = httpsCallable(legacyFunctions(), 'updateUserRole');
     await fn({ userId, uid: userId, email, role });
   } catch (e) {
-    console.warn('updateUserRole function gagal, menulis langsung:', e?.message || e);
-    await updateDoc(doc(db, COLLECTION, userId), { role, updatedAt: new Date().toISOString() });
+    throw new Error(e?.message || 'Gagal mengubah peran pengguna.');
   }
   invalidate(CACHE_KEY);
 };
 
-export const removeUser = async (userId) => {
-  await deleteDoc(doc(db, COLLECTION, userId));
+/**
+ * Cabut akses pengguna lewat Cloud Function `removeUserAccess`.
+ *
+ * Penghapusan tidak lagi ditulis langsung dari klien: rules `users` menolak
+ * delete dari siapa pun (hanya Admin SDK), supaya pencabutan akses selalu
+ * lewat pemeriksaan peran di server.
+ */
+export const removeUser = async (userId, email) => {
+  const fn = httpsCallable(legacyFunctions(), 'removeUserAccess');
+  try {
+    await fn({ userId, email });
+  } catch (e) {
+    throw new Error(e?.message || 'Gagal menghapus akses pengguna.');
+  }
   invalidate(CACHE_KEY);
 };

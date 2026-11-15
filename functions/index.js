@@ -1442,3 +1442,41 @@ exports.updateUserRole = onCall(
       return {success: true};
     },
 );
+
+// ---------------------------------------------------------------------------
+// Hapus akses pengguna
+//
+// Dulu dihapus langsung dari klien (`deleteDoc`). Setelah rules diperketat,
+// penghapusan dari klien ditolak dan itu memang disengaja: hanya administrator
+// yang boleh mencabut akses. Dijadikan Cloud Function agar pengecekan peran
+// tetap ada dan tidak bisa dilewati.
+// ---------------------------------------------------------------------------
+
+exports.removeUserAccess = onCall(
+    {region: REGION, cors: true, maxInstances: 5},
+    async (request) => {
+      const actor = authorizeRole(["admin", "superadmin"])(await authenticateUser(request));
+      const {userId, email} = request.data || {};
+
+      let docId = userId;
+      if (docId) {
+        const d = await firestore.collection("users").doc(docId).get();
+        if (!d.exists) docId = null;
+      }
+      if (!docId && email) {
+        const snap = await firestore.collection("users").where("email", "==", email).limit(1).get();
+        if (!snap.empty) docId = snap.docs[0].id;
+      }
+      if (!docId) throw new HttpsError("not-found", "Pengguna tidak ditemukan.");
+
+      const target = await firestore.collection("users").doc(docId).get();
+      if (target.get("uid") === actor.uid) {
+        throw new HttpsError("failed-precondition", "Anda tidak dapat menghapus akses akun sendiri.");
+      }
+
+      await firestore.collection("users").doc(docId).delete();
+      await logAuditEvent("USER_ACCESS_REMOVED", {targetUserId: docId, performedBy: actor.uid}, request);
+
+      return {success: true, userId: docId};
+    },
+);

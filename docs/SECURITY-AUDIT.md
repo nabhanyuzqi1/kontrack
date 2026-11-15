@@ -4,8 +4,18 @@ Tanggal: 2026-11-15 · Branch: `rebrand/kontrack-saas` · Unit 5.
 Lingkup: `firestore.rules`, `storage.rules`, `firebase.json`,
 `functions/index.js`, `index.html`. UI tidak diubah.
 
-Status: **belum di-deploy**. Semua perbaikan di berkas; penerapan menunggu
-izin pemilik (`firebase deploy --only firestore:rules,storage,hosting`).
+Status: **SUDAH DI-DEPLOY** ke produksi 2026-11-15.
+
+- `firestore.rules` + `storage.rules` → `firebase deploy --only firestore:rules,storage`
+  (compiled successfully, released).
+- 11 Cloud Function (termasuk `removeUserAccess` baru) → deployed.
+- Header keamanan + CSP → `firebase deploy --only hosting`, diverifikasi lewat
+  `curl -I https://kontrack.web.app/`.
+
+Diuji terhadap Firestore **live** (REST, tanpa login): `projects` dan `settings`
+200; `users`, `ai_usage`, `invoices`, `clients`, `audit_logs` dan semua percobaan
+tulis anonim 403 `PERMISSION_DENIED`. Tidak ada dokumen uji yang tertinggal
+(jumlah `users` 3, `ai_usage` 15, `invoices` 21 sebelum dan sesudah).
 
 ---
 
@@ -215,3 +225,26 @@ Masih terbuka dari AGENTS.md §8: rotasi API key Gemini lama dan
   "supaya tidak error".
 - Kuota harian ditegakkan server; koleksi `ai_usage` harus tetap tertutup klien.
 - Validasi ukuran di callable tidak boleh dihapus demi "biar cepat".
+
+---
+
+## Tindak lanjut yang mengubah kode klien
+
+Ketiga celah di atas tidak bisa ditutup hanya dengan rules: jalur tulis dari klien
+harus dipindahkan ke server, jika tidak fitur akan mati saat rules aktif.
+
+| Fitur | Sebelum | Sekarang |
+|---|---|---|
+| Hapus akses pengguna | `deleteDoc` langsung dari klien | Cloud Function `removeUserAccess` (`admin`/`superadmin`, tidak boleh menghapus diri sendiri) |
+| Ubah peran | coba function, **fallback** tulis langsung `role` | hanya `updateUserRole`; fallback dibuang karena itulah jalur eskalasi |
+| Unggah arsip (SPK/PK/WPHO) | ditolak rules | `storage.rules` menerima `doc-archives/{invoices|projects}/{id}/{file}` |
+
+## Yang sengaja TIDAK diperketat
+
+- `projects` tetap `allow read: if true` — tautan berbagi ke mitra tidak boleh
+  minta login. Risikonya semua field proyek terbaca. Pengganti benar: share-token
+  per proyek (Fase 2).
+- `settings/{id}` tetap public-read: branding & tema dibaca halaman publik.
+- Rules tidak bisa membedakan peran karena dokumen `users` di-query lewat field
+  `email`, bukan keyed by uid. Pembedaan peran ditegakkan di Cloud Function
+  (`authorizeRole`).

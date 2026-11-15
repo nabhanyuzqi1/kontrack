@@ -326,3 +326,28 @@ Diurutkan menurut dampak pada masalah utama kontraktor (jeda arus kas):
 8. **Jadwal penagihan otomatis** (reminder H-7/H-1/H+3) yang terhubung ke kanal email/WhatsApp yang sudah ada.
 9. **Rekonsiliasi bank**: impor mutasi rekening dan pencocokan otomatis ke invoice/transaksi.
 10. **Dasbor pemilik**: kas masuk 30/60/90 hari ke depan, proyek dengan margin terancam, dan umur piutang.
+
+## 2026-11-15 — Keamanan diterapkan ke produksi
+
+Rules hasil audit sempat di-`git checkout` sebelum build hosting (untuk menjaga
+perilaku produksi), lalu diterapkan ulang dengan sengaja setelah jalur tulis klien
+disesuaikan. Yang berubah:
+
+- `firestore.rules`: catch-all `if signedIn()` dihapus. Sembilan koleksi
+  didaftarkan eksplisit (`transactions`, `invoices`, `clients`, `projects`,
+  `users`, `ai_usage`, `audit_logs`, `settings`), sisanya `if false`.
+  `users` hanya boleh dibuat pemilik email sendiri dengan `role == 'staff'`,
+  dan `role` tidak bisa diubah dari klien.
+- `storage.rules`: path `doc-archives/{invoices|projects}/{id}/{file}` diterima
+  (sebelumnya arsip SPK/PK/WPHO selalu gagal unggah).
+- `functions/index.js`: `removeUserAccess` baru (12 function total).
+- `src/services/users.js`: `removeUser` dan `changeUserRole` hanya lewat Cloud
+  Function, tanpa fallback tulis langsung.
+- `src/components/settings/UsersTab.jsx`: `removeUser(id, email)`.
+
+Diverifikasi di produksi: header keamanan + CSP aktif (`curl -I`), rules menolak
+semua baca/tulis anonim ke koleksi peka (403), `projects`/`settings` tetap terbaca,
+tidak ada dokumen uji tertinggal. Build live `index-BwasRS8X.js`.
+
+Belum terverifikasi: perilaku aplikasi setelah LOGIN di balik rules baru (perlu
+akun pemilik), unggah arsip nyata ke Storage, dan impor CoreTax.

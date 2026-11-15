@@ -65,6 +65,20 @@ service firebase.storage {
       allow write, delete: if signedIn() && isDocument() && sizeOk(25);
     }
 
+    // Arsip dokumen per record — path NYATA yang ditulis aplikasi:
+    //   doc-archives/{invoices|projects}/{recordId}/{kind}_{ttl}_{nama}
+    // (src/services/invoices.js → uploadInvoiceDocument). Path ini sebelumnya
+    // tidak terdaftar, sehingga unggah SPK/PK/WPHO/BAHK SELALU ditolak blok
+    // catch-all di bawah dan arsip digital tidak pernah bisa diisi.
+    // Hanya path berbentuk itu yang diterima; `{recordId}` dibatasi satu segmen.
+    match /doc-archives/{record}/{recordId}/{fileName} {
+      allow read: if signedIn();
+      allow write, delete: if signedIn()
+        && (record == 'invoices' || record == 'projects')
+        && isDocument()
+        && sizeOk(25);
+    }
+
     // Selebihnya ditolak — tidak ada path lain yang ditulis aplikasi.
     match /{allPaths=**} {
       allow read, write: if false;
