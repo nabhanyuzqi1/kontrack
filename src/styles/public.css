@@ -43,3 +43,31 @@
 [data-public-mode='dark'] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: #34434d; }
 [data-public-login] { color-scheme: dark; }
 [data-public-login] svg rect { fill: #3358f4; }
+
+/* Di kedua halaman publik, --slate-* dipatok ulang oleh blok di atas. Bila mode
+ * APLIKASI sedang gelap, globals.css juga menulis `--slate-*` pada <html> —
+ * spesifisitas `[data-theme]` dan `[data-public-mode]` sama, jadi yang menang
+ * bergantung urutan impor. Akibatnya label/link di login bisa berubah jadi
+ * permukaan gelap (teks hilang). Karena itu token publik dinaikkan
+ * spesifisitasnya dan diletakkan di akhir berkas, bukan diandalkan urutannya. */
+html [data-public-mode] {
+  --slate-50: 246 248 251;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 100 116 139;
+  --slate-500: 71 85 105;
+  --slate-600: 51 65 85;
+  --slate-700: 30 41 59;
+  --slate-800: 15 23 42;
+  --slate-900: 8 14 28;
+  --slate-950: 4 8 18;
+}
+html [data-public-mode='dark'] { --slate-400: 160 172 192; }
+
+/* Aksen judul login: gradasi brand asli (brand-600 -> indigo) terlalu gelap di
+   atas navy (kontras ~2.6:1, di bawah ambang WCAG 3:1 untuk teks besar).
+   Dipatok lebih terang hanya pada halaman login. */
+[data-public-login] .text-gradient {
+  background-image: linear-gradient(135deg, #6fb3ff, #a5b4fc);
+}
