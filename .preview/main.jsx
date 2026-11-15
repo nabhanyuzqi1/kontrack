@@ -11,8 +11,20 @@ import TaxInvoicesPage from '../src/components/invoices/TaxInvoicesPage.jsx';
 import SettingsPage from '../src/components/settings/SettingsPage.jsx';
 import DeveloperPage from '../src/components/developer/DeveloperPage.jsx';
 import ProjectDetail from '../src/components/projects/ProjectDetail.jsx';
+import AITransactionModal from '../src/components/transactions/AITransactionModal.jsx';
 import { projects } from './mock/data.js';
 import '../src/styles/globals.css';
+
+// Membuka AITransactionModal dengan data proyek sungguhan dari mock.
+const AIHarness = () => (
+  <AITransactionModal
+    isOpen
+    onClose={() => {}}
+    onSuccess={() => {}}
+    projects={projects}
+    currentUser={{ uid: 'u1', email: 'demo@kontrack.id' }}
+  />
+);
 
 // Pratinjau seluruh halaman supaya audit kontras/overlap mencakup aplikasi
 // sebenarnya, bukan cuma halaman yang kebetulan sudah ada di sini.
@@ -25,7 +37,9 @@ const PAGES = [
   { key: 'invoices', label: 'Invoice', el: <InvoicesPage /> },
   { key: 'tax', label: 'Faktur Pajak', el: <TaxInvoicesPage /> },
   { key: 'settings', label: 'Pengaturan', el: <SettingsPage /> },
-  { key: 'developer', label: 'Developer', el: <DeveloperPage /> }
+  { key: 'developer', label: 'Developer', el: <DeveloperPage /> },
+  // Modal butuh state terbuka; dibungkus komponen kecil di bawah.
+  { key: 'ai-input', label: 'Input AI', el: <AIHarness /> }
 ];
 
 const user = { role: 'admin', email: 'demo@kontrack.id', name: 'Nabhan Yuzqi' };

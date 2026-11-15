@@ -370,29 +370,65 @@ const geminiError = (status, body) => {
 };
 
 // Schema output (enum + tipe) → menegakkan struktur tanpa prompt panjang = hemat token.
+//
+// `category` WAJIB enum, bukan STRING bebas. Sebelumnya model bebas mengarang
+// kategori ("Bon", "Konsumsi", "Transport") sehingga hasil analisis tidak cocok
+// dengan daftar kategori aplikasi dan harus dibetulkan manual satu per satu.
 const RESPONSE_SCHEMA = {
   type: "ARRAY",
   items: {
     type: "OBJECT",
     properties: {
-      date: {type: "STRING", description: "ISO 8601, kosongkan bila tak ada"},
+      date: {type: "STRING", description: "Tanggal transaksi, format YYYY-MM-DD"},
+      time: {type: "STRING", description: "Jam transaksi HH:MM (24 jam) bila tertera, kosongkan bila tidak"},
       amount: {type: "NUMBER"},
       type: {type: "STRING", enum: ["income", "expense"]},
-      category: {type: "STRING"},
+      category: {
+        type: "STRING",
+        enum: [
+          "Proyek",
+          "Pembayaran Invoice",
+          "Lainnya",
+          "Operasional",
+          "Material",
+          "Upah Karyawan/Tukang",
+          "Pajak",
+          "Pengeluaran Lain",
+        ],
+      },
       description: {type: "STRING"},
+      vendor: {type: "STRING", description: "Nama toko/penerima/pihak lawan bila tertera"},
+      paymentMethod: {
+        type: "STRING",
+        enum: ["tunai", "transfer", "qris", "lainnya"],
+        description: "Cara bayar bila terbaca",
+      },
     },
     required: ["amount", "type", "category", "description"],
   },
 };
 
 // Prompt ringkas — schema sudah mengatur format, jadi teks fokus ke ATURAN saja.
-const PROMPT = `Ekstrak data transaksi keuangan dari SETIAP gambar (bukti transfer, invoice, atau penawaran). Hasilkan satu objek per gambar, urut sesuai urutan gambar.
-Aturan:
-- amount: jumlah total/ditransfer, angka murni tanpa titik.
-- type: "income" bila ada kata terima/masuk/CR; selain itu "expense" (default).
-- category income: Proyek | Pembayaran | Lainnya. category expense: Operasional | Material | Upah Karyawan/Tukang | Pengeluaran Lain.
-- description: ringkas dari berita transfer / item utama.
-- date: ISO 8601 bila tertera; jika tidak, kosongkan.`;
+const PROMPT = `Ekstrak data transaksi keuangan dari SETIAP gambar (nota/bon, bukti transfer, invoice, atau penawaran). Hasilkan satu objek per gambar, urut sesuai urutan gambar.
+
+ATURAN KATEGORI (paling penting — pilih dari daftar, jangan mengarang):
+- "Upah Karyawan/Tukang": bon/nota pembayaran upah, honor, ongkos kerja, borongan, harian tukang, kerja bakti, atau pembayaran ke orang perorangan untuk tenaga.
+- "Material": pembelian bahan bangunan atau barang habis pakai proyek (semen, pasir, besi, kayu, batu, cat, pipa).
+- "Operasional": perjalanan, BBM, transport, sewa alat, konsumsi rapat, ATK, listrik/air, telepon, jasa pihak ketiga non-tenaga.
+- "Pajak": setoran PPN/PPh ke kas negara, kode billing, NTPN, faktur pajak.
+- "Pengeluaran Lain": pengeluaran sah yang tidak masuk empat di atas.
+- income: "Pembayaran Invoice" bila pembayaran termin/invoice proyek; "Proyek" bila uang muka proyek; "Lainnya" bila bukan proyek.
+
+ATURAN TANGGAL & JAM:
+- date: YYYY-MM-DD. Baca tanggal dari gambar (nota, struk, header transfer). Bulan ditulis angka (01-12).
+- time: HH:MM 24 jam bila jam tertera. Bila hanya tanggal, kosongkan time (jangan mengarang).
+- Bila gambar tidak memuat tanggal sama sekali, kosongkan date. JANGAN memakai tanggal hari ini.
+
+LAIN-LAIN:
+- amount: jumlah AKHIR yang dibayar/diterima (setelah diskon), angka murni tanpa titik/koma pemisah ribuan.
+- type: "income" bila ada kata terima/masuk/CR/kredit; selain itu "expense".
+- description: ringkas isi nota (mis. "Bon upah 3 tukang", "Beli semen 20 sak").
+- vendor: nama toko/penerima pembayaran bila tertera.`;
 
 exports.analyzeTransactionImageWithAI = onCall(
     // timeout + memory: 8 gambar hingga ~24 MB harus diurai di memori sebelum

@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { addProject, updateProject } from '../../services/projects';
 import { uploadInvoiceDocument } from '../../services/invoices';
 import { getAllClients, clientDisplayName } from '../../services/clients';
-import { PROJECT_STATUS, TAX_RATES } from '../../utils/constants';
+import { EXPENSE_CATEGORIES, PROJECT_STATUS, TAX_RATES } from '../../utils/constants';
+import { X } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { Field, Input, Select, Textarea } from '../ui/Field';
@@ -82,10 +83,18 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
     terminCount: p?.terminCount !== undefined ? p.terminCount.toString() : '',
     retentionPct: p?.retentionPct !== undefined ? p.retentionPct.toString() : '5',
     retentionMonths: p?.retentionMonths !== undefined ? p.retentionMonths.toString() : '3',
+    lastBaDate: formatDateForInput(p?.lastBaDate) || '',
     description: p?.description || ''
   });
 
   const [formData, setFormData] = useState(() => buildFormData(project));
+
+  // RAB disimpan sebagai array { category, budget }. Bentuk array dipilih
+  // (bukan field tetap per kategori) supaya kategori bisa ditambah tanpa
+  // mengubah skema dokumen.
+  const [rabRows, setRabRows] = useState(() =>
+    Array.isArray(project?.rab) ? project.rab.map((r) => ({ ...r })) : []
+  );
 
   const [loading, setLoading] = useState(false);
   const [docBusy, setDocBusy] = useState(null);
@@ -199,6 +208,10 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
         terminCount: formData.terminCount === '' ? null : parseInt(formData.terminCount, 10),
         retentionPct: parseFloat(formData.retentionPct),
         retentionMonths: parseInt(formData.retentionMonths, 10),
+        lastBaDate: formData.lastBaDate || '',
+        rab: rabRows
+          .filter((r) => r.category && String(r.category).trim())
+          .map((r) => ({ category: String(r.category).trim(), budget: Number(r.budget) || 0 })),
         description: formData.description.trim()
       };
 
@@ -505,6 +518,16 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                 </Select>
               </Field>
 
+              <Field label="Tanggal BA Terakhir">
+                <Input
+                  type="date"
+                  name="lastBaDate"
+                  value={formData.lastBaDate}
+                  onChange={handleChange}
+                  disabled={loading}
+                />
+              </Field>
+
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Retensi (%)" error={errors.retentionPct}>
                   <Input
@@ -531,6 +554,84 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                 </Field>
               </div>
             </div>
+
+          <FormSection title="Anggaran Biaya (RAB)">
+            <p className="mb-3 text-xs text-slate-500">
+              Isi anggaran per kategori pengeluaran. Kosongkan bila belum ada RAB; serapan biaya
+              otomatis dibandingkan dengan angka di sini.
+            </p>
+
+            {rabRows.length === 0 && (
+              <p className="mb-3 rounded-lg bg-slate-500/5 px-3 py-2.5 text-xs text-slate-400">
+                Belum ada baris anggaran.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {rabRows.map((row, idx) => (
+                <div key={idx} className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Select
+                      value={row.category}
+                      onChange={(e) => {
+                        const next = [...rabRows];
+                        next[idx] = { ...next[idx], category: e.target.value };
+                        setRabRows(next);
+                      }}
+                      disabled={loading}
+                    >
+                      <option value="">— Pilih kategori —</option>
+                      {EXPENSE_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="w-36 shrink-0">
+                    <Input
+                      type="number"
+                      value={row.budget}
+                      min="0"
+                      step="any"
+                      placeholder="Anggaran"
+                      onChange={(e) => {
+                        const next = [...rabRows];
+                        next[idx] = { ...next[idx], budget: e.target.value };
+                        setRabRows(next);
+                      }}
+                      disabled={loading}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRabRows(rabRows.filter((_, i) => i !== idx))}
+                    disabled={loading}
+                    className="mb-1 shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-600"
+                    aria-label="Hapus baris anggaran"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setRabRows([...rabRows, { category: '', budget: '' }])}
+              disabled={loading}
+              className="mt-2 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
+            >
+              + Tambah kategori anggaran
+            </button>
+
+            {rabRows.length > 0 && (
+              <p className="mt-2 border-t border-slate-200/60 pt-2 text-xs text-slate-500 dark:border-white/10">
+                Total anggaran:{' '}
+                <span className="tnum font-semibold text-slate-700">
+                  {formatRupiah(rabRows.reduce((s, r) => s + (Number(r.budget) || 0), 0))}
+                </span>
+              </p>
+            )}
+          </FormSection>
           </FormSection>
 
           <FormSection title="Berkas">

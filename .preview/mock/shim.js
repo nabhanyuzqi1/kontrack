@@ -11,7 +11,6 @@ export const sortInvoiceList = (list, { sortBy = 'date', direction = 'desc', pro
   [...list].sort((a, b) => compareInvoices(a, b, sortBy, direction, projectNameOf));
 export const signUpUser = async () => ({ role: 'staff', name: 'Preview' });
 export const generateProjectPDF = () => {};
-export const generateProjectSummaryImage = () => '';
 
 // Mock doc/getDoc: ProjectDetail mengimpor keduanya langsung dari
 // 'firebase/firestore' (dialihkan ke shim lewat vite.config.mjs).
@@ -56,7 +55,38 @@ export const updateTransaction = noop;
 export const deleteTransaction = noop;
 export const uploadTransactionImage = async () => 'https://example.invalid/bukti.webp';
 export const validateImageFile = () => true;
-export const analyzeTransactionImages = async () => ({ transactions: [] });
+// Hasil analisis tiruan: sengaja mencakup tiga kondisi yang harus terlihat
+// bedanya di UI — (a) nota "bon" upah dengan jam terbaca, (b) nota tanpa jam,
+// (c) hasil tanpa tanggal sama sekali. Ketiganya menguji penanda sumber.
+// Kontrak services/ai.js: mengembalikan ARRAY hasil yang sudah dinormalkan
+// (bukan { transactions }), karena pemanggil langsung memanggil .map().
+export const analyzeTransactionImages = async () => ([
+  {
+      type: 'expense',
+      category: 'Upah Karyawan/Tukang',
+      amount: 1350000,
+      date: '2026-11-12T15:30',
+      vendor: 'Toko Bangunan Sumber Rejeki',
+      description: 'Bon upah 3 tukang harian',
+      imageUrl: ''
+    },
+    {
+      type: 'expense',
+      category: 'Material',
+      amount: 4875000,
+      date: '2026-11-10',
+      vendor: 'CV Karya Besi',
+      description: 'Beli besi beton 12mm'
+    },
+    {
+      type: 'income',
+      category: 'Pembayaran Invoice',
+      amount: 25000000,
+      date: '',
+      vendor: '',
+      description: 'Transfer masuk tanpa tanggal pada bukti'
+    }
+]);
 export const scanWphoDocument = async () => ({
   wphoNumber: 'SLM/WP/2611/00449',
   amount: 39710000,
@@ -246,6 +276,22 @@ export const generateInvoicePDF = async () => ({
 });
 export const buildInvoiceNumber = () => `PREVIEW-${Date.now()}`;
 export const shareProjectWhatsAppRich = noopSync;
+// ProjectDetail kini memakai buildProjectWhatsAppMessage (bukan lagi
+// shareProjectWhatsAppRich) untuk pratinjau berbagi. Bila ekspornya tidak ada di
+// sini, impor modul gagal dengan "does not provide an export named ..." dan
+// seluruh pratinjau tampil kosong tanpa pesan.
+export const shareProjectWhatsApp = noopSync;
+export const copyProjectLink = noop;
+export const buildProjectWhatsAppMessage = (project) =>
+  `*${project?.name || 'Proyek'}*
+
+Pratinjau pesan pada harness. Teks asli dibangun utils/sharing.js.`;
+export const generateProjectSummaryImage = async () => {
+  // Gambar 2x2 PNG transparan: cukup untuk menguji alur pratinjau gambar
+  // tanpa menjalankan canvas sungguhan.
+  const px = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+  return new Blob([px], { type: 'image/png' });
+};
 export const buildFinancialSummary = () => ({});
 export const getFinancialInsight = async () => ({});
 

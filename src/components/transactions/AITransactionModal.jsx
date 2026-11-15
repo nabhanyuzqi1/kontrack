@@ -1,13 +1,15 @@
 // src/components/transactions/AITransactionModal.jsx
 import React, { useState } from 'react';
-import { Sparkles, UploadCloud, CheckCircle2, X, Trash2 } from 'lucide-react';
+import { Sparkles, UploadCloud, CheckCircle2, X } from 'lucide-react';
 import { addTransaction } from '../../services/transactions';
 import { analyzeTransactionImages, validateImageFile } from '../../services/ai';
-import { formatDateTimeForInput, formatCurrency } from '../../utils/formatters';
-import { TRANSACTION_TYPES, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../utils/constants';
+import { normalizeTxDateTime } from '../../utils/txDateTime';
+import AITransactionCard from './AITransactionCard';
+
+
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
-import { Field, Input, Select, Textarea } from '../ui/Field';
+import { Select } from '../ui/Field';
 
 const StepBadge = ({ number, label, done }) => (
   <div className="mb-3 flex items-center gap-2.5">
@@ -66,7 +68,14 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
     setError('');
     try {
       const raw = await analyzeTransactionImages(files.map((f) => f.file), currentUser.uid);
-      setResults(raw.map((r) => ({ ...r, projectId: selectedProjectId })));
+      // Tanggal dinormalkan SEKALI di sini: hasil AI bisa berbentuk
+      // "2026-05-01" (tanpa jam) atau "1 Mei 2026". Tanpa normalisasi, jam
+      // hilang dan input datetime-local tampil kosong.
+      setResults(raw.map((r) => ({
+        ...r,
+        projectId: selectedProjectId,
+        date: normalizeTxDateTime(r.date, r.time, { fallbackToNow: false }) || '',
+      })));
     } catch (err) {
       console.error('Analysis error:', err);
       setError(err.message || 'Gagal menganalisis gambar. Pastikan gambar jelas.');
@@ -93,7 +102,10 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
           ...r,
           projectId: selectedProjectId,
           projectName: project.name,
-          date: r.date || new Date().toISOString(),
+          // Bila tanggal tetap kosong (pengguna tidak mengisi), barulah pakai
+          // waktu sekarang — dicatat sebagai koreksi sistem, bukan hasil bacaan.
+          date: normalizeTxDateTime(r.date, null),
+          dateSource: r.date ? 'ai' : 'system',
           createdBy: currentUser.uid,
           isAIProcessed: true
         });
@@ -213,103 +225,26 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
           <StepBadge number={3} label={`Verifikasi ${results.length} Hasil`} done={false} />
           <p className="mb-4 text-sm text-slate-500">
             Periksa & edit tiap transaksi sebelum disimpan. Hapus yang tidak perlu.
+            {results.some((x) => !x.date) && (
+              <span className="ml-1 font-medium text-amber-700 dark:text-amber-400">
+                {results.filter((x) => !x.date).length} hasil belum bertanggal.
+              </span>
+            )}
           </p>
 
-          <div className="space-y-4">
-            {results.map((r, idx) => {
-              const categories =
-                r.type === TRANSACTION_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-              return (
-                <div key={idx} className="rounded-xl border border-slate-200 p-4">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      {r.imageUrl && (
-                        <img
-                          src={r.imageUrl}
-                          alt=""
-                          className="h-12 w-12 rounded-lg border border-slate-200 object-cover"
-                        />
-                      )}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">
-                          Bukti #{idx + 1}
-                        </p>
-                        <p
-                          className={`font-display text-sm font-bold ${
-                            r.type === 'income' ? 'text-emerald-600' : 'text-red-600'
-                          }`}
-                        >
-                          {r.type === 'income' ? '+' : '−'}
-                          {formatCurrency(r.amount)}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => removeResult(idx)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/10 dark:hover:bg-red-500/10 hover:text-red-600"
-                      title="Hapus hasil ini"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="Tanggal & Waktu">
-                      <Input
-                        type="datetime-local"
-                        value={formatDateTimeForInput(r.date)}
-                        onChange={(e) => updateResult(idx, { date: e.target.value })}
-                      />
-                    </Field>
-                    <Field label="Jenis">
-                      <Select
-                        value={r.type}
-                        onChange={(e) => {
-                          const newType = e.target.value;
-                          updateResult(idx, {
-                            type: newType,
-                            category:
-                              newType === TRANSACTION_TYPES.INCOME
-                                ? INCOME_CATEGORIES[0]
-                                : EXPENSE_CATEGORIES[0]
-                          });
-                        }}
-                      >
-                        <option value={TRANSACTION_TYPES.INCOME}>Pemasukan</option>
-                        <option value={TRANSACTION_TYPES.EXPENSE}>Pengeluaran</option>
-                      </Select>
-                    </Field>
-                    <Field label="Kategori">
-                      <Select value={r.category} onChange={(e) => updateResult(idx, { category: e.target.value })}>
-                        {categories.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field label="Nominal (Rp)">
-                      <Input
-                        type="number"
-                        value={r.amount}
-                        onChange={(e) => updateResult(idx, { amount: Number(e.target.value) })}
-                        min="0"
-                        step="any"
-                      />
-                    </Field>
-                    <div className="sm:col-span-2">
-                      <Field label="Deskripsi">
-                        <Textarea
-                          value={r.description}
-                          onChange={(e) => updateResult(idx, { description: e.target.value })}
-                          rows="2"
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          {/* pb-1 memberi napas ke kartu terakhir di depan footer modal; tanpa
+              ini kartu terlihat menempel/terpotong tepi panel. */}
+          <div className="space-y-3 pb-1">
+            {results.map((r, idx) => (
+              <AITransactionCard
+                key={idx}
+                index={idx}
+                result={r}
+                onUpdate={updateResult}
+                onRemove={removeResult}
+                disabled={busy}
+              />
+            ))}
           </div>
         </div>
       )}

@@ -7,8 +7,13 @@ export const buildProjectWhatsAppMessage = (project, transactions = [], company 
   const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + (t.amount || 0), 0);
   const expense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + (t.amount || 0), 0);
 
+  // PPN kontraktor memakai DPP Nilai Lain (PMK 131/2024): DPP = 11/12 x nilai,
+  // PPN = 12% x DPP, jadi efektif 11% dari nilai kontrak. Menghitung 11% langsung
+  // dari nilai kontrak menghasilkan angka yang sama, tetapi ditulis eksplisit
+  // supaya tidak tampak seperti kesalahan pembulatan bila tarif berubah.
   const taxRate = Number(project.taxRate) || 0;
-  const taxAmount = (project.value * taxRate) / 100;
+  const dpp = (project.value * 11) / 12;
+  const taxAmount = Math.round((dpp * taxRate) / 100);
   const total = project.value + taxAmount;
   const paid = project.paidAmount || 0;
   const outstanding = Math.max(project.value - paid, 0);
@@ -23,23 +28,24 @@ export const buildProjectWhatsAppMessage = (project, transactions = [], company 
   rows.push(`Mitra: ${project.partner || '-'}`);
   if (project.contractNumber) rows.push(`No. SPK: ${project.contractNumber}`);
   rows.push('');
-  rows.push(`▪️ Status: *${getStatusLabel(project.status)}*`);
-  rows.push(`▪️ Periode: ${formatDate(project.startDate)} – ${formatDate(project.endDate)}`);
-  rows.push(`▪️ Progress: *${progress}%*`);
+  rows.push(`Status: *${getStatusLabel(project.status)}*`);
+  rows.push(`Periode: ${formatDate(project.startDate)} - ${formatDate(project.endDate)}`);
+  rows.push(`Progress: *${progress}%*`);
   rows.push('');
   rows.push('*Ringkasan Nilai*');
-  rows.push(`• Nilai Kontrak: ${formatCurrency(project.value)}`);
-  if (taxRate > 0) rows.push(`• Pajak (${taxRate}%): ${formatCurrency(taxAmount)}`);
-  rows.push(`• Total: ${formatCurrency(total)}`);
-  rows.push(`• Terbayar: ${formatCurrency(paid)}`);
-  rows.push(`• Sisa Tagihan: ${formatCurrency(outstanding)}`);
+  rows.push(`- Nilai Kontrak: ${formatCurrency(project.value)}`);
+  if (taxRate > 0) rows.push(`- DPP Nilai Lain: ${formatCurrency(dpp)}`);
+  if (taxRate > 0) rows.push(`- PPN (${taxRate}% x DPP): ${formatCurrency(taxAmount)}`);
+  rows.push(`- Total: ${formatCurrency(total)}`);
+  rows.push(`- Terbayar: ${formatCurrency(paid)}`);
+  rows.push(`- Sisa Tagihan: ${formatCurrency(outstanding)}`);
   // Arus kas internal hanya bila transaksi disertakan (bukan untuk mitra murni)
   if (transactions.length > 0) {
     rows.push('');
     rows.push('*Arus Kas Proyek*');
-    rows.push(`• Pemasukan: ${formatCurrency(income)}`);
-    rows.push(`• Pengeluaran: ${formatCurrency(expense)}`);
-    rows.push(`• Saldo: ${formatCurrency(income - expense)}`);
+    rows.push(`- Pemasukan: ${formatCurrency(income)}`);
+    rows.push(`- Pengeluaran: ${formatCurrency(expense)}`);
+    rows.push(`- Saldo: ${formatCurrency(income - expense)}`);
 
     // Rincian per kategori (maks. 5 teratas tiap arah) — informasi tanpa banjir teks.
     const byCategory = (type) => {
@@ -57,13 +63,13 @@ export const buildProjectWhatsAppMessage = (project, transactions = [], company 
       rows.push('*Pengeluaran per Kategori*');
       pengeluaran.forEach(([kat, amt]) => {
         const pct = expense > 0 ? ((amt / expense) * 100).toFixed(1) : '0';
-        rows.push(`• ${kat}: ${formatCurrency(amt)} (${pct}%)`);
+        rows.push(`- ${kat}: ${formatCurrency(amt)} (${pct}%)`);
       });
     }
   }
   rows.push('');
   rows.push(line);
-  rows.push(`🔗 Detail: ${window.location.origin}/app/projects/${project.id}`);
+  rows.push(`Detail: ${window.location.origin}/app/projects/${project.id}`);
 
   return rows.join('\n').trim();
 };

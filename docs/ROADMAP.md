@@ -485,3 +485,56 @@ diverifikasi pada header hosting live.
 **Belum terverifikasi:** login sebagai superadmin sungguhan (gating peran diuji
 lewat fungsi + harness, bukan sesi nyata), dan pemakaian konsol developer di
 produksi.
+
+## 2026-11-16 — Analisis AI, penampil berkas, bagikan proyek, perencanaan proyek
+
+### Analisis AI
+- `RESPONSE_SCHEMA` Fungsi AI: `category` kini **enum** 8 nilai (bukan string
+  bebas) + field `time` dan `vendor`. Model tidak bisa lagi mengarang kategori;
+  "bon" upah dipetakan ke `Upah Karyawan/Tukang` oleh enum, bukan tebakan prompt.
+- `src/utils/txDateTime.js` — parser tanggal/jam Indonesia (`1 Mei 2026`,
+  `15 Agustus 2026 09:15`, `5 Agt 2026`, `2026-11-12T15:30`). Tanggal tak terbaca
+  tidak lagi diam-diam diganti "sekarang".
+- `AITransactionCard.jsx` dirombak: bukti di kiri, tiga blok berbingkai seragam
+  (Nilai & Klasifikasi / Waktu Transaksi / Pihak & Deskripsi), badge
+  "tanpa tanggal" pada kartu yang memang tanpa tanggal.
+
+### Berkas gambar & PDF
+- Akar "content blocked": `frame-src` CSP tanpa `blob:`, dan Storage mengirim
+  `Content-Disposition: attachment` sehingga PDF langsung terunduh.
+- `src/components/ui/FileViewer.jsx` — gambar & PDF dibuka in-app lewat object
+  URL, tombol Unduh terpisah. Dipakai detail proyek dan detail invoice.
+
+### Bagikan proyek ke WhatsApp
+- `ShareProjectModal.jsx` — modal pratinjau (gambar + teks) dengan empat aksi
+  eksplisit: Bagikan, Unduh gambar, Buka WhatsApp, Salin teks. Menggantikan
+  perilaku lama yang mengunduh diam-diam lalu membuka tab WhatsApp.
+- `utils/sharing.js`: PPN lewat DPP Nilai Lain (PMK 131/2024) ditulis eksplisit,
+  seluruh emoji dihapus.
+
+### Detail proyek
+- `TransactionFilterBar.jsx`: grid 12 kolom, tiga kontrol 43px sejajar, ikon
+  pencarian, hitungan hasil lebih kontras, tombol reset filter.
+- `ProjectPlanningPanel.jsx` + `src/utils/projectPlanning.js` (murni, teruji di
+  Node): RAB vs realisasi, termin & kurva-S, retensi, margin. Form proyek kini
+  punya pengisian RAB dan tanggal BA terakhir.
+- Kategori **tanpa anggaran** tidak lagi dihitung "melampaui anggaran" (dulu
+  memicu peringatan palsu); dilaporkan terpisah sebagai pengeluaran tanpa
+  anggaran. Termin selalu berstatus: cair / telat N hari / N hari lagi.
+
+### Bug lama yang ketemu saat verifikasi
+- `AITransactionModal.jsx` tidak bisa dikompilasi (penutup `</div>` yatim) —
+  membuat seluruh harness kosong tanpa pesan. Seluruh 100+ berkas kini lolos
+  parse esbuild.
+- Shim harness: `analyzeTransactionImages` mengembalikan `{transactions}` padahal
+  kontraknya array (`raw.map is not a function`).
+- `retentionStatus` membaca `retentionPercent` padahal form menulis
+  `retentionPct` → retensi selalu "tidak menahan".
+- Pencairan termin memakai `netProceeds` (dana bersih) sehingga tampak melebihi
+  nilai termin; kini memakai `grandTotal`.
+
+### Belum terverifikasi
+- Hasil AI dari Gemini sungguhan (butuh login pemilik), termasuk pemetaan nota
+  "bon" ke `Upah Karyawan/Tukang`.
+- `FileViewer` untuk PDF dari Storage produksi (butuh login).
+- Pengiriman WhatsApp/email nyata — secret masih placeholder `BELUM-DISET`.

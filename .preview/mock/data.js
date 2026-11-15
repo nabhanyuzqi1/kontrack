@@ -12,7 +12,24 @@ export const projects = [
     taxRate: 11,
     contractNumber: '602/SPK/DPUPR/2026',
     startDate: '2026-03-04',
-    endDate: '2026-12-20'
+    endDate: '2026-12-20',
+    progress: 62,
+    retentionPct: 5,
+    retentionMonths: 3,
+    lastBaDate: '2026-09-30',
+    rabTotal: 3900000000,
+    rab: [
+      { category: 'Material', budget: 2450000000 },
+      { category: 'Upah Karyawan/Tukang', budget: 980000000 },
+      { category: 'Operasional', budget: 320000000 }
+    ],
+    terminPlan: [
+      { label: 'DP 30%', dueDate: '2026-03-20', amount: 1455000000, invoiceId: 'i1' },
+      { label: 'Termin II 15%', dueDate: '2026-05-20', amount: 727500000 },
+      { label: 'Termin III 25%', dueDate: '2026-08-20', amount: 1212500000 },
+      { label: 'Termin IV 25%', dueDate: '2026-11-20', amount: 1212500000 },
+      { label: 'Retensi 5%', dueDate: '2027-03-31', amount: 242500000 }
+    ]
   },
   {
     id: 'p2',

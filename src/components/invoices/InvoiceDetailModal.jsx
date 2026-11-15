@@ -26,7 +26,7 @@ import { Field, Input, Textarea } from '../ui/Field';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { generateInvoicePDF } from '../../utils/invoiceGenerator';
 import { fetchAssetDataUrl } from '../../services/assets';
-import PdfPreview from '../ui/PdfPreview';
+import FileViewer from '../ui/FileViewer';
 import { generateShippingLabel } from '../../utils/shippingLabel';
 import {
   INVOICE_STATUS,
@@ -76,6 +76,7 @@ const InvoiceDetailModal = ({
   const [coretaxOpen, setCoretaxOpen] = useState(false);
   const [companyForCoretax, setCompanyForCoretax] = useState(null);
   const [uploading, setUploading] = useState(null);
+  const [docView, setDocView] = useState(null);
 
   // Form email penagihan
   const [emailOpen, setEmailOpen] = useState(false);
@@ -473,14 +474,13 @@ const InvoiceDetailModal = ({
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     {docs[k] ? (
-                      <a
-                        href={docs[k].url}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => setDocView({ url: docs[k].url, name: docs[k].name || `${INVOICE_DOC_LABELS[k]}.pdf` })}
                         className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
                       >
                         Lihat
-                      </a>
+                      </button>
                     ) : (
                       <span className="text-xs text-slate-300">belum ada</span>
                     )}
@@ -511,14 +511,14 @@ const InvoiceDetailModal = ({
     </Modal>
 
     {pdfPreview && (
-      <PdfPreview
-        isOpen
+      <FileViewer
+        file={{ blob: pdfPreview.blob, name: pdfPreview.fileName || 'Invoice.pdf' }}
         onClose={() => setPdfPreview(null)}
-        blob={pdfPreview.blob}
-        fileName={pdfPreview.fileName}
-        title="Pratinjau Invoice"
       />
     )}
+
+    {/* Berkas arsip (BAHK/WPHO/Faktur Pajak) dibuka di tempat. */}
+    <FileViewer file={docView} onClose={() => setDocView(null)} />
 
     {coretaxOpen && (
       <CoretaxExportModal

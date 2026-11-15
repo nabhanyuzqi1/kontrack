@@ -26,7 +26,7 @@ import AITransactionModal from '../transactions/AITransactionModal';
 import TransactionTable from '../transactions/TransactionTable';
 import InvoiceModal from '../invoices/InvoiceModal';
 import { formatCurrency, formatDate, calculateProjectProgress, calculateDaysLeft } from '../../utils/formatters';
-import { shareProjectWhatsAppRich } from '../../utils/sharing';
+import { buildProjectWhatsAppMessage } from '../../utils/sharing';
 import { generateProjectSummaryImage } from '../../utils/projectImage';
 import { generateProjectPDF } from '../../utils/pdfGenerator';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
@@ -37,6 +37,10 @@ import ProgressBar from '../ui/ProgressBar';
 import { SkeletonDetail } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import { Input, Select } from '../ui/Field';
+import FileViewer from '../ui/FileViewer';
+import TransactionFilterBar from './TransactionFilterBar';
+import ShareProjectModal from './ShareProjectModal';
+import ProjectPlanningPanel from './ProjectPlanningPanel';
 
 // Masa retensi standar sejak BA terakhir, sebelum penagihan garansi retensi (bulan).
 const RETENTION_MONTHS = 3;
@@ -69,6 +73,7 @@ const ProjectDetail = ({ currentUser }) => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [txnRestricted, setTxnRestricted] = useState(false);
+  const [viewerFile, setViewerFile] = useState(null);
 
   // Kontrol tabel transaksi
   const [search, setSearch] = useState('');
@@ -195,7 +200,10 @@ const ProjectDetail = ({ currentUser }) => {
   };
 
   const [sharingWa, setSharingWa] = useState(false);
+  const [shareData, setShareData] = useState(null);
 
+  // Siapkan gambar + teks, lalu TAMPILKAN pratinjaunya. Tidak lagi mengunduh
+  // diam-diam: pengguna melihat lebih dulu apa yang akan dikirim.
   const handleShareWhatsApp = async () => {
     if (!project || sharingWa) return;
     setSharingWa(true);
@@ -203,9 +211,14 @@ const ProjectDetail = ({ currentUser }) => {
       const settings = await getCompanySettings().catch(() => null);
       const company = mergeCompanyInfo(settings);
       const image = await generateProjectSummaryImage(project, transactions, company).catch(() => null);
-      await shareProjectWhatsAppRich(project, transactions, company, image);
+      setShareData({
+        imageBlob: image || null,
+        message: buildProjectWhatsAppMessage(project, transactions, company),
+        imageName: `Proyek_${(project.name || 'kontrack').replace(/[^a-z0-9]/gi, '_')}.png`
+      });
     } catch (err) {
-      console.error('Gagal share WhatsApp:', err);
+      console.error('Gagal menyiapkan bagikan WhatsApp:', err);
+      setShareData({ imageBlob: null, message: '', imageName: '' });
     } finally {
       setSharingWa(false);
     }
@@ -294,9 +307,9 @@ const ProjectDetail = ({ currentUser }) => {
             <Link2 className="h-4 w-4" />
             Salin Link
           </Button>
-          <Button variant="success" size="sm" onClick={handleShareWhatsApp} loading={sharingWa}>
+          <Button variant="success" size="sm" onClick={handleShareWhatsApp} loading={sharingWa} title="Pratinjau lalu bagikan ringkasan proyek ke WhatsApp">
             {!sharingWa && <WhatsAppIcon />}
-            {sharingWa ? 'Menyiapkan…' : 'WhatsApp'}
+            {sharingWa ? 'Menyiapkan…' : 'Bagikan Ringkasan'}
           </Button>
           {currentUser && (
             <Button variant="secondary" size="sm" onClick={handleExportPDF}>
@@ -349,7 +362,9 @@ const ProjectDetail = ({ currentUser }) => {
           </div>
           <div className="mt-3 border-t border-slate-100 pt-3 dark:border-white/5">
             <ProgressBar value={project.value > 0 ? Math.min(100, (paidAmount / project.value) * 100) : 0} className="h-2" />
-            <div className="mt-1.5 flex items-baseline justify-between text-[13px]">
+            {/* flex-wrap: nominal bisa membesar (miliaran), dan pada 390px dua
+                kolom berbagi satu baris akan bertabrakan tanpa ini. */}
+            <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[13px]">
               <span className="text-emerald-600">
                 Terbayar <span className="tnum font-semibold">{formatCurrency(paidAmount)}</span>
               </span>
@@ -417,33 +432,31 @@ const ProjectDetail = ({ currentUser }) => {
           </h3>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {Object.entries(projectDocs).map(([kind, d]) => (
-              <a
+              <button
                 key={`p-${kind}`}
-                href={d.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 px-3 py-2 text-[13px] transition-colors hover:border-brand-300 dark:border-white/10"
+                type="button"
+                onClick={() => setViewerFile({ url: d.url, name: d.name || `${INVOICE_DOC_LABELS[kind] || kind}.pdf` })}
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 px-3 py-2 text-left text-[13px] transition-colors hover:border-brand-300 dark:border-white/10"
               >
                 <span className="truncate">
                   <span className="font-medium text-slate-800">{INVOICE_DOC_LABELS[kind] || kind}</span>
                   <span className="ml-1.5 text-xs text-slate-400">· proyek</span>
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              </a>
+              </button>
             ))}
             {invoiceDocEntries.map((d, i) => (
-              <a
+              <button
                 key={`i-${i}`}
-                href={d.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 px-3 py-2 text-[13px] transition-colors hover:border-brand-300 dark:border-white/10"
+                type="button"
+                onClick={() => setViewerFile({ url: d.url, name: d.name || `${d.label}.pdf` })}
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 px-3 py-2 text-left text-[13px] transition-colors hover:border-brand-300 dark:border-white/10"
               >
                 <span className="truncate">
                   <span className="font-medium text-slate-800">{d.label}</span>
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              </a>
+              </button>
             ))}
           </div>
         </Card>
@@ -485,6 +498,11 @@ const ProjectDetail = ({ currentUser }) => {
         </Card>
       )}
 
+      {/* Perencanaan: anggaran, termin, retensi, margin */}
+      <div className="mb-5">
+        <ProjectPlanningPanel project={project} transactions={transactions} invoices={invoices} />
+      </div>
+
       {/* Tabel transaksi: cari, urut, filter kategori */}
       <Card>
         <CardHeader
@@ -504,27 +522,17 @@ const ProjectDetail = ({ currentUser }) => {
             )
           }
         />
-        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari deskripsi / kategori…"
-            className="text-sm"
-          />
-          <Select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="all">Semua kategori</option>
-            {categories.map((c) => (
-              <option key={c.category} value={c.category}>
-                {c.category}
-              </option>
-            ))}
-          </Select>
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-            <option value="date">Urutkan: tanggal terbaru</option>
-            <option value="amount">Urutkan: nominal terbesar</option>
-            <option value="category">Urutkan: kategori</option>
-          </Select>
-        </div>
+        <TransactionFilterBar
+          search={search}
+          onSearch={setSearch}
+          category={catFilter}
+          onCategory={setCatFilter}
+          categories={categories.map((c) => c.category)}
+          sortBy={sortBy}
+          onSortBy={setSortBy}
+          shown={filteredTxns.length}
+          total={transactions.length}
+        />
         <TransactionTable
           transactions={filteredTxns}
           onEdit={isAdmin ? handleEditTransaction : null}
@@ -564,6 +572,18 @@ const ProjectDetail = ({ currentUser }) => {
           project={project}
         />
       )}
+
+      {/* Penampil berkas: gambar & PDF dibuka di tempat, bukan diunduh dulu. */}
+      <FileViewer file={viewerFile} onClose={() => setViewerFile(null)} />
+
+      <ShareProjectModal
+        open={Boolean(shareData)}
+        onClose={() => setShareData(null)}
+        project={project}
+        message={shareData?.message || ''}
+        imageBlob={shareData?.imageBlob || null}
+        imageName={shareData?.imageName || 'ringkasan-proyek.png'}
+      />
     </div>
   );
 };
