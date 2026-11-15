@@ -434,3 +434,54 @@ Perbaikan dari pengujian:
   mengulang bagian yang sudah ada di address; diuji terhadap 5 bentuk data asli.
 - **Tanda minus sumbu grafik**: `Rp-2,5 M` diperbaiki jadi `-Rp2,5 M`
   (`CashflowChart.jsx` dan `ReportCharts.jsx`).
+
+## 2026-11-16 — Kategori seragam, invoice dua kolom, konsol developer
+
+**1. Kategori transaksi: satu sumber, data produksi dinormalkan**
+
+Tiga angkatan penamaan untuk hal yang sama ditemukan di data produksi (261
+transaksi): `Pembayaran`/`Pembayaran Invoice` untuk uang masuk invoice, dan
+`Pengeluaran Lain`/`Pajak` untuk PPN invoice.
+
+- `src/utils/transactionMeta.js` jadi satu-satunya sumber kanon: daftar
+  kategori, `canonicalCategory()`, `AUTO_CATEGORY`, dan `TX_SOURCE`.
+  `utils/constants.js` hanya me-re-export (tidak ada salinan kedua).
+- `markInvoicePaid` menulis `Pembayaran Invoice` + `Pajak` dan menyertakan
+  `source` (`invoice`, `invoice-ppn`) supaya asal transaksi tidak perlu ditebak
+  dari teks deskripsi.
+- Semua jalur baca `services/transactions.js` melewati `withCanonicalCategory`,
+  sehingga data lama tampil benar walau belum dimigrasi.
+- `scripts/normalize-transaction-categories.mjs`: dry-run 17/261 dokumen,
+  `--apply` 17 diubah 0 gagal, dijalankan ulang 0 (idempoten). Jumlah dokumen
+  tetap 261. Cadangan: `~/Kontrack-backup/tx-normalize-*/plan.json`.
+
+**2. Detail invoice: panel penuh dua kolom**
+
+Tab `Detail | Arsip Berkas` dihapus supaya isi tidak saling menyembunyikan.
+`Modal` mendapat `drawerWidth="full"` (lebar layar, tinggi penuh). Kolom kiri:
+identitas, nomor referensi, rincian pekerjaan, dokumen pajak. Kolom kanan:
+Grand Total, pembayaran, status penagihan, arsip berkas.
+
+Diukur: 1440px → kolom 821/529px, tinggi 447/523px, tanpa scroll; 390px → satu
+kolom, `overflowX` false, tanpa teks terpotong.
+
+**3. Setelan teknis dipindah ke `/app/developer`**
+
+Tab "Dokumen & Data" dan "Notifikasi" (isi: nama secret `SMTP_USER`/`SMTP_PASS`,
+`WA_GATEWAY_URL`/`WA_TOKEN`, kesehatan Firestore) tidak boleh terlihat klien.
+Dipindah ke `components/developer/DeveloperPage.jsx`, dijaga
+`utils/access.js` (`superadmin` saja; `admin` klien TIDAK termasuk). Pengaturan
+klien kini: Perusahaan, Pajak, Tema, Notifikasi (preferensi saja), Pengguna.
+Diverifikasi: halaman klien nol penyebutan SMTP/Firestore/WA_TOKEN.
+
+**4. CSP: callable AI tidak lagi diblokir**
+
+`connect-src` di `firebase.json` tidak memuat `*.cloudfunctions.net`, sehingga
+setiap panggilan Cloud Function dari browser ditolak. Bukan karena anonymous
+auth dimatikan: endpoint menjawab `UNAUTHENTICATED` dengan pesan benar saat
+diuji langsung lewat curl, dan preflight `OPTIONS` 204. Sudah ditambahkan dan
+diverifikasi pada header hosting live.
+
+**Belum terverifikasi:** login sebagai superadmin sungguhan (gating peran diuji
+lewat fungsi + harness, bukan sesi nyata), dan pemakaian konsol developer di
+produksi.

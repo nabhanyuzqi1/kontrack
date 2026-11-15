@@ -16,8 +16,8 @@ import {
 } from 'lucide-react';
 import UsersTab from './UsersTab';
 import TaxSettings from './TaxSettings';
-import NotifySettings from './NotifySettings';
-import DataSettings from './DataSettings';
+import NotificationPreferences from './NotificationPreferences';
+
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -133,11 +133,18 @@ const AssetCard = ({
   </Card>
 );
 
+// Pengaturan sisi PENGGUNA saja.
+//
+// Tab "Dokumen & Data" (penomoran berkas, kesehatan Firestore, retensi) dan
+// "Notifikasi" (SMTP, gateway WhatsApp, nama secret) dipindahkan ke
+// /app/developer. Isinya urusan cara aplikasi dibangun, bukan cara perusahaan
+// memakainya, dan memuat nama secret yang tidak pantas terlihat klien.
 const TABS = [
   { key: 'company', label: 'Perusahaan', icon: Building2 },
-  { key: 'documents', label: 'Dokumen & Data', icon: FileText },
   { key: 'tax', label: 'Pajak', icon: Landmark },
   { key: 'theme', label: 'Tema & Tampilan', icon: Palette },
+  // Hanya preferensi penerimaan pemberitahuan. Kesiapan kanal, secret SMTP,
+  // dan gateway WhatsApp ada di /app/developer.
   { key: 'notifications', label: 'Notifikasi', icon: Bell },
   { key: 'users', label: 'Pengguna', icon: Users }
 ];
@@ -500,11 +507,9 @@ const SettingsPage = ({ currentUser }) => {
         </Card>
       )}
 
+      {tab === 'notifications' && <NotificationPreferences form={form} setNotif={setNotif} />}
       {tab === 'users' && <UsersTab currentUser={currentUser} />}
 
-      {tab === 'notifications' && <NotifySettings form={form} set={set} setNotif={setNotif} />}
-
-      {tab === 'documents' && <DataSettings form={form} set={set} />}
 
       {tab === 'tax' && <TaxSettings form={form} set={set} />}
     </div>

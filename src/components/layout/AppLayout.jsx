@@ -15,6 +15,7 @@ import {
   Users,
   BarChart3,
   Settings,
+  Terminal,
   LogOut,
   LogIn,
   X,
@@ -43,8 +44,9 @@ import { getAllInvoices, INVOICE_STATUS } from '../../services/invoices';
 import { PROJECT_STATUS } from '../../utils/constants';
 import NotificationCenter from './NotificationCenter';
 import { monthlyTaxReport, taxDueDate, taxDueStatus } from '../../utils/reportCalc';
+import { isDeveloper as isDeveloperUser } from '../../utils/access';
 
-const navItems = (isAdmin) => [
+const navItems = (isAdmin, showDeveloper) => [
   ...(isAdmin ? [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true }] : []),
   { to: '/app/projects', label: 'Proyek', icon: FolderKanban },
   ...(isAdmin
@@ -55,7 +57,9 @@ const navItems = (isAdmin) => [
       ]
     : []),
   { to: '/app/reports', label: 'Laporan', icon: BarChart3 },
-  ...(isAdmin ? [{ to: '/app/settings', label: 'Pengaturan', icon: Settings }] : [])
+  ...(isAdmin ? [{ to: '/app/settings', label: 'Pengaturan', icon: Settings }] : []),
+  // Hanya muncul untuk peran superadmin; rute-nya juga dijaga di App.jsx.
+  ...(showDeveloper ? [{ to: '/app/developer', label: 'Developer', icon: Terminal }] : [])
 ];
 
 // Navigasi bawah ponsel — 4 tujuan utama + tombol "Lainnya".
@@ -142,10 +146,10 @@ const PopoverItem = ({ icon: Icon, title, desc, tone = 'brand', onClick }) => (
 // digeser sendiri dan ikut bergeser saat roda mouse dipakai di atas header.
 // Kini: tanpa scroll (menu diringkas agar muat), dan klik pada rail yang
 // meluap dialihkan ke drawer ponsel lewat tombol menu.
-const ModuleStrip = ({ isAdmin, onNavigate }) => (
+const ModuleStrip = ({ isAdmin, showDeveloper, onNavigate }) => (
   <div className="relative">
     <nav className="flex items-center gap-1 overflow-hidden px-2 pb-1">
-      {navItems(isAdmin).map(({ to, label, icon: Icon, end }) => (
+      {navItems(isAdmin, showDeveloper).map(({ to, label, icon: Icon, end }) => (
         <NavLink
           key={`${to}-${label}`}
           to={to}
@@ -264,6 +268,7 @@ const AppLayout = ({ currentUser, children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = currentUser?.role === 'admin';
+  const developer = isDeveloperUser(currentUser);
   const { mode, toggle } = useColorMode();
 
   // Identitas entitas untuk kapsul header — dibaca dari Pengaturan, bukan dikarang.
@@ -676,7 +681,7 @@ const AppLayout = ({ currentUser, children }) => {
 
           {/* Tingkat 2 — rail navigasi modul (tablet ke atas) */}
           <div className="hidden overflow-hidden rounded-b-[18px] border-t border-slate-200/70 sm:block">
-            <ModuleStrip isAdmin={isAdmin} />
+            <ModuleStrip isAdmin={isAdmin} showDeveloper={developer} />
           </div>
         </div>
       </header>
@@ -708,7 +713,7 @@ const AppLayout = ({ currentUser, children }) => {
             <EntityCapsule company={company} user={currentUser} showText className="w-full" />
 
             <nav className="flex flex-col gap-0.5">
-              {navItems(isAdmin).map(({ to, label, icon: Icon, end }) => (
+              {navItems(isAdmin, developer).map(({ to, label, icon: Icon, end }) => (
                 <NavLink
                   key={`m-${to}-${label}`}
                   to={to}

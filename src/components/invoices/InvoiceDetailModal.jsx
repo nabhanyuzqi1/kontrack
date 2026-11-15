@@ -43,10 +43,12 @@ import CoretaxExportModal from './CoretaxExportModal';
 
 const statusTone = { draft: 'slate', sent: 'blue', paid: 'emerald', void: 'red' };
 
+// Label kolom tetap, nilai rata kanan: dengan begitu semua nilai duduk pada
+// satu garis vertikal walau panjang labelnya berbeda (PO vs No. SPK / Kontrak).
 const RefRow = ({ label, value }) => (
-  <div className="flex items-baseline justify-between gap-3 py-1">
+  <div className="flex items-baseline justify-between gap-4 border-b border-slate-200/40 py-1 last:border-0 dark:border-white/5">
     <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</span>
-    <span className="tnum truncate text-[13px] font-semibold text-slate-800">{value || '—'}</span>
+    <span className="tnum min-w-0 truncate text-right text-[13px] font-semibold text-slate-800">{value || '—'}</span>
   </div>
 );
 
@@ -68,7 +70,6 @@ const InvoiceDetailModal = ({
   onRevise,
   busy
 }) => {
-  const [tab, setTab] = useState('detail');
   const [downloading, setDownloading] = useState(false);
   // Pratinjau PDF: blob disimpan di state, PdfPreview yang membuat/mencabut object URL.
   const [pdfPreview, setPdfPreview] = useState(null);
@@ -197,6 +198,7 @@ const InvoiceDetailModal = ({
       subtitle={inv.projectName}
       size="xl"
       drawer
+      drawerWidth="full"
       footer={
         <>
           {isPaid ? (
@@ -252,54 +254,134 @@ const InvoiceDetailModal = ({
         </>
       }
     >
-      {/* Tab: Detail | Arsip Berkas */}
-      <div className="mb-4 flex items-center gap-1 border-b border-slate-200/70 dark:border-white/10">
-        {['detail', 'arsip'].map((k) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`-mb-px border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition-colors ${
-              tab === k
-                ? 'border-brand-600 text-brand-700 dark:text-brand-300'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            {k === 'detail' ? 'Detail' : `Arsip Berkas${Object.keys(docs).length ? ` (${Object.keys(docs).length})` : ''}`}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'detail' ? (
-      <div className="space-y-4">
-        {/* Kepala: identitas | grand total — tampil sekali saja */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={statusTone[inv.status] || 'slate'}>
-                {INVOICE_STATUS_LABEL[inv.status] || inv.status || 'Draft'}
-              </Badge>
-              {inv.billingStage && (
-                <Badge tone="violet">
-                  {billingStageLabel(inv.billingStage)}
-                  {inv.quantity ? ` · ${inv.quantity}` : ''}
+      {/*
+        Dua kolom, bukan dua tab.
+        Sebab: isi invoice (nomor referensi, rincian pekerjaan, pembayaran,
+        dokumen pajak, arsip berkas) tadinya dipotong menjadi dua tab yang
+        saling menyembunyikan. Dengan panel selebar layar, semuanya terbaca
+        sekaligus tanpa menggulir bolak-balik; kekurangan tempat di layar
+        kecil diserahkan ke breakpoint, bukan ke tab.
+      */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start">
+        {/* KIRI — identitas, nomor referensi, rincian pekerjaan */}
+        <div className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={statusTone[inv.status] || 'slate'}>
+                  {INVOICE_STATUS_LABEL[inv.status] || inv.status || 'Draft'}
                 </Badge>
-              )}
-              {isPpnCair(inv) && <Badge tone="cyan">PPN Cair</Badge>}
+                {inv.billingStage && (
+                  <Badge tone="violet">
+                    {billingStageLabel(inv.billingStage)}
+                    {inv.quantity ? ` · ${inv.quantity}` : ''}
+                  </Badge>
+                )}
+                {isPpnCair(inv) && <Badge tone="cyan">PPN Cair</Badge>}
+              </div>
+              <p className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-600">
+                <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
+                {inv.clientName || inv.client?.client_name || '—'}
+              </p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-slate-500">
+                <Briefcase className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                {inv.projectName || '—'}
+              </p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                Terbit {formatDate(inv.issueDate)} · Jatuh tempo {formatDate(inv.dueDate)}
+              </p>
             </div>
-            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-600">
-              <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
-              {inv.clientName || inv.client?.client_name || '—'}
-            </p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-slate-500">
-              <Briefcase className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              {inv.projectName || '—'}
-            </p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-              Terbit {formatDate(inv.issueDate)} · Jatuh tempo {formatDate(inv.dueDate)}
-            </p>
           </div>
-          <div className="text-right">
+
+          <div>
+            <SectionLabel>
+              <FileText className="mr-1 inline h-3.5 w-3.5" />
+              Nomor Referensi
+            </SectionLabel>
+            <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+              <RefRow label="No. PO" value={inv.poNumber} />
+              <RefRow label="No. SPK / Kontrak" value={inv.spkNumber} />
+              <RefRow label="No. PK" value={inv.pkNumber} />
+              <RefRow label="No. BAHK" value={inv.bahkNumber} />
+              <RefRow label="No. WPHO / BAST" value={inv.wphoNumber} />
+              <RefRow label="No. Faktur Pajak" value={inv.taxInvoiceNumber} />
+              <RefRow label="Kode Billing" value={inv.billingCode} />
+              <RefRow label="NTPN" value={inv.ntpnNumber} />
+            </div>
+          </div>
+
+          {items.length === 0 && (
+            <div>
+              <SectionLabel>Rincian Pekerjaan</SectionLabel>
+              <p className="rounded-[10px] px-3 py-2.5 text-xs text-slate-400 ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
+                Invoice ini tidak memuat baris pekerjaan (dibuat sebelum rincian item diwajibkan).
+                Nilainya tetap sah: lihat Subtotal dan PPN pada bagian nilai di bawah.
+              </p>
+            </div>
+          )}
+          {items.length > 0 && (
+            <div>
+              <SectionLabel>Rincian Pekerjaan</SectionLabel>
+              <div className="overflow-hidden rounded-[10px] ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-slate-200/70 text-left text-[11px] uppercase tracking-wide text-slate-400 dark:border-white/10">
+                      <th className="px-3 py-1.5 font-medium">Deskripsi</th>
+                      <th className="px-3 py-1.5 font-medium">Qty</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Harga</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Jumlah</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => (
+                      <tr key={i} className="border-b border-slate-200/50 last:border-0 dark:border-white/5">
+                        <td className="px-3 py-1.5 text-slate-800">{it.description || '—'}</td>
+                        <td className="px-3 py-1.5 text-slate-500">
+                          {it.qty || '—'} {it.unit || ''}
+                        </td>
+                        <td className="tnum px-3 py-1.5 text-right text-slate-500">
+                          {it.unitPrice ? formatCurrency(it.unitPrice) : '—'}
+                        </td>
+                        <td className="tnum px-3 py-1.5 text-right font-semibold text-slate-800">
+                          {formatCurrency(
+                            it.amount !== '' && it.amount != null
+                              ? Number(it.amount)
+                              : (Number(it.qty) || 1) * (Number(it.unitPrice) || 0)
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <div>
+            <div className="flex items-center justify-between">
+              <SectionLabel>Dokumen Pajak</SectionLabel>
+              <span className="text-xs text-slate-400">{doneCount}/4</span>
+            </div>
+            <div className="space-y-1.5">
+              {progress.map((p) => (
+                <div key={p.key} className="flex items-center justify-between text-[13px]">
+                  <span className={p.done ? 'font-medium text-slate-800' : 'text-slate-400'}>
+                    {p.label}
+                  </span>
+                  <span
+                    className={`h-2 w-2 rounded-full ${p.done ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* KANAN — pembayaran dan arsip berkas */}
+        <div className="min-w-0 space-y-4 lg:border-l lg:border-slate-200/70 lg:pl-6 dark:lg:border-white/10">
+          {/* Grand Total di sini, bukan di kepala kolom kiri: angka total hanya
+              bermakna berdampingan dengan Subtotal/PPN yang membentuknya. */}
+          <div className="rounded-[10px] bg-slate-500/5 px-3.5 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Grand Total</p>
             <p className="tnum font-display text-2xl font-bold tracking-tight text-slate-900">
               {formatCurrency(inv.grandTotal || 0)}
@@ -310,67 +392,7 @@ const InvoiceDetailModal = ({
               </p>
             )}
           </div>
-        </div>
 
-        {/* Nomor referensi — lebar penuh, grid 3 kolom */}
-        <div>
-          <SectionLabel>
-            <FileText className="mr-1 inline h-3.5 w-3.5" />
-            Nomor Referensi
-          </SectionLabel>
-          <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-3">
-            <RefRow label="No. PO" value={inv.poNumber} />
-            <RefRow label="No. SPK / Kontrak" value={inv.spkNumber} />
-            <RefRow label="No. PK" value={inv.pkNumber} />
-            <RefRow label="No. BAHK" value={inv.bahkNumber} />
-            <RefRow label="No. WPHO / BAST" value={inv.wphoNumber} />
-            <RefRow label="No. Faktur Pajak" value={inv.taxInvoiceNumber} />
-            <RefRow label="Kode Billing" value={inv.billingCode} />
-            <RefRow label="NTPN" value={inv.ntpnNumber} />
-          </div>
-        </div>
-
-        {/* Rincian pekerjaan — lebar penuh */}
-        {items.length > 0 && (
-          <div>
-            <SectionLabel>Rincian Pekerjaan</SectionLabel>
-            <div className="overflow-hidden rounded-[10px] ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b border-slate-200/70 text-left text-[11px] uppercase tracking-wide text-slate-400 dark:border-white/10">
-                    <th className="px-3 py-1.5 font-medium">Deskripsi</th>
-                    <th className="px-3 py-1.5 font-medium">Qty</th>
-                    <th className="px-3 py-1.5 text-right font-medium">Harga</th>
-                    <th className="px-3 py-1.5 text-right font-medium">Jumlah</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it, i) => (
-                    <tr key={i} className="border-b border-slate-200/50 last:border-0 dark:border-white/5">
-                      <td className="px-3 py-1.5 text-slate-800">{it.description || '—'}</td>
-                      <td className="px-3 py-1.5 text-slate-500">
-                        {it.qty || '—'} {it.unit || ''}
-                      </td>
-                      <td className="tnum px-3 py-1.5 text-right text-slate-500">
-                        {it.unitPrice ? formatCurrency(it.unitPrice) : '—'}
-                      </td>
-                      <td className="tnum px-3 py-1.5 text-right font-semibold text-slate-800">
-                        {formatCurrency(
-                          it.amount !== '' && it.amount != null
-                            ? Number(it.amount)
-                            : (Number(it.qty) || 1) * (Number(it.unitPrice) || 0)
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Pembayaran & dokumen pajak — berdampingan */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <SectionLabel>Pembayaran</SectionLabel>
             <div className="space-y-1 text-[13px]">
@@ -403,72 +425,88 @@ const InvoiceDetailModal = ({
             </div>
           </div>
 
+          {/* Status penagihan: mengisi kolom kanan dan menjawab pertanyaan yang
+              paling sering muncul saat membuka invoice — uangnya sudah masuk?
+              pajaknya sudah disetor? tanpanya kolom kanan menggantung kosong. */}
           <div>
-            <div className="flex items-center justify-between">
-              <SectionLabel>Dokumen Pajak</SectionLabel>
-              <span className="text-xs text-slate-400">{doneCount}/4</span>
+            <SectionLabel>Status Penagihan</SectionLabel>
+            <div className="space-y-1.5 text-[13px]">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Terbit</span>
+                <span className="tnum font-medium text-slate-800">{formatDate(inv.issueDate) || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Jatuh tempo</span>
+                <span className="tnum font-medium text-slate-800">{formatDate(inv.dueDate) || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Tanggal terbayar</span>
+                <span className="tnum font-medium text-slate-800">
+                  {formatDate(inv.paidAt || inv.paymentDate) || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">PPN disetor</span>
+                <span className="font-medium text-slate-800">
+                  {inv.taxPaidAt || inv.taxPaymentProofUrl ? 'Sudah ada bukti' : 'Belum disetor'}
+                </span>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              {progress.map((p) => (
-                <div key={p.key} className="flex items-center justify-between text-[13px]">
-                  <span className={p.done ? 'font-medium text-slate-800' : 'text-slate-400'}>
-                    {p.label}
-                  </span>
-                  <span
-                    className={`h-2 w-2 rounded-full ${p.done ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-                  />
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <SectionLabel>Arsip Berkas</SectionLabel>
+              <span className="text-xs text-slate-400">{Object.keys(docs).length}/3</span>
+            </div>
+            <p className="mb-2 text-xs text-slate-400">
+              Berkas penagihan terkait invoice ini membentuk arsip digital.
+            </p>
+            <div className="space-y-2">
+              {DOC_KEYS.map((k) => (
+                <div key={k} className="flex items-center justify-between gap-2 rounded-[10px] px-3 py-2.5 ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
+                  <div className="min-w-0">
+                    <p className={docs[k] ? 'text-sm font-medium text-slate-800' : 'text-sm text-slate-400'}>
+                      {INVOICE_DOC_LABELS[k]}
+                    </p>
+                    {docs[k] && <p className="truncate text-xs text-slate-400">{docs[k].name}</p>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {docs[k] ? (
+                      <a
+                        href={docs[k].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
+                      >
+                        Lihat
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-300">belum ada</span>
+                    )}
+                    <label
+                      title={`Unggah ${INVOICE_DOC_LABELS[k]}`}
+                      className="cursor-pointer rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-700"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*,.pdf,.tif,.tiff"
+                        disabled={uploading === k}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) handleUpload(k, file);
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
-      ) : (
-      <div className="space-y-2">
-        <p className="text-xs text-slate-400">
-          Semua berkas penagihan terkait invoice ini. Kumpulannya membentuk arsip digital penagihan.
-        </p>
-        {DOC_KEYS.map((k) => (
-          <div key={k} className="flex items-center justify-between gap-2 rounded-[10px] px-3 py-2.5 ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
-            <div className="min-w-0">
-              <p className={docs[k] ? 'text-sm font-medium text-slate-800' : 'text-sm text-slate-400'}>
-                {INVOICE_DOC_LABELS[k]}
-              </p>
-              {docs[k] && <p className="truncate text-xs text-slate-400">{docs[k].name}</p>}
-            </div>
-            <div className="flex shrink-0 items-center gap-3">
-              {docs[k] ? (
-                <a
-                  href={docs[k].url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
-                >
-                  Lihat
-                </a>
-              ) : (
-                <span className="text-xs text-slate-300">belum ada</span>
-              )}
-              <label
-                title={`Unggah ${INVOICE_DOC_LABELS[k]}`}
-                className="cursor-pointer rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-700"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                <input
-                  type="file"
-                  className="hidden"
-                  accept="image/*,.pdf,.tif,.tiff"
-                  disabled={uploading === k}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (file) handleUpload(k, file);
-                  }}
-                />
-              </label>
-            </div>
-          </div>
-        ))}
       </div>
       )}
     </Modal>

@@ -6,7 +6,18 @@ const sizes = {
   sm: 'max-w-md',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
-  xl: 'max-w-4xl'
+  xl: 'max-w-4xl',
+  // Halaman penuh: dipakai detail dokumen yang isinya panjang (invoice).
+  // Lebar dibatasi supaya baris teks tidak melebar tanpa batas di layar ultrawide,
+  // tetapi tinggi selalu penuh sehingga isi tidak "dipotong" oleh viewport.
+  full: 'max-w-[1400px]'
+};
+
+// Varian drawer: `width` menentukan batas lebarnya.
+const DRAWER_WIDTH = {
+  narrow: 'max-w-2xl',
+  wide: 'max-w-5xl',
+  full: 'max-w-none'
 };
 
 /**
@@ -16,7 +27,7 @@ const sizes = {
  *   terlihat, cepat dibuka-tutup untuk melihat detail sambil membandingkan
  *   daftar di belakangnya).
  */
-const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, children, footer }) => {
+const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, drawerWidth = 'narrow', children, footer }) => {
   useEffect(() => {
     if (!isOpen) return undefined;
     const onKey = (e) => e.key === 'Escape' && onClose?.();
@@ -46,7 +57,9 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, 
       <div
         className={
           drawer
-            ? 'panel-solid flex h-full w-full max-w-2xl flex-col overflow-hidden shadow-2xl animate-slide-in-right'
+            ? `panel-solid flex h-full w-full flex-col overflow-hidden shadow-2xl animate-slide-in-right ${
+                DRAWER_WIDTH[drawerWidth] || DRAWER_WIDTH.narrow
+              }`
             : `panel-solid flex max-h-[92vh] w-full flex-col overflow-hidden shadow-2xl animate-scale-in ${sizes[size]}`
         }
         role="dialog"
@@ -66,7 +79,7 @@ const Modal = ({ isOpen, onClose, title, subtitle, size = 'md', drawer = false, 
           </button>
         </div>
 
-        <div className="custom-scrollbar flex-1 overflow-y-auto px-6 pb-10 pt-5">{children}</div>
+        <div className={`custom-scrollbar flex-1 overflow-y-auto pb-10 pt-5 ${drawerWidth === "full" ? "px-6 md:px-8" : "px-6"}`}>{children}</div>
 
         {footer && (
           <div className="flex justify-end gap-3 border-t border-slate-200/70 bg-slate-100/60 px-6 py-4">

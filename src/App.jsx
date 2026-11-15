@@ -11,6 +11,7 @@ import ProjectList from './components/projects/ProjectList';
 import ProjectDetail from './components/projects/ProjectDetail';
 import Reports from './components/reports/Reports';
 import SettingsPage from './components/settings/SettingsPage';
+import DeveloperPage from './components/developer/DeveloperPage';
 import InvoicesPage from './components/invoices/InvoicesPage';
 import TaxInvoicesPage from './components/invoices/TaxInvoicesPage';
 import ClientsPage from './components/clients/ClientsPage';
@@ -18,6 +19,7 @@ import { LogoMark } from './components/brand/Logo';
 import { applyTheme, getCachedTheme } from './utils/themes';
 import { getCompanySettings, getThemeFromSettings } from './services/settings';
 import { resolveMode, applyMode } from './utils/colorMode';
+import { isDeveloper } from './utils/access';
 import './styles/globals.css';
 
 // Mode dipasang lebih dulu: tema butuh tahu mode mana yang aktif.
@@ -84,6 +86,13 @@ function App() {
     ? isAdmin ? page : <Navigate to="/app/projects" replace />
     : <Navigate to="/login" replace />);
 
+  // Developer: hanya peran superadmin (pemilik/platform), bukan admin klien.
+  // Klien yang menebak URL-nya dikembalikan ke beranda, bukan diberi halaman
+  // kosong — supaya tidak ada petunjuk bahwa halaman itu ada.
+  const developerOnly = (page) => (currentUser
+    ? isDeveloper(currentUser) ? page : <Navigate to={home} replace />
+    : <Navigate to="/login" replace />);
+
   return (
     <Router>
       <Routes>
@@ -135,6 +144,7 @@ function App() {
                 <Route path="tax-invoices" element={adminOnly(<TaxInvoicesPage />)} />
                 <Route path="clients" element={adminOnly(<ClientsPage />)} />
                 <Route path="settings" element={adminOnly(<SettingsPage currentUser={currentUser} />)} />
+                <Route path="developer" element={developerOnly(<DeveloperPage currentUser={currentUser} />)} />
                 <Route path="*" element={<Navigate to={currentUser ? home : '/login'} replace />} />
               </Routes>
             </AppLayout>

@@ -23,18 +23,12 @@ export const TRANSACTION_TYPES = {
   EXPENSE: 'expense'
 };
 
-export const INCOME_CATEGORIES = [
-  'Proyek',
-  'Pembayaran',
-  'Lainnya'
-];
-
-export const EXPENSE_CATEGORIES = [
-  'Operasional',
-  'Material',
-  'Upah Karyawan/Tukang',
-  'Pengeluaran Lain'
-];
+// Kategori transaksi: SATU sumber di utils/transactionMeta.js.
+// Dulu daftar ini tinggal di sini sementara penulis transaksi otomatis memakai
+// string sendiri ('Pembayaran', 'Pengeluaran Lain'), sehingga isi koleksi
+// `transactions` bercampur antar-angkatan. Re-export menjaga pemanggil lama
+// tetap jalan tanpa menyimpan salinan kedua yang bisa menyimpang.
+export { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './transactionMeta';
 
 
 export const TAX_RATES = [

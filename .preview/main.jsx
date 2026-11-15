@@ -9,6 +9,7 @@ import ClientsPage from '../src/components/clients/ClientsPage.jsx';
 import InvoicesPage from '../src/components/invoices/InvoicesPage.jsx';
 import TaxInvoicesPage from '../src/components/invoices/TaxInvoicesPage.jsx';
 import SettingsPage from '../src/components/settings/SettingsPage.jsx';
+import DeveloperPage from '../src/components/developer/DeveloperPage.jsx';
 import ProjectDetail from '../src/components/projects/ProjectDetail.jsx';
 import { projects } from './mock/data.js';
 import '../src/styles/globals.css';
@@ -23,10 +24,12 @@ const PAGES = [
   { key: 'clients', label: 'Klien', el: <ClientsPage /> },
   { key: 'invoices', label: 'Invoice', el: <InvoicesPage /> },
   { key: 'tax', label: 'Faktur Pajak', el: <TaxInvoicesPage /> },
-  { key: 'settings', label: 'Pengaturan', el: <SettingsPage /> }
+  { key: 'settings', label: 'Pengaturan', el: <SettingsPage /> },
+  { key: 'developer', label: 'Developer', el: <DeveloperPage /> }
 ];
 
 const user = { role: 'admin', email: 'demo@kontrack.id', name: 'Nabhan Yuzqi' };
+const developerUser = { role: 'superadmin', email: 'dev@kontrack.id', name: 'Developer Platform' };
 
 // MemoryRouter dengan initialEntries '/projects': perilaku yang bergantung pada
 // path (mis. pencarian yang hanya menyaring di halaman Proyek) tidak bisa
@@ -65,7 +68,9 @@ const Harness = () => {
             <Route path="*" element={<ProjectDetail currentUser={user} />} />
           </Routes>
         ) : (
-          React.cloneElement(active.el, { currentUser: user })
+          React.cloneElement(active.el, {
+            currentUser: active.key === 'developer' ? developerUser : user
+          })
         )}
       </AppLayout>
     </MemoryRouter>

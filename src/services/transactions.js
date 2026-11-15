@@ -16,9 +16,21 @@ import {
 import { deleteObject, ref } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { invalidate, CACHE_KEYS } from './cache';
+import { canonicalCategory } from '../utils/transactionMeta';
 
 // Collection reference
 const TRANSACTIONS_COLLECTION = 'transactions';
+
+// Semua pembacaan melewati normalisasi kategori.
+//
+// Data produksi berisi tiga angkatan penamaan untuk hal yang sama (lihat
+// utils/transactionMeta.js). Menormalkan saat BACA membuat semua halaman benar
+// seketika, tanpa menunggu migrasi dan tanpa menyentuh dokumen yang belum
+// siap ditulis. Nilai asli tidak dibuang; hanya `category` yang diseragamkan.
+const withCanonicalCategory = (tx) => {
+  const category = canonicalCategory(tx);
+  return category === tx.category ? tx : { ...tx, category };
+};
 
 /**
  * Add a new transaction
@@ -149,10 +161,10 @@ export const getAllTransactions = async () => {
     const transactions = [];
     
     querySnapshot.forEach((doc) => {
-      transactions.push({
+      transactions.push(withCanonicalCategory({
         id: doc.id,
         ...doc.data()
-      });
+      }));
     });
     
     console.log(`Retrieved ${transactions.length} transactions`);
@@ -180,10 +192,10 @@ export const getTransactionsByProject = async (projectId) => {
     const transactions = [];
     
     querySnapshot.forEach((doc) => {
-      transactions.push({
+      transactions.push(withCanonicalCategory({
         id: doc.id,
         ...doc.data()
-      });
+      }));
     });
     
     console.log(`Retrieved ${transactions.length} transactions for project ${projectId}`);
@@ -213,10 +225,10 @@ export const getTransactionsByDateRange = async (startDate, endDate) => {
     const transactions = [];
     
     querySnapshot.forEach((doc) => {
-      transactions.push({
+      transactions.push(withCanonicalCategory({
         id: doc.id,
         ...doc.data()
-      });
+      }));
     });
     
     console.log(`Retrieved ${transactions.length} transactions in date range`);
