@@ -351,3 +351,29 @@ tidak ada dokumen uji tertinggal. Build live `index-BwasRS8X.js`.
 
 Belum terverifikasi: perilaku aplikasi setelah LOGIN di balik rules baru (perlu
 akun pemilik), unggah arsip nyata ke Storage, dan impor CoreTax.
+
+## 2026-11-15 — Akurasi laporan PPN diperbaiki (akar, bukan tampilan)
+
+Tiga cacat di `utils/reportCalc.js` membuat laporan pajak tidak pernah bisa
+dipercaya, walau tabelnya rapi:
+
+1. **Setoran dihitung walau belum dibayar.** `ppnDisetor` jatuh ke
+   `inv.pajak11` bila `taxPaymentAmount` kosong, tanpa memeriksa apakah ada
+   bukti setor. Akibatnya setiap masa berstatus "Lunas" dan tunggakan tidak
+   pernah muncul. Sekarang hanya dihitung bila `taxPaidAt` **atau**
+   `taxPaymentProofUrl` terisi.
+2. **Setoran diatribusikan ke bulan bayar, bukan masa pajak.** Faktur Maret
+   disetor April membuat April "Lebih setor" dan Maret "Lewat tenggat"
+   sekaligus. Sekarang urutan sumber masa: `taxPeriod` eksplisit →
+   `issueDate` → `taxPaidAt` (dokumen lama).
+3. **Notifikasi tenggat PPN di navbar tidak pernah muncul** karena sebab (1):
+   `selisih > 0` tidak pernah benar. Sekarang muncul saat memang ada tunggakan.
+
+Diverifikasi lewat `monthlyTaxReport` langsung (bukan hanya tampilan): 12 bulan,
+bulan nihil, Timestamp/string campur, invoice `void` diabaikan, bukti setor tanpa
+tanggal, dan setoran lintas bulan. Tampilan Laporan → Pajak Bulanan dan dasbor
+Pajak diperiksa ulang; 390px tanpa overflow. `npm run check` + `npm run build` hijau.
+
+Catatan data: invoice lama tidak menyimpan `taxPeriod`, jadi masa pajak
+diturunkan dari `issueDate`. Kalau suatu saat faktur dibuat untuk masa sebelumnya,
+isi `taxPeriod` agar tidak salah masa.

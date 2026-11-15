@@ -53,11 +53,31 @@ export const monthlyTaxReport = (invoices = [], year) => {
       r.omzet += num(inv.grandTotal ?? inv.totals?.grandTotal);
     }
 
-    // Setoran PPN
-    const paidKey = monthKey(inv.taxPaidAt);
-    if (paidKey && Number(paidKey.slice(0, 4)) === year) {
-      const idx = Number(paidKey.slice(5, 7)) - 1;
-      rows[idx].ppnDisetor += num(inv.taxPaymentAmount ?? inv.pajak11 ?? inv.totals?.ppn);
+    // Setoran PPN.
+    //
+    // PENTING 1: hanya hitung sebagai setoran bila ADA bukti setor
+    // (`taxPaidAt` atau `taxPaymentProofUrl`). Sebelumnya nilai jatuh ke
+    // `inv.pajak11` walau belum dibayar, sehingga setiap masa tampak "Lunas"
+    // dan laporan pajak tidak pernah menunjukkan tunggakan.
+    //
+    // PENTING 2: setoran diatribusikan ke MASA PAJAK, bukan tanggal bayar.
+    // Faktur masa Maret lazim disetor April (tenggat akhir bulan berikutnya),
+    // jadi memakai `taxPaidAt` membuat April tampak "lebih setor" sebesar PPN
+    // Maret sekaligus meninggalkan Maret "lewat tenggat" — dua kesalahan
+    // sekaligus di satu baris. Urutan sumber masa pajak:
+    //   1. `taxPeriod` eksplisit ('YYYY-MM'), bila dokumen menyimpannya;
+    //   2. bulan terbit faktur (`issueDate`) — masa pajak = masa terbit;
+    //   3. baru tanggal bayar, untuk dokumen lama tanpa tanggal terbit.
+    const sudahDisetor = Boolean(inv.taxPaidAt || inv.taxPaymentProofUrl);
+    if (sudahDisetor) {
+      const periodKey =
+        (typeof inv.taxPeriod === 'string' && /^\d{4}-\d{2}$/.test(inv.taxPeriod) ? inv.taxPeriod : null) ||
+        monthKey(inv.issueDate || inv.date) ||
+        monthKey(inv.taxPaidAt);
+      if (periodKey && Number(periodKey.slice(0, 4)) === year) {
+        const idx = Number(periodKey.slice(5, 7)) - 1;
+        rows[idx].ppnDisetor += num(inv.taxPaymentAmount ?? inv.pajak11 ?? inv.totals?.ppn);
+      }
     }
   });
 
