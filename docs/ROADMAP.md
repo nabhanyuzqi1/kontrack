@@ -642,3 +642,11 @@ produksi.
 - Deploy gabungan sempat gagal pada timeout analisis Firebase (10 detik), bukan error kode. Deploy dipisah dan berhasil: Functions + Hosting.
 - Hosting live diperbarui; Functions live memuat getStorageAssetDataUrl dengan konversi TIFF.
 - Belum terverifikasi: pratinjau TIFF sungguhan dan unggah SPK dari UI live (butuh berkas asli + login pemilik).
+
+## 2026-11-16 — Upgrade `firebase-functions` v7
+
+- `firebase-functions` dari `^6.0.1` ke `^7.4.0`, `firebase-admin` dari `^12.6.0` ke `^13.10.0`; versi terpasang di lockfile 7.4.0/13.x.
+- `firebase-functions-test` tetap `^3.1.0` karena versi terbaru menolak `firebase-admin@14`, sementara v13 didukung penuh. `firebase-admin@14` sengaja TIDAK dipasang.
+- Verifikasi lokal: `node --check` lulus untuk `index.js`/`tiff.js`; `require('./index.js')` mengekspor 11 function dalam sekitar 2,8 detik.
+- Deploy Functions sukses untuk 11 function, tanpa peringatan versi usang. Endpoint `getStorageAssetDataUrl` dan `analyzeTransactionImageWithAI` menjawab 400 untuk payload kosong tanpa auth, sesuai perilaku callable.
+- Lint ESLint masih gagal pada parser lama `ecmaVersion: 2018` (optional chaining) dan aturan CRLF; masalah ini sudah ada sebelum upgrade, bukan regresi dependensi.
