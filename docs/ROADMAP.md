@@ -20,6 +20,28 @@ Menggantikan `PLAN-next-session.md` dan bagian status di `roadmap-invoice-pajak.
 
 ## Sudah selesai
 
+### Batch fitur invoice & AI dokumen (2026-11-*) — live, commit `447385c`
+- **Unggah berkas langsung tampak tanpa refresh**: modal detail invoice kini
+  mengikuti data terbaru dari daftar (`detailLive` di `InvoicesPage.jsx`), dan
+  berkas yang baru diunggah digabung lewat state `uploadedDocs`. Label "(ada)"
+  dan pratinjau langsung berubah; tidak perlu muat ulang halaman.
+- **Kirim email penagihan dengan lampiran**: tombol "Unduh + Kirim via Gmail"
+  mengunduh PDF invoice + seluruh berkas arsip (BAHK/WPHO/faktur), isi email
+  mencantumkan daftar lampiran, lalu membuka draf Gmail (bukan SMTP — email ke
+  mitra adalah korespondensi pemilik). Lampirkan dari folder Unduhan.
+- **Email penagihan terpisah dari email PT**: field `billingEmail` di dokumen
+  klien (ditambah di `ClientModal` + panel detail klien). Form email invoice
+  memprefill `billingEmail`, bukan email utama.
+- **Analisis AI arsip invoice**: callable `analyzeInvoiceDocuments` (maks 3
+  dokumen; TIFF dikonversi PNG server-side) mengekstrak nomor, nilai, qty,
+  tanggal, uraian dari WPHO/BAHK/faktur, plus temuan kesalahan (nilai tidak
+  konsisten, nomor kosong, tanggal beda). Hasil DITAMPILKAN lewat
+  `InvoiceAiReviewModal` untuk dikonfirmasi per dokumen sebelum diterapkan —
+  tidak ada bidang tertimpa tanpa persetujuan; sisanya tetap bisa diedit manual.
+- Verifikasi: build hijau, `npm run check` lulus, 12 Cloud Function ter-deploy,
+  hosting live `index-BE8VuHTz.js`. Belum terverifikasi: hasil analisis AI
+  terhadap dokumen nyata (butuh unggahan pemilik + kuota AI).
+
 ### Batch arsip & penagihan (2026-11-15)
 - Drawer detail invoice: tanpa duplikasi (grand total hanya di kepala), layout
   dua kolom, terverifikasi nol scroll di 1440×900.

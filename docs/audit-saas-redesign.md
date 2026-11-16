@@ -13,7 +13,7 @@ Tanggal: 2026-07-21 · Basis audit: commit `a78b862` (main)
 
 Kontrack saat ini adalah aplikasi single-tenant untuk PT Permata Energi Borneo: React 18 (CRA) + Firebase (Auth, Firestore, Storage, Functions) + Gemini untuk analisis gambar transaksi. Arsitekturnya "fat client": semua query, agregasi, dan logika bisnis jalan di browser, Firestore diakses langsung.
 
-### 🔴 Kritis (perbaiki sekarang, terlepas dari rencana SaaS)
+### Kritis (perbaiki sekarang, terlepas dari rencana SaaS)
 
 **1. GEMINI_API_KEY ter-commit di git.**
 File `functions/.env.sistem-keuangan-ptpeb` ada di git history dan berisi API key Gemini. Siapa pun yang punya akses repo (atau kalau repo pernah publik) bisa memakai kuota Anda.
@@ -33,7 +33,7 @@ File `functions/.env.sistem-keuangan-ptpeb` ada di git history dan berisi API ke
 **5. Bukti transfer bisa dibaca publik.**
 `storage.rules` men-set `allow read: if true` untuk `transactions/{userId}/**`. Ini bukti transfer bank dan invoice — data finansial sensitif, terindeks siapa pun yang punya URL.
 
-### 🟠 Struktural (akan meledak saat jadi SaaS)
+### Struktural (akan meledak saat jadi SaaS)
 
 - **Tidak ada konsep tenant.** Koleksi `projects`, `transactions`, `users` flat dan global. Ini gap terbesar menuju SaaS.
 - **`paidAmount` di-recompute di client** (`transactions.js:325`): setiap tambah/edit/hapus transaksi, client membaca ulang semua transaksi proyek lalu menulis balik total ke dokumen proyek. Race condition kalau dua user menulis bersamaan; drift permanen kalau client crash di tengah jalan. Harus pindah ke Cloud Function trigger atau Firestore transaction.
@@ -41,7 +41,7 @@ File `functions/.env.sistem-keuangan-ptpeb` ada di git history dan berisi API ke
 - **Lookup user by email, bukan by uid** (`auth.js`): satu query ekstra di setiap auth state change, dan email bisa berubah. Dokumen user seharusnya ber-key `uid`; role seharusnya custom claim.
 - **Transisi status proyek dihitung di client** (`projects.js:274`) — logika bisnis yang seharusnya server-side/scheduled.
 
-### 🟡 Kualitas
+### Kualitas
 
 - CRA (`react-scripts` 5) sudah deprecated — migrasi ke Vite.
 - Testing library terpasang, nol test.

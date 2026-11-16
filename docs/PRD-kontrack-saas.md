@@ -27,11 +27,11 @@ Kontrack (baik live maupun backup) memakai abstraksi **Proyek**: nilai kontrak �
 
 | Tipe kontraktor | Model bisnis | Cocok dengan Kontrack sekarang? |
 |---|---|---|
-| **Bangunan/sipil** (gedung, jalan, jembatan, perumahan) | Berbasis proyek: RAB → SPK → termin → retensi → serah terima | ✅ Sangat cocok — ini core-nya |
-| **Jasa dgn alat berat** (land clearing, hauling, cut & fill) | Berbasis kontrak + volume (m³, ritase, ton) | 🟡 Bisa dipaksakan sebagai "proyek", tapi tak ada tracking volume/unit |
-| **Sewa/rental alat berat** (excavator, dozer, crane) | Berbasis utilisasi aset: sewa per jam/hari/bulan, rekurin | 🔴 Tidak cocok — tak ada registri aset, utilisasi, jadwal maintenance |
-| **Mekanikal/Elektrikal (ME)** | Berbasis proyek | ✅ Cocok (sama seperti sipil) |
-| **Supplier/trading material** | Berbasis order/stok | 🟡 Sebagian (tak ada inventory) |
+| **Bangunan/sipil** (gedung, jalan, jembatan, perumahan) | Berbasis proyek: RAB → SPK → termin → retensi → serah terima | Ya. Sangat cocok — ini core-nya |
+| **Jasa dgn alat berat** (land clearing, hauling, cut & fill) | Berbasis kontrak + volume (m³, ritase, ton) | Sebagian. Bisa dipaksakan sebagai "proyek", tapi tak ada tracking volume/unit |
+| **Sewa/rental alat berat** (excavator, dozer, crane) | Berbasis utilisasi aset: sewa per jam/hari/bulan, rekurin | Tidak. Tidak cocok — tak ada registri aset, utilisasi, jadwal maintenance |
+| **Mekanikal/Elektrikal (ME)** | Berbasis proyek | Ya. Cocok (sama seperti sipil) |
+| **Supplier/trading material** | Berbasis order/stok | Sebagian. Sebagian (tak ada inventory) |
 
 **Catatan penting dari survey:** field "Assets" di wizard registrasi step 3 hanya soal **aset branding (logo)**, bukan alat berat. Jadi saat ini belum ada dukungan terstruktur untuk manajemen alat berat sama sekali.
 
@@ -180,10 +180,10 @@ orgs/{orgId}/aggregates/summary*     → (server-maintained)
 **Fase 0 — Keamanan (blocking, dari audit):** rotasi API key, firestore.rules eksplisit, App Check di function Gemini, tutup storage publik.
 
 **Fase 1 — Rebrand UI + rekonstruksi baseline (in progress):**
-- ✅ Migrasi Vite, design system Kontrack, shell sidebar, halaman login/dashboard/proyek/laporan baru
-- ⬜ Wizard registrasi perusahaan 5 langkah (multi-tenant onboarding) — belum ada di backup
-- ⬜ Modul invoice + template konstruksi
-- ⬜ Portofolio publik
+- Ya Migrasi Vite, design system Kontrack, shell sidebar, halaman login/dashboard/proyek/laporan baru
+- [ ] Wizard registrasi perusahaan 5 langkah (multi-tenant onboarding) — belum ada di backup
+- [ ] Modul invoice + template konstruksi
+- [ ] Portofolio publik
 
 **Fase 2 — Multi-tenant penuh:** skema `orgs/...`, custom claims, trigger agregat, billing (Midtrans/Xendit), migrasi PT PEB jadi tenant pertama.
 
