@@ -38,7 +38,7 @@ import {
   uploadInvoiceDocument
 } from '../../services/invoices';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
-import { sendInvoiceEmail, buildBillingEmailContent } from '../../services/email';
+import { buildGmailComposeUrl, buildBillingEmailContent } from '../../services/email';
 import CoretaxExportModal from './CoretaxExportModal';
 
 const statusTone = { draft: 'slate', sent: 'blue', paid: 'emerald', void: 'red' };
@@ -84,7 +84,6 @@ const InvoiceDetailModal = ({
   const [emailUp, setEmailUp] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
-  const [emailBusy, setEmailBusy] = useState(false);
 
   // Form label kirim
   const [labelOpen, setLabelOpen] = useState(false);
@@ -136,27 +135,18 @@ const InvoiceDetailModal = ({
     setEmailOpen(true);
   };
 
-  const handleSendEmail = async () => {
-    if (!emailTo) {
+  const handleSendEmail = () => {
+    if (!emailTo.trim()) {
       alert('Isi alamat email tujuan terlebih dahulu.');
       return;
     }
-    setEmailBusy(true);
-    try {
-      await sendInvoiceEmail({
-        to: emailTo,
-        subject: emailSubject,
-        body: emailBody,
-        attachments,
-      });
-      alert('Email penagihan terkirim.');
-      setEmailOpen(false);
-    } catch (err) {
-      console.error('Gagal kirim email:', err);
-      alert(err?.message || 'Gagal mengirim email.');
-    } finally {
-      setEmailBusy(false);
-    }
+    const url = buildGmailComposeUrl({
+      to: emailTo.trim(),
+      subject: emailSubject,
+      body: emailBody,
+    });
+    // Dipanggil langsung dari klik agar tab Gmail tidak diblokir sebagai popup.
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleUpload = async (kind, file) => {
@@ -561,14 +551,14 @@ const InvoiceDetailModal = ({
         isOpen
         onClose={() => setEmailOpen(false)}
         title="Kirim Email Penagihan"
-        subtitle={`${attachments.length} berkas dilampirkan`}
+        subtitle="Periksa pesan, lalu lanjutkan pengiriman di Gmail"
         size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setEmailOpen(false)}>Batal</Button>
-            <Button onClick={handleSendEmail} loading={emailBusy}>
+            <Button onClick={handleSendEmail}>
               <Mail className="h-4 w-4" />
-              Kirim
+              Buka Gmail
             </Button>
           </>
         }
@@ -587,7 +577,9 @@ const InvoiceDetailModal = ({
             <Textarea rows={10} value={emailBody} onChange={(e) => setEmailBody(e.target.value)} />
           </Field>
           <p className="text-xs text-slate-400">
-            Lampiran: {attachments.length > 0 ? attachments.map((a) => a.name).join(', ') : 'belum ada berkas di arsip — buka tab Arsip Berkas untuk mengunggah.'}
+            Gmail terbuka dengan pesan di atas. Lampirkan berkas dari tab Arsip Berkas lebih dulu
+            (tombol Unduh): Gmail tidak dapat menerima lampiran lewat tautan draf.
+            {attachments.length > 0 ? ` Tersedia: ${attachments.map((a) => a.name).join(', ')}.` : ' Belum ada berkas di arsip.'}
           </p>
         </div>
       </Modal>

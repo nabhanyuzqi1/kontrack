@@ -633,10 +633,38 @@ produksi.
   prediktor horizontal, dan TIFF tanpa `StripByteCounts`.
 - `getStorageAssetDataUrl` mengubah TIFF menjadi PNG sekali di server; hasilnya
   dipakai pratinjau, unduhan, dan analisis AI. Berkas asli tidak diubah.
-- Format yang belum didukung (TIFF berkompresi JPEG, CMYK, planar, 16 bit) ditolak
-  dengan pesan yang meminta simpan ulang, bukan menghasilkan gambar rusak.
+- Format yang belum didukung (CMYK, planar, 16 bit) ditolak dengan pesan yang
+  meminta simpan ulang, bukan menghasilkan gambar rusak.
 - Uji decoder: 11/11 lulus (RGB, grayscale, WhiteIsZero, prediktor, deflate,
   PackBits, strip tanpa byte count, berkas bukan TIFF, TIFF rusak).
+
+### TIFF berkompresi JPEG (kompresi 6 dan 7) — sebelumnya ditolak
+- Laporan pemilik: "format tiff belum dapat ditampilkan, kompresi tiff 6 belum
+  didukung". Gejala benar: bentuk ini dipakai banyak pemindai dokumen.
+- `functions/jpeg.js` (baru): decoder JPEG baseline sendiri (SOI..EOI, Huffman,
+  IDCT, upsampling chroma bilinear, restart marker, 4:2:0/4:2:2/4:4:4, YCbCr→RGB
+  dan RGB Adobe). Progressive dan arithmetic coding ditolak dengan pesan jelas.
+  Akurasi terhadap Pillow: selisih maks 3/255. Kinerja: 1024x768 ± 0,5 detik.
+- `decodeJpegTiff` di `functions/tiff.js` menangani tiga bentuk JPEG-in-TIFF:
+  1. Interchange format (tag 513): satu stream JPEG utuh.
+  2. JPEGTables + strip utuh (bentuk libtiff/Pillow untuk kompresi 7): tag 347
+     berisi SOI+DQT+DHT, tiap strip SOI+SOF+SOS+entropy+EOI. Tabel disuntik ke
+     tiap strip.
+  3. Tabel + entropy terpisah (old-style JPEG pemindai, kompresi 6): payload
+     tabel mentah di tag 519/520/521, strip dimulai langsung pada entropy. Stream
+     lengkap disusun ulang mengikuti T.81, mengikuti konvensi libtiff
+     (`tif_ojpeg.c`: ID komponen 0-based, tabel kuantisasi ke-i untuk komponen
+     ke-i, tabel terakhir diulang bila komponen lebih banyak daripada tabel).
+- Warna JPEG-in-TIFF: stream tanpa penanda Adobe APP14 dianggap YCbCr secara
+  default, TETAPI bila ID komponen di SOF adalah "R","G","B" (0x52,0x47,0x42)
+  datanya RGB apa adanya. Tanpa cek kedua ini gambar Pillow/Photoshop bergeser
+  warna (biru menjadi hijau, kanal merah terbaca sebagai luma).
+- Verifikasi `scripts/verify-tiff-conversion.cjs`: TIFF kompresi 7 dari Pillow
+  selisih piksel maks 1/255 (0 dari 120.000 piksel menyimpang), TIFF kompresi 6
+  sintetis selisih maks 3/255, CMYK ditolak dengan pesan yang benar, dan JPEG
+  4:4:4 langsung selisih maks 3/255.
+- Verifikasi penuh kompresi 6 dengan berkas pemindai asli milik pemilik masih
+  perlu dilakukan lewat unggahan nyata di aplikasi.
 
 ### Deploy dan belum terverifikasi
 - Deploy gabungan sempat gagal pada timeout analisis Firebase (10 detik), bukan error kode. Deploy dipisah dan berhasil: Functions + Hosting.
@@ -652,6 +680,12 @@ produksi.
 - Lint ESLint masih gagal pada parser lama `ecmaVersion: 2018` (optional chaining) dan aturan CRLF; masalah ini sudah ada sebelum upgrade, bukan regresi dependensi.
 
 ## 2026-11-16 — Error CRUD Firestore, carousel hasil AI, TIFF, prompt hemat token
+
+### Perbaikan PDF detail invoice dan draf Gmail
+- FileViewer berhenti sebelum memproses blob tanpa URL. Guard kini menerima blob hasil generator dari detail invoice.
+- Generator asli diuji di browser: application/pdf, 10.837 byte, header %PDF-. Pemeriksaan visual iframe belum terverifikasi karena viewer PDF membekukan CDP harness.
+- Email invoice kini membuka draf Gmail dengan penerima, subjek, dan isi; tidak memanggil SMTP. Lampiran ditambahkan manual di Gmail. SMTP pemberitahuan Kontrack tetap tersedia.
+- URL Gmail diuji terhadap karakter khusus dan baris baru; npm run check dan npm run build lulus. Pengiriman nyata dari akun Gmail pemilik belum diuji.
 
 ### Akar error `Unsupported field value: undefined (categoryFrom)`
 - `AITransactionModal` menulis `categoryCorrectedFrom: fixed ? r.category : undefined`.

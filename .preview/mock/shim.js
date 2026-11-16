@@ -319,6 +319,10 @@ export const getFinancialInsight = async () => ({});
 
 // services/email
 export const sendInvoiceEmail = async () => ({ messageId: 'mock' });
+export const buildGmailComposeUrl = ({ to = '', subject = '', body = '' }) => {
+  const params = new URLSearchParams({ view: 'cm', fs: '1', to, su: subject, body });
+  return `https://mail.google.com/mail/?${params.toString()}`;
+};
 export const buildBillingEmailContent = (invoice) => ({
   subject: `Penagihan ${invoice?.invoiceNumber || ''}`,
   body: 'mock body'

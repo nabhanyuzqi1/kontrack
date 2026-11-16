@@ -1,17 +1,21 @@
 // src/services/email.js
-// Kirim email penagihan lewat Cloud Function sendInvoiceEmail.
-// Lampiran: URL berkas Storage (BAHK/WPHO/PK/faktur) dan PDF invoice yang
-// di-generate klien lalu dikirim sebagai base64.
-import { httpsCallable } from 'firebase/functions';
-import { aiFunctions } from './functionsRegion';
+// Pembuat isi email penagihan + pembuka draf di klien email pengguna.
+//
+// Kenapa TIDAK lewat SMTP: pengiriman invoice adalah korespondensi pemilik dengan
+// mitranya, bukan pemberitahuan dari produk. Lewat SMTP, surat terkirim dari
+// alamat server Kontrack (bukan alamat pemilik), mudah masuk spam, dan riwayat
+// kirimnya tidak ada di kotak masuk pemilik. SMTP tetap dipakai HANYA untuk email
+// dari Kontrack ke pengguna aplikasi (undangan, pemberitahuan, verifikasi).
+//
+// Draf dibuka di Gmail. Lampiran tidak bisa dibawa URL draf, jadi pemilik
+// melampirkan sendiri dari tombol Unduh di pratinjau berkas.
 
-export const sendInvoiceEmail = async ({ to, cc, subject, body, attachments = [], replyTo }) => {
-  const fn = httpsCallable(aiFunctions(), 'sendInvoiceEmail');
-  const res = await fn({ to, cc, subject, body, attachments, replyTo });
-  return res.data;
+export const buildGmailComposeUrl = ({ to = '', subject = '', body = '' }) => {
+  const params = new URLSearchParams({ view: 'cm', fs: '1', to, su: subject, body });
+  return `https://mail.google.com/mail/?${params.toString()}`;
 };
 
-export const buildBillingEmailContent = (invoice, company, { up = '' }) => {
+export const buildBillingEmailContent = (invoice, company, { up = '' } = {}) => {
   const lines = [];
   const companyName = company?.name || company?.companyName || 'Kami';
   lines.push(`Kepada Yth.${up ? `\nu.p. ${up}` : ''}`);

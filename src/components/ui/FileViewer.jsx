@@ -42,7 +42,8 @@ const FileViewer = ({ file, onClose }) => {
   const tiffUnsupported = isTiff(label, file?.url) && !conversionNote.includes('diubah menjadi PNG');
 
   useEffect(() => {
-    if (!file?.url) return undefined;
+    // PDF hasil generator tersedia sebagai blob tanpa URL Storage.
+    if (!file?.url && !file?.blob) return undefined;
 
     // Blob yang sudah disiapkan pemanggil (mis. PDF yang baru dibuat generator)
     if (file.blob) {

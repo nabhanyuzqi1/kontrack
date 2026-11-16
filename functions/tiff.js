@@ -217,14 +217,17 @@ const decodeTiff = (input) => {
   if (bps[0] !== 8) {
     throw new Error(`TIFF ${bps[0]} bit per kanal belum didukung. Simpan ulang sebagai 8 bit.`);
   }
+  if (photometric === 5) {
+    throw new Error("TIFF CMYK belum didukung. Simpan ulang sebagai RGB, JPG, atau PNG.");
+  }
   if (samplesPerPixel > 4 || samplesPerPixel < 1) {
     throw new Error("Jumlah kanal TIFF tidak didukung.");
   }
   if (planar !== 1) {
     throw new Error("TIFF terpisah per kanal (planar) belum didukung. Simpan ulang sebagai satu bidang.");
   }
-  if (compression === 7) {
-    throw new Error("TIFF berkompresi JPEG belum didukung. Simpan ulang sebagai TIFF tanpa kompresi atau JPG.");
+  if (compression === 6 || compression === 7) {
+    return decodeJpegTiff(buf, tags, {width, height, samplesPerPixel, photometric, planar});
   }
 
   const offsets = tags[273] || [];
@@ -311,6 +314,252 @@ const isTiff = (buf) => {
   if (!buf || buf.length < 4) return false;
   const s = buf.slice(0, 4).toString("latin1");
   return s === "II*\0" || s === "MM\0*";
+};
+
+/**
+ * TIFF berkompresi JPEG (Compression 6 atau 7) → PNG.
+ *
+ * Tiga bentuk yang ditangani:
+ *
+ * 1. **Interchange format** (tag 513 `JPEGInterchangeFormat`): seluruh gambar
+ *    sudah berupa satu stream JPEG utuh (SOI..EOI). Cukup di-decode.
+ *
+ * 2. **JPEGTables + strip utuh** (bentuk yang ditulis libtiff/Pillow untuk
+ *    kompresi 7): tag 347 berisi SOI + DQT + DHT (+ EOI), dan SETIAP strip
+ *    berupa SOI + SOF + SOS + entropy + EOI tanpa tabel. Tabel dari 347
+ *    disuntikkan ke tiap strip sebelum SOF, lalu di-decode.
+ *
+ * 3. **Tabel + entropy terpisah** (bentuk old-style JPEG pemindai): tabel
+ *    kuantisasi (519) dan Huffman (520/521) disimpan sebagai payload mentah
+ *    64-byte / "16 byte BITS + VALUES", dan data strip dimulai langsung pada
+ *    entropy tanpa SOI. Stream lengkap disusun ulang mengikuti T.81.
+ *
+ * Tanpa ketiganya, WPHO/PK hasil scan ditolak dengan "kompresi 6 belum
+ * didukung" — padahal itu format bawaan banyak pemindai dokumen.
+ */
+const decodeJpegTiff = (buf, tags, meta) => {
+  const {decodeJpeg} = require("./jpeg");
+  const t = (id) => (tags[id] ? tags[id][0] : undefined);
+  const all = (id) => tags[id] || [];
+
+  const {width, height, samplesPerPixel} = meta;
+  const offsets = all(273);
+  const counts = all(279);
+
+  const asPng = (img) => ({
+    data: encodePng(img.data, img.width, img.height, 3),
+    width: img.width,
+    height: img.height,
+  });
+
+  // (1) Interchange format: satu stream JPEG utuh.
+  const ifdOffset = t(513);
+  if (ifdOffset) {
+    const len = t(514) || (buf.length - ifdOffset);
+    const end = Math.min(buf.length, ifdOffset + len);
+    let start = ifdOffset;
+    // Loloskan pengisi sebelum SOI.
+    while (start + 1 < end && !(buf[start] === 0xff && buf[start + 1] === 0xd8)) start++;
+    // Stream JPEG yang tertanam hampir selalu YCbCr; penanda Adobe APP14
+    // (jika ada) yang menyatakan RGB ditangani decoder apa adanya.
+    return asPng(decodeJpeg(buf.slice(start, end)));
+  }
+
+  if (!offsets.length) throw new Error("TIFF JPEG tidak memuat data gambar.");
+
+  // (2) Bangun daftar stream JPEG per strip.
+  // TYPE_UNDEFINED dibaca readIfd sebagai byte array, bukan offset.
+  const jpegTables = Array.isArray(tags[347]) && tags[347].length
+    ? Buffer.from(tags[347])
+    : null;
+  // Isi tabel dari JPEGTables: segmen di antara SOI dan EOI.
+  const tableBody = (() => {
+    if (!jpegTables) return [];
+    const tb = jpegTables;
+    if (tb.length < 4 || tb[0] !== 0xff || tb[1] !== 0xd8) return [];
+    const parts = [];
+    let p = 2;
+    while (p + 3 < tb.length) {
+      if (tb[p] !== 0xff) { p++; continue; }
+      const m = tb[p + 1];
+      if (m === 0xd9) break;
+      if (m === 0x00 || m === 0xff) { p++; continue; }
+      const segLen = tb.readUInt16BE(p + 2);
+      parts.push(tb.slice(p, p + 2 + segLen));
+      p += 2 + segLen;
+    }
+    return parts;
+  })();
+
+  /** Gabungkan SOI + tabel + isi strip (tanpa SOI/EOI ganda). */
+  const assemble = (stripBuf, extraTables) => {
+    const parts = [Buffer.from([0xff, 0xd8]), ...tableBody, ...extraTables];
+    let body = stripBuf;
+    // Buang SOI di depan.
+    if (body.length >= 2 && body[0] === 0xff && body[1] === 0xd8) body = body.slice(2);
+    parts.push(body);
+    // Pastikan diakhiri EOI.
+    if (!(body.length >= 2 && body[body.length - 2] === 0xff && body[body.length - 1] === 0xd9)) {
+      parts.push(Buffer.from([0xff, 0xd9]));
+    }
+    return Buffer.concat(parts);
+  };
+
+  // (2) Pilih jalur berdasarkan isi strip. Bentuk "strip utuh" dimulai dengan
+  //     SOI (0xFFD8); bentuk "tabel terpisah" adalah entropy mentah tanpa SOI.
+  const firstStart = offsets[0] || 0;
+  const firstEnd = counts[0] ? firstStart + counts[0] : buf.length;
+  const firstStrip = buf.slice(firstStart, Math.min(firstEnd, buf.length));
+  const isFullStrips =
+    firstStrip.length >= 2 && firstStrip[0] === 0xff && firstStrip[1] === 0xd8;
+
+  if (!isFullStrips) return decodeSplitTables(buf, tags, meta);
+
+  const pieces = [];
+  for (let i = 0; i < offsets.length; i++) {
+    const start = offsets[i];
+    const end = counts[i] ? start + counts[i] : (offsets[i + 1] || buf.length);
+    if (!start || end <= start) continue;
+    pieces.push(decodeJpeg(assemble(buf.slice(start, Math.min(end, buf.length)), [])));
+  }
+
+  return stitch(pieces, width, height);
+};
+
+/** Jahit strip penuh-lebar menjadi satu gambar. */
+const stitch = (pieces, width, height) => {
+  const totalH = pieces.reduce((a, p) => a + p.height, 0);
+  const outW = pieces[0].width;
+  const outH = Math.min(height, totalH);
+  const out = Buffer.alloc(outW * outH * 3);
+  let y0 = 0;
+  for (const p of pieces) {
+    const rows = Math.min(p.height, outH - y0);
+    if (rows <= 0) break;
+    for (let y = 0; y < rows; y++) {
+      p.data.copy(out, (y0 + y) * outW * 3, y * p.width * 3, y * p.width * 3 + outW * 3);
+    }
+    y0 += rows;
+  }
+  return {data: encodePng(out, outW, outH, 3), width: outW, height: outH};
+};
+
+/**
+ * Bentuk old-style JPEG pemindai: tabel kuantisasi (519) dan Huffman (520/521)
+ * disimpan sebagai payload mentah, dan strip dimulai langsung pada entropy
+ * tanpa SOI. Stream lengkap disusun ulang mengikuti T.81, lalu di-decode.
+ */
+const decodeSplitTables = (buf, tags, meta) => {
+  const {decodeJpeg} = require("./jpeg");
+  const t = (id) => (tags[id] ? tags[id][0] : undefined);
+  const all = (id) => tags[id] || [];
+  const {width, height, samplesPerPixel} = meta;
+  const offsets = all(273);
+  const counts = all(279);
+  const qtOffsets = all(519);
+  const dcOffsets = all(520);
+  const acOffsets = all(521);
+  const ncomp = samplesPerPixel >= 3 ? 3 : 1;
+
+  // Ubah payload tabel mentah menjadi segmen penanda DQT/DHT.
+  const qtSegments = [];
+  qtOffsets.forEach((off, i) => {
+    if (!off) return;
+    const raw = buf.slice(off, off + 64);
+    if (raw.length < 64) return;
+    // 64 byte urut zigzag, presisi 8 bit.
+    const body = Buffer.alloc(65);
+    body[0] = i & 0x0f; // Pq=0 (8 bit), Tq=i
+    raw.copy(body, 1);
+    qtSegments.push(marker(0xdb, body));
+  });
+
+  const huffSegments = [];
+  const pushHuff = (off, cls, id) => {
+    if (!off) return;
+    const raw = buf.slice(off, off + 16 + 256);
+    if (raw.length < 17) return;
+    const cnts = raw.slice(0, 16);
+    const total = cnts.reduce((a, b) => a + b, 0);
+    const body = Buffer.alloc(1 + 16 + total);
+    body[0] = (cls << 4) | id;
+    cnts.copy(body, 1);
+    raw.copy(body, 17, 16, 16 + total);
+    huffSegments.push(marker(0xc4, body));
+  };
+  const maxTables = Math.max(dcOffsets.length, acOffsets.length, ncomp);
+  for (let i = 0; i < maxTables; i++) {
+    pushHuff(dcOffsets[i], 0, i);
+    pushHuff(acOffsets[i], 1, i);
+  }
+
+  // SOF: ID komponen 0-based seperti tif_ojpeg.c libtiff; tabel kuantisasi
+  // ke-i untuk komponen ke-i, tabel terakhir diulang bila kurang.
+  const sOf = Buffer.alloc(6 + 3 * ncomp);
+  sOf[0] = 8; // presisi
+  sOf.writeUInt16BE(height, 1);
+  sOf.writeUInt16BE(width, 3);
+  sOf[5] = ncomp;
+  const qtFor = (i) => (qtSegments.length ? Math.min(i, qtSegments.length - 1) : 0);
+  for (let i = 0; i < ncomp; i++) {
+    sOf[6 + i * 3] = i;
+    sOf[7 + i * 3] = 0x11; // sampling 1x1: bentuk ini tidak menyimpan faktornya
+    sOf[8 + i * 3] = qtFor(i);
+  }
+
+  const sos = Buffer.alloc(4 + 2 * ncomp);
+  sos[0] = ncomp;
+  const tblFor = (arr, i) => (arr.length ? Math.min(i, arr.length - 1) : 0);
+  for (let i = 0; i < ncomp; i++) {
+    sos[1 + i * 2] = i;
+    sos[2 + i * 2] = ((tblFor(dcOffsets, i) & 0x0f) << 4) | (tblFor(acOffsets, i) & 0x0f);
+  }
+  sos[1 + 2 * ncomp] = 0; // Ss
+  sos[2 + 2 * ncomp] = 63; // Se
+  sos[3 + 2 * ncomp] = 0; // Ah/Al
+
+  // Tabel bersama dari tag 347 bila ada (jarang di bentuk terpisah, tapi aman).
+  const tableBody = [];
+  const tables = t(347);
+  if (tables) {
+    const tb = buf.slice(tables, tables + (t(348) || 65535));
+    let endIdx = -1;
+    for (let i = tb.length - 1; i > 1; i--) {
+      if (tb[i] === 0xd9 && tb[i - 1] === 0xff) { endIdx = i - 1; break; }
+    }
+    if (endIdx > 2) tableBody.push(tb.slice(2, endIdx)); // buang SOI dan EOI
+  }
+
+  const pieces = [];
+  for (let i = 0; i < offsets.length; i++) {
+    const start = offsets[i];
+    const end = counts[i] ? start + counts[i] : (offsets[i + 1] || buf.length);
+    if (!start || end <= start) continue;
+    const entropy = buf.slice(start, Math.min(end, buf.length));
+    const stream = Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      ...tableBody,
+      ...qtSegments,
+      ...huffSegments,
+      marker(0xc0, sOf),
+      marker(0xda, sos),
+      entropy,
+      Buffer.from([0xff, 0xd9]),
+    ]);
+    pieces.push(decodeJpeg(stream));
+  }
+
+  if (!pieces.length) throw new Error("TIFF JPEG tidak memuat strip yang bisa dibaca.");
+  return stitch(pieces, width, height);
+};
+
+/** Susun satu segmen JPEG: 0xFF, penanda, panjang 16-bit, isi. */
+const marker = (code, body) => {
+  const head = Buffer.alloc(4);
+  head[0] = 0xff;
+  head[1] = code;
+  head.writeUInt16BE(body.length + 2, 2);
+  return Buffer.concat([head, body]);
 };
 
 /**
