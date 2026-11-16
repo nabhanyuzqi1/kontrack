@@ -155,7 +155,12 @@ const FileViewer = ({ file, onClose }) => {
 
         {state === 'ready' && objectUrl && (
           pdf ? (
-            <iframe src={objectUrl} title={label} className="h-full w-full bg-white" />
+            // <object> bukan <iframe>: Safari tidak merender PDF di dalam iframe
+            // (layar kosong tanpa pesan), tetapi merendernya lewat object/embed.
+            // iframe di dalamnya hanya fallback untuk peramban tanpa plugin PDF.
+            <object data={objectUrl} type="application/pdf" title={label} className="h-full w-full bg-white">
+              <iframe src={objectUrl} title={label} className="h-full w-full bg-white" />
+            </object>
           ) : tiffUnsupported ? (
             <div className="mx-auto max-w-md rounded-[10px] bg-white p-5 text-center">
               <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-600" />
@@ -172,6 +177,12 @@ const FileViewer = ({ file, onClose }) => {
               src={objectUrl}
               alt={label}
               className="max-h-full max-w-full rounded-[10px] object-contain"
+              // Safari menyembunyikan gambar yang gagal muat tanpa pesan apa pun;
+              // ubah kegagalan senyap itu jadi pesan + jalan keluar.
+              onError={() => {
+                setErrorText('Gambar tidak dapat ditampilkan peramban ini. Unduh berkasnya untuk diperiksa.');
+                setState('error');
+              }}
             />
           )
         )}

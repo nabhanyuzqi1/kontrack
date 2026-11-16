@@ -681,6 +681,17 @@ produksi.
 
 ## 2026-11-16 — Error CRUD Firestore, carousel hasil AI, TIFF, prompt hemat token
 
+### Safari: PDF dan TIFF kosong di pratinjau
+- Safari tidak merender PDF di `<iframe>` (keterbatasan platform); Chrome bisa.
+  FileViewer kini memakai `<object type="application/pdf">` dengan iframe sebagai
+  fallback — didukung Safari, Chrome, dan Firefox.
+- Safari menyembunyikan `<img>` yang gagal muat tanpa pesan, sehingga TIFF yang
+  gagal render tampak sebagai layar kosong. `<img>` kini punya `onError` yang
+  menampilkan pesan + tombol unduh.
+- Belum terverifikasi: tampilan nyata di Safari (tidak ada Safari di lingkungan
+  pengembangan). Perlu uji pemilik di Safari dengan hard refresh
+  (Cmd+Shift+R) agar memuat bundle baru.
+
 ### Perbaikan PDF detail invoice dan draf Gmail
 - FileViewer berhenti sebelum memproses blob tanpa URL. Guard kini menerima blob hasil generator dari detail invoice.
 - Generator asli diuji di browser: application/pdf, 10.837 byte, header %PDF-. Pemeriksaan visual iframe belum terverifikasi karena viewer PDF membekukan CDP harness.
