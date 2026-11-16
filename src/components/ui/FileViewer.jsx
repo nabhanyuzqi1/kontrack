@@ -16,27 +16,28 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, FileDown, Loader2, AlertTriangle, FileText } from 'lucide-react';
 import Button from './Button';
+import { fetchAssetPayload } from '../../services/assets';
 
-const isPdf = (name = '', url = '') => /\.pdf($|\?)/i.test(name) || /\.pdf($|\?)/i.test(url);
-
-// Storage menyimpan URL dengan token; menambah ?alt=media membuat respons
-// dikirim sebagai isi berkas, bukan halaman HTML viewer.
-const asMediaUrl = (url) => {
-  if (!url) return url;
-  const base = url.split('?')[0];
-  const params = new URL(url).searchParams;
-  if (base.includes('firebasestorage.googleapis.com') || base.includes('storage.googleapis.com')) {
-    params.set('alt', 'media');
-  }
-  return `${base}?${params.toString()}`;
+const isPdf = (name = '', url = '', type = '') => type === 'application/pdf' || /\.pdf($|\?)/i.test(name) || /\.pdf($|\?)/i.test(url);
+const isTiff = (name = '', url = '') => /\.(tif|tiff)($|\?)/i.test(name) || /\.(tif|tiff)($|\?)/i.test(url);
+const dataUrlToBlob = (url) => {
+  const [head, b64] = url.split(',');
+  const mime = /data:([^;]+)/.exec(head)?.[1] || 'application/octet-stream';
+  const bin = atob(b64 || '');
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
 };
 
 const FileViewer = ({ file, onClose }) => {
   const [objectUrl, setObjectUrl] = useState(null);
   const [state, setState] = useState('idle'); // idle | loading | ready | error
+  const [errorText, setErrorText] = useState('');
+  const [conversionNote, setConversionNote] = useState('');
 
   const label = file?.name || 'Berkas';
   const pdf = isPdf(file?.name, file?.url);
+  const tiff = isTiff(label, file?.url);
 
   useEffect(() => {
     if (!file?.url) return undefined;
@@ -53,19 +54,28 @@ const FileViewer = ({ file, onClose }) => {
     let created = null;
     setState('loading');
     setObjectUrl(null);
+    setConversionNote('');
+    setErrorText('');
 
-    fetch(asMediaUrl(file.url))
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
+    fetchAssetPayload(file.url)
+      .then((payload) => {
         if (!alive) return;
+        const blob = dataUrlToBlob(payload.dataUrl);
         created = URL.createObjectURL(blob);
         setObjectUrl(created);
         setState('ready');
+        if (payload.converted) setConversionNote('TIFF diubah menjadi PNG agar dapat ditampilkan. Berkas asli tidak berubah.');
+        else if (isTiff(file.name, file.url)) setConversionNote(payload.conversionNote || 'TIFF tidak dapat ditampilkan di peramban.');
       })
-      .catch(() => alive && setState('error'));
+      .catch((error) => {
+        if (!alive) return;
+        const code = error?.code || '';
+        if (code === 'functions/resource-exhausted') setErrorText('Kuota harian membuka berkas sudah habis.');
+        else if (code === 'functions/unauthenticated') setErrorText('Sesi login berakhir. Masuk ulang lalu coba lagi.');
+        else if (code === 'functions/not-found') setErrorText('Berkas tidak ditemukan di arsip.');
+        else setErrorText(error?.message || 'Berkas gagal dimuat.');
+        setState('error');
+      });
 
     return () => {
       alive = false;
@@ -116,6 +126,12 @@ const FileViewer = ({ file, onClose }) => {
         </div>
       </div>
 
+      {conversionNote && (
+        <p className="border-b border-white/10 bg-white/5 px-4 py-1.5 text-xs text-white/75">
+          {conversionNote}
+        </p>
+      )}
+
       <div className="flex min-h-0 flex-1 items-center justify-center p-3">
         {state === 'loading' && (
           <p className="flex items-center gap-2 text-sm text-white/80">
@@ -128,9 +144,7 @@ const FileViewer = ({ file, onClose }) => {
           <div className="max-w-md rounded-[10px] bg-white p-5 text-center">
             <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-600" />
             <p className="text-sm font-semibold text-slate-800">Berkas gagal dimuat di pratinjau</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Server berkas menolak permintaan ini. Buka di tab baru atau unduh untuk memeriksanya.
-            </p>
+            <p className="mt-1 text-xs text-slate-500">{errorText || 'Berkas gagal dimuat.'}</p>
             <a href={file.url} target="_blank" rel="noreferrer" className="mt-3 inline-block">
               <Button size="sm">Buka di tab baru</Button>
             </a>

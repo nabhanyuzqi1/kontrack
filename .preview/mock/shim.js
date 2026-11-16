@@ -36,6 +36,28 @@ export const INVOICE_STATUS_LABEL = {
 export const USER_ROLES = { ADMIN: 'admin', USER: 'user' };
 export const legacyFunctions = {};
 
+// Harness: berkas diambil dari gambar contoh, bukan Storage. `converted`
+// dipakai untuk menguji jalur "TIFF diubah server menjadi PNG".
+export const fetchAssetPayload = async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420">
+    <rect width="640" height="420" fill="#ffffff"/>
+    <rect x="24" y="24" width="592" height="372" fill="none" stroke="#1e293b" stroke-width="2"/>
+    <text x="44" y="86" font-family="Georgia, serif" font-size="26" fill="#0f172a">SURAT PERINTAH KERJA</text>
+    <text x="44" y="122" font-family="Georgia, serif" font-size="15" fill="#475569">No. 041/SPK/IPAL-SLM/2026</text>
+    <text x="44" y="180" font-family="Georgia, serif" font-size="13" fill="#334155">Pekerjaan: Instalasi IPAL 17 unit - Kab. Katingan</text>
+    <text x="44" y="210" font-family="Georgia, serif" font-size="13" fill="#334155">Nilai: Rp 4.250.000.000</text>
+    <text x="44" y="240" font-family="Georgia, serif" font-size="13" fill="#334155">Retensi: 5% - masa pemeliharaan 3 bulan</text>
+  </svg>`;
+  return {
+    dataUrl: `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`,
+    contentType: 'image/png',
+    originalContentType: 'image/tiff',
+    converted: true,
+    conversionNote: '',
+    size: 2048,
+  };
+};
+
 // --- Proyek ---
 export const getAllProjects = async () => projects;
 export const getProject = async (id) => projects.find((p) => p.id === id) || null;
@@ -329,6 +351,7 @@ export const sendInvoiceWhatsApp = async () => ({ ok: true });
 export const fetchAssetDataUrl = async () => {
   throw new Error('Harness: pengambilan aset Storage dilewati.');
 };
+// Viewer memakai `fetchAssetPayload`; aset kop PDF tetap dilewati di atas.
 
 
 // --- Ringkasan pilihan (invoice/proyek) ---

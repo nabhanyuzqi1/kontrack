@@ -594,3 +594,51 @@ produksi.
 - Hasil Gemini SUNGGUHAN untuk nota/bukti transfer baru (butuh login).
 - Akurasi tanggal pada foto nota buram.
 - Kirim WhatsApp/email nyata: secret masih `BELUM-DISET`.
+
+## 2026-11-16 — Perbaikan unggah SPK, pratinjau berkas, TIFF, dan error edit proyek
+
+### Error `Cannot read properties of null (reading 'toString')`
+- Sebab: `buildFormData` di `ProjectModal` memakai `terminCount !== undefined ? .toString() : ''`.
+  Firestore menyimpan field kosong sebagai `null`, dan `null !== undefined` bernilai
+  benar, jadi `null.toString()` melempar error setiap kali form proyek dibuka.
+- Perbaikan di akar: helper `numText()` menutup `undefined`, `null`, string kosong,
+  dan angka tak sah sekaligus; dipakai untuk `value`, `terminCount`, `retentionPct`,
+  `retentionMonths`. `taxRate` juga tidak lagi menjadi `null` (jatuh ke 11).
+- Uji helper: 7/7 bentuk masukan lulus (null, undefined, '', 0, angka, 'abc', NaN).
+
+### Pratinjau "server berkas menolak permintaan ini"
+- Sebab: `FileViewer` memakai `fetch()` langsung ke URL Storage. Storage menolak
+  permintaan tanpa token (401) DAN respons galatnya tidak membawa header CORS,
+  sehingga peramban melaporkannya sebagai kegagalan jaringan. Akibatnya SEMUA
+  berkas proyek/invoice gagal dipratinjau, bukan hanya berkas tertentu.
+- Perbaikan: berkas diambil lewat Cloud Function `getStorageAssetDataUrl`
+  (sudah memeriksa login + kuota, membaca objek dengan Admin SDK) melalui
+  `fetchAssetPayload()` baru di `services/assets.js`.
+- Pesan galat kini spesifik: kuota habis, sesi berakhir, berkas tidak ditemukan.
+
+### Unggah SPK/PK tidak muncul di form
+- Form memegang salinan `project` dari props, jadi setelah unggahan sukses label
+  dan pratinjau tidak berubah sampai halaman dimuat ulang. Ditambah state
+  `uploadedDocs` yang digabung ke data proyek, label "(ada)" langsung berubah.
+- `alert()` diganti pesan inline yang menjelaskan sebab (hak akses, ukuran,
+  jaringan), bukan "Gagal mengunggah berkas" yang tidak bisa ditindaklanjuti.
+
+### Dukungan TIFF (SPK, PK, WPHO)
+- Diuji langsung di peramban: `<img>` dan `createImageBitmap` sama-sama GAGAL
+  membuka TIFF. Gemini juga hanya menerima png/jpeg/webp/heic. Jadi TIFF tidak
+  mungkin dipratinjau atau dianalisis tanpa konversi.
+- `functions/tiff.js` (baru, tanpa dependensi): decoder TIFF baseline yang menulis
+  PNG memakai `zlib` bawaan Node. Cakupan: little/big endian, strip/tile, kompresi
+  none/LZW/PackBits/Deflate, 1 kanal atau RGB(A), WhiteIsZero (hasil faks),
+  prediktor horizontal, dan TIFF tanpa `StripByteCounts`.
+- `getStorageAssetDataUrl` mengubah TIFF menjadi PNG sekali di server; hasilnya
+  dipakai pratinjau, unduhan, dan analisis AI. Berkas asli tidak diubah.
+- Format yang belum didukung (TIFF berkompresi JPEG, CMYK, planar, 16 bit) ditolak
+  dengan pesan yang meminta simpan ulang, bukan menghasilkan gambar rusak.
+- Uji decoder: 11/11 lulus (RGB, grayscale, WhiteIsZero, prediktor, deflate,
+  PackBits, strip tanpa byte count, berkas bukan TIFF, TIFF rusak).
+
+### Deploy dan belum terverifikasi
+- Deploy gabungan sempat gagal pada timeout analisis Firebase (10 detik), bukan error kode. Deploy dipisah dan berhasil: Functions + Hosting.
+- Hosting live diperbarui; Functions live memuat getStorageAssetDataUrl dengan konversi TIFF.
+- Belum terverifikasi: pratinjau TIFF sungguhan dan unggah SPK dari UI live (butuh berkas asli + login pemilik).

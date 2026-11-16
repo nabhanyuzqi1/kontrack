@@ -5,6 +5,7 @@ const {getFirestore} = require("firebase-admin/firestore");
 // Secret Manager (menggantikan defineString yang membaca .env plaintext ter-commit).
 const {defineSecret} = require("firebase-functions/params");
 const nodemailer = require("nodemailer");
+const {tiffToPng, isTiff} = require("./tiff");
 // Node 22 sudah menyediakan fetch secara global — tidak perlu paket node-fetch
 // (yang memang tidak terdaftar di dependencies dan membuat deploy gagal).
 
@@ -1215,13 +1216,37 @@ exports.getStorageAssetDataUrl = onCall(
           throw new HttpsError("invalid-argument", "Berkas terlalu besar untuk diambil lewat fungsi ini.");
         }
         const [buffer] = await file.download();
-        const contentType = metadata?.contentType || guessContentType(objectPath);
+        let contentType = metadata?.contentType || guessContentType(objectPath);
+        let payload = buffer;
+
+        // Peramban tidak dapat menampilkan TIFF sama sekali, dan Gemini pun
+        // hanya menerima png/jpeg/webp/heic. Dokumen SPK/PK/WPHO dari mitra
+        // sering berupa TIFF, jadi diubah di server sekali di sini: pratinjau,
+        // unduhan pratinjau, dan analisis AI memakai hasil yang sama.
+        let converted = false;
+        let conversionNote = "";
+        if (isTiff(buffer)) {
+          try {
+            const png = tiffToPng(buffer);
+            payload = png.data;
+            contentType = "image/png";
+            converted = true;
+          } catch (error) {
+            // Berkas tetap dikirim apa adanya supaya pengguna masih bisa
+            // mengunduhnya; klien menampilkan alasan konversi gagal.
+            conversionNote = error?.message || "TIFF tidak dapat dikonversi.";
+            contentType = "image/tiff";
+          }
+        }
 
         return {
-          dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`,
+          dataUrl: `data:${contentType};base64,${payload.toString("base64")}`,
           metadata: {
             contentType,
-            size: Number(metadata?.size) || buffer.length,
+            originalContentType: metadata?.contentType || guessContentType(objectPath),
+            converted,
+            conversionNote,
+            size: converted ? payload.length : Number(metadata?.size) || buffer.length,
             bucket: resolvedBucket,
             path: objectPath,
           },

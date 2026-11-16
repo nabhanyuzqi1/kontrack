@@ -67,7 +67,17 @@ const FormSection = ({ title, children }) => (
 const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
   const isEdit = project !== null && project !== undefined;
 
-  const buildFormData = (p) => ({
+  // Nilai dari Firestore bisa `null`, bukan hanya `undefined` — dan `null`
+// LOLOS dari pemeriksaan `!== undefined`, lalu `.toString()` melempar
+// "Cannot read properties of null (reading 'toString')" saat form dibuka.
+// Helper ini menutup keduanya sekaligus.
+const numText = (v, fallback = '') => {
+  if (v === undefined || v === null || v === '') return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? String(v) : fallback;
+};
+
+const buildFormData = (p) => ({
     name: p?.name || '',
     partner: p?.partner || '',
     ownerName: p?.ownerName || '',
@@ -75,15 +85,15 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
     contractNumber: p?.contractNumber || '',
     pkNumber: p?.pkNumber || '',
     status: p?.status || PROJECT_STATUS.AKAN_DATANG,
-    value: p?.value ? p.value.toString() : '',
-    taxRate: p?.taxRate !== undefined ? p.taxRate : 11,
+    value: numText(p?.value),
+    taxRate: p?.taxRate === undefined || p?.taxRate === null ? 11 : p.taxRate,
     startDate: formatDateForInput(p?.startDate) || '',
     endDate: formatDateForInput(p?.endDate) || '',
     paymentTerm: p?.paymentTerm || '14 Hari',
     billingMethod: p?.billingMethod || 'termin',
-    terminCount: p?.terminCount !== undefined ? p.terminCount.toString() : '',
-    retentionPct: p?.retentionPct !== undefined ? p.retentionPct.toString() : '5',
-    retentionMonths: p?.retentionMonths !== undefined ? p.retentionMonths.toString() : '3',
+    terminCount: numText(p?.terminCount),
+    retentionPct: numText(p?.retentionPct, '5'),
+    retentionMonths: numText(p?.retentionMonths, '3'),
     lastBaDate: formatDateForInput(p?.lastBaDate) || '',
     description: p?.description || ''
   });
@@ -106,6 +116,10 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
 
   const [loading, setLoading] = useState(false);
   const [docBusy, setDocBusy] = useState(null);
+  // Berkas yang baru diunggah di sesi form ini. Digabung dengan data proyek
+  // supaya UI langsung berubah tanpa menunggu muat ulang.
+  const [uploadedDocs, setUploadedDocs] = useState({});
+  const [docError, setDocError] = useState(null);
   const [errors, setErrors] = useState({});
   const [displayValue, setDisplayValue] = useState(() => formatNumberDisplay(project?.value || ''));
   const [clients, setClients] = useState(null); // null = belum dimuat
@@ -686,7 +700,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                       className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-xs text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-white/15"
                     >
                       {kind === 'spk' ? 'SPK / Kontrak' : 'PK'}
-                      {project?.documents?.[kind] ? ' (ada)' : ''}
+                      {((uploadedDocs[kind] || project?.documents?.[kind]) ? ' (ada)' : '')}
                       <input
                         type="file"
                         className="hidden"
@@ -698,10 +712,23 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                           if (!file || !project?.id) return;
                           setDocBusy(kind);
                           try {
-                            await uploadInvoiceDocument(project.id, kind, file, 'projects');
-                            alert('Berkas terunggah ke arsip proyek.');
+                            const entry = await uploadInvoiceDocument(project.id, kind, file, 'projects');
+                            // Form memegang salinan `project` dari props, jadi tanpa
+                            // ini label "(ada)" dan pratinjau baru muncul setelah
+                            // halaman dimuat ulang — terasa seperti unggahan hilang.
+                            setUploadedDocs((prev) => ({ ...prev, [kind]: entry }));
+                            setDocError(null);
                           } catch (err) {
-                            alert('Gagal mengunggah berkas.');
+                            // Pesan spesifik, bukan "Gagal" generik: 90% kasus
+                            // adalah berkas terlalu besar atau sesi login habis.
+                            const code = err?.code || '';
+                            let msg = 'Berkas gagal diunggah. Coba lagi.';
+                            if (code === 'storage/unauthorized') msg = 'Tidak berhak mengunggah ke arsip ini. Masuk ulang lalu coba lagi.';
+                            else if (code === 'storage/canceled') msg = 'Unggahan dibatalkan.';
+                            else if (code === 'storage/retry-limit-exceeded') msg = 'Jaringan lambat: unggahan habis waktu. Coba lagi.';
+                            else if (/exceeds the maximum/i.test(err?.message || '')) msg = 'Berkas melebihi batas ukuran. Perkecil atau simpan sebagai PDF.';
+                            else if (err?.message) msg = `Berkas gagal diunggah: ${err.message}`;
+                            setDocError(msg);
                           } finally {
                             setDocBusy(null);
                           }
@@ -710,13 +737,21 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                     </label>
                   ))}
                 </div>
-                {project?.documents && (project.documents.spk || project.documents.pk) && (
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    Terunggah:{' '}
-                    {[project.documents.spk && 'SPK', project.documents.pk && 'PK'].filter(Boolean).join(' · ')}
-                    {' '}— ganti lewat tombol di atas.
-                  </p>
-                )}
+                {(() => {
+                  const docs = { ...(project?.documents || {}), ...uploadedDocs };
+                  return (
+                    <>
+                      {Object.keys(uploadedDocs).length > 0 || project?.documents ? (
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Terunggah:{' '}
+                          {['spk', 'pk'].filter((k) => docs[k]).map((k) => (k === 'spk' ? 'SPK' : 'PK')).join(' · ') || 'belum ada'}
+                          {' '}— ganti lewat tombol di atas.
+                        </p>
+                      ) : null}
+                      {docError && <p className="mt-1 text-[11px] font-medium text-rose-600">{docError}</p>}
+                    </>
+                  );
+                })()}
               </>
             ) : (
               <p className="text-xs text-slate-500">
