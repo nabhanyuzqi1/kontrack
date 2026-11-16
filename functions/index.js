@@ -5,7 +5,7 @@ const {getFirestore} = require("firebase-admin/firestore");
 // Secret Manager (menggantikan defineString yang membaca .env plaintext ter-commit).
 const {defineSecret} = require("firebase-functions/params");
 const nodemailer = require("nodemailer");
-const {tiffToPng, isTiff} = require("./tiff");
+const {tiffToPng, isTiff, isBigTiff} = require("./tiff");
 // Node 22 sudah menyediakan fetch secara global — tidak perlu paket node-fetch
 // (yang memang tidak terdaftar di dependencies dan membuat deploy gagal).
 
@@ -648,8 +648,12 @@ Kata kunci pada catatan/berita transfer MENANG atas kesan umum gambar. Bukti tra
 Nota belanja dan kuitansi pembayaran selalu expense.
 
 === 6. DESKRIPSI & VENDOR ===
-- description: ringkas dan informatif. Sebutkan APA yang dibeli/dibayar dan rinciannya bila ada ("Semen 20 sak @Rp65.000, pasir 1 rit"). PERTAHANKAN catatan/berita transfer apa adanya ("bon gendro"). Jangan menghapus kata kunci upah/material.
-- vendor: nama toko/penerima/pihak lawan. Pada bukti transfer, nama PENERIMA (bukan pengirim). Bila hanya ada nama bank, kosongkan.
+- description: SATU frasa padat, maks 6 kata. Sebutkan APA yang dibeli/dibayar, tidak lebih.
+  JANGAN jelaskan konteks, alasan, atau rincian perhitungan (mis. "biaya admin bulanan
+  untuk operasional proyek" → cukup "Biaya admin"). PERTAHANKAN kata kunci upah/material
+  apa adanya ("bon gendro"), karena itu yang dipakai menentukan kategori.
+  Contoh baik: "Bon gendro", "Semen 20 sak", "Solar 40 L", "Termin 2 SPK-041", "Upah 3 tukang".
+- vendor: nama toko/penerima/pihak lawan bila tertera. Pada bukti transfer, nama PENERIMA (bukan pengirim). Bila hanya ada nama bank, kosongkan.
 - paymentMethod: tunai, transfer, qris, atau lainnya — sesuai bukti pada dokumen.
 
 === CONTOH PENALARAN (bukan untuk dihafal) ===
@@ -1225,7 +1229,11 @@ exports.getStorageAssetDataUrl = onCall(
         // unduhan pratinjau, dan analisis AI memakai hasil yang sama.
         let converted = false;
         let conversionNote = "";
-        if (isTiff(buffer)) {
+        if (isBigTiff(buffer)) {
+          contentType = "image/tiff";
+          conversionNote = "Berkas ini BigTIFF (TIFF 64-bit), format khusus pemindai untuk berkas sangat besar. " +
+            "Simpan ulang sebagai TIFF biasa, JPG, atau PDF agar dapat dipratinjau.";
+        } else if (isTiff(buffer)) {
           try {
             const png = tiffToPng(buffer);
             payload = png.data;

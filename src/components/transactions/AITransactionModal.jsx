@@ -1,5 +1,5 @@
 // src/components/transactions/AITransactionModal.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Sparkles, UploadCloud, CheckCircle2, X } from 'lucide-react';
 import { addTransaction } from '../../services/transactions';
 import { analyzeTransactionImages, validateImageFile } from '../../services/ai';
@@ -34,6 +34,30 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [files, setFiles] = useState([]); // {file, previewUrl}
   const [results, setResults] = useState(null); // array of edited results
+  const [activeIndex, setActiveIndex] = useState(0);
+  const trackRef = useRef(null);
+
+  // Geser ke kartu tertentu. `scrollTo` dengan `behavior: smooth` menghormati
+  // preferensi sistem lewat CSS, sementara perhitungan posisi memakai lebar
+  // anak sebenarnya agar bekerja sama di ponsel maupun desktop.
+  const scrollToCard = (index) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const clamped = Math.max(0, Math.min(index, (results?.length || 1) - 1));
+    const child = track.children[clamped];
+    if (child) track.scrollTo({ left: child.offsetLeft - track.offsetLeft, behavior: 'smooth' });
+    setActiveIndex(clamped);
+  };
+
+  // Titik navigasi mengikuti posisi geser; pengguna yang menggeser dengan
+  // jari/jempol tidak perlu menekan tombol agar indikatornya ikut berpindah.
+  const handleTrackScroll = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const width = track.clientWidth || 1;
+    const next = Math.round(track.scrollLeft / width);
+    if (next !== activeIndex) setActiveIndex(Math.max(0, Math.min(next, (results?.length || 1) - 1)));
+  };
 
   const handleFilesChange = (e) => {
     const picked = Array.from(e.target.files || []);
@@ -242,20 +266,68 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
             )}
           </p>
 
-          {/* pb-1 memberi napas ke kartu terakhir di depan footer modal; tanpa
-              ini kartu terlihat menempel/terpotong tepi panel. */}
-          <div className="space-y-3 pb-1">
+          {/* Kartu hasil disusun MENYAMPING dan digeser, bukan ditumpuk
+              vertikal. Dengan 8 gambar, tumpukan vertikal memaksa pengguna
+              menggulir jauh untuk mencapai tombol Simpan; geser menyamping
+              menjaga tombol dan ringkasan tetap terlihat.
+              scroll-snap membuat tiap kartu berhenti rapi di tepi. */}
+          <div
+            ref={trackRef}
+            className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2"
+            onScroll={handleTrackScroll}
+          >
             {results.map((r, idx) => (
-              <AITransactionCard
+              <div
                 key={idx}
-                index={idx}
-                result={r}
-                onUpdate={updateResult}
-                onRemove={removeResult}
-                disabled={busy}
-              />
+                className="w-full min-w-full shrink-0 snap-center sm:min-w-[calc(100%-1rem)]"
+              >
+                <AITransactionCard
+                  index={idx}
+                  result={r}
+                  total={results.length}
+                  onUpdate={updateResult}
+                  onRemove={removeResult}
+                  disabled={busy}
+                />
+              </div>
             ))}
           </div>
+
+          {results.length > 1 && (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => scrollToCard(activeIndex - 1)}
+                disabled={activeIndex === 0}
+              >
+                Sebelumnya
+              </Button>
+              <div className="flex items-center gap-1.5" role="tablist" aria-label="Pilih hasil">
+                {results.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    aria-selected={i === activeIndex}
+                    aria-label={`Hasil ${i + 1}`}
+                    onClick={() => scrollToCard(i)}
+                    className={`h-2 rounded-full transition-all ${
+                      i === activeIndex ? 'w-6 bg-brand-600' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                    }`}
+                  />
+                ))}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => scrollToCard(activeIndex + 1)}
+                disabled={activeIndex >= results.length - 1}
+              >
+                Berikutnya
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Modal>

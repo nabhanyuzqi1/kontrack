@@ -17,6 +17,7 @@ import { deleteObject, ref } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { invalidate, CACHE_KEYS } from './cache';
 import { canonicalCategory } from '../utils/transactionMeta';
+import { sanitizeForFirestore } from '../utils/firestoreSanitize';
 
 // Collection reference
 const TRANSACTIONS_COLLECTION = 'transactions';
@@ -55,8 +56,13 @@ export const addTransaction = async (transactionData) => {
       updatedAt: Timestamp.now()
     };
     
-    // Add to Firestore
-    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave);
+    // Add to Firestore. Sanitasi WAJIB: satu field `undefined` (mis.
+    // `categoryCorrectedFrom` yang hanya ada saat kategori dikoreksi) membuat
+    // addDoc menolak SELURUH dokumen dengan pesan yang menyebut field lain.
+    const docRef = await addDoc(
+      collection(db, TRANSACTIONS_COLLECTION),
+      sanitizeForFirestore(dataToSave),
+    );
     invalidate(CACHE_KEYS.TRANSACTIONS);
     invalidate(CACHE_KEYS.PROJECTS);
     
@@ -95,7 +101,7 @@ export const updateTransaction = async (transactionId, updates) => {
       dataToUpdate.amount = Number(dataToUpdate.amount);
     }
     
-    await updateDoc(transactionRef, dataToUpdate);
+    await updateDoc(transactionRef, sanitizeForFirestore(dataToUpdate));
     invalidate(CACHE_KEYS.TRANSACTIONS);
     invalidate(CACHE_KEYS.PROJECTS);
     

@@ -37,7 +37,9 @@ const FileViewer = ({ file, onClose }) => {
 
   const label = file?.name || 'Berkas';
   const pdf = isPdf(file?.name, file?.url);
-  const tiff = isTiff(label, file?.url);
+  // TIFF yang TIDAK berhasil dikonversi server: `<img>` tidak akan pernah
+  // memuatnya, jadi jangan tampilkan gambar rusak — tampilkan penjelasan.
+  const tiffUnsupported = isTiff(label, file?.url) && !conversionNote.includes('diubah menjadi PNG');
 
   useEffect(() => {
     if (!file?.url) return undefined;
@@ -132,32 +134,38 @@ const FileViewer = ({ file, onClose }) => {
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 items-center justify-center p-3">
+      {/* PDF memakai seluruh layar: padding dihilangkan supaya halaman terbaca
+          tanpa memaksa pengguna zoom. Gambar tetap diberi jeda tepi. */}
+      <div className={pdf ? 'min-h-0 flex-1' : 'flex min-h-0 flex-1 items-center justify-center p-3'}>
         {state === 'loading' && (
-          <p className="flex items-center gap-2 text-sm text-white/80">
+          <p className="flex h-full items-center justify-center gap-2 text-sm text-white/80">
             <Loader2 className="h-4 w-4 animate-spin" />
             Memuat berkas…
           </p>
         )}
 
         {state === 'error' && (
-          <div className="max-w-md rounded-[10px] bg-white p-5 text-center">
+          <div className="mx-auto mt-6 max-w-md rounded-[10px] bg-white p-5 text-center">
             <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-600" />
             <p className="text-sm font-semibold text-slate-800">Berkas gagal dimuat di pratinjau</p>
             <p className="mt-1 text-xs text-slate-500">{errorText || 'Berkas gagal dimuat.'}</p>
-            <a href={file.url} target="_blank" rel="noreferrer" className="mt-3 inline-block">
-              <Button size="sm">Buka di tab baru</Button>
-            </a>
           </div>
         )}
 
         {state === 'ready' && objectUrl && (
           pdf ? (
-            <iframe
-              src={objectUrl}
-              title={label}
-              className="h-full w-full rounded-[10px] bg-white"
-            />
+            <iframe src={objectUrl} title={label} className="h-full w-full bg-white" />
+          ) : tiffUnsupported ? (
+            <div className="mx-auto max-w-md rounded-[10px] bg-white p-5 text-center">
+              <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-600" />
+              <p className="text-sm font-semibold text-slate-800">Format TIFF belum dapat ditampilkan</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {conversionNote || 'Peramban tidak mendukung TIFF.'} Unduh berkasnya lewat tombol di atas.
+              </p>
+              <a href={objectUrl} download={label} className="mt-3 inline-block">
+                <Button size="sm">Unduh berkas asli</Button>
+              </a>
+            </div>
           ) : (
             <img
               src={objectUrl}

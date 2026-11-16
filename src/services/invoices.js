@@ -26,6 +26,7 @@ import { cached, invalidate, CACHE_KEYS } from './cache';
 import { addTransaction } from './transactions';
 import { normalizeInvoice, compareInvoices } from '../utils/invoiceNormalization';
 import { AUTO_CATEGORY, TX_SOURCE } from '../utils/transactionMeta';
+import { sanitizeForFirestore } from '../utils/firestoreSanitize';
 
 const COLLECTION = 'invoices';
 
@@ -113,7 +114,7 @@ export const getNextInvoiceNumber = async () => {
 
 export const addInvoice = async (data) => {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(db, COLLECTION), {
+  const docRef = await addDoc(collection(db, COLLECTION), sanitizeForFirestore({
     ...data,
     status: data.status || INVOICE_STATUS.DRAFT,
     coreTaxStatus: data.coreTaxStatus || CORETAX_STATUS.WAITING,
@@ -121,7 +122,7 @@ export const addInvoice = async (data) => {
     taxEvents: data.taxEvents || [],
     createdAt: now,
     updatedAt: now
-  });
+  }));
   invalidate(CACHE_KEYS.INVOICES);
   return docRef.id;
 };
@@ -153,7 +154,7 @@ const assertMutable = async (invoiceId) => {
 
 export const updateInvoice = async (invoiceId, data) => {
   await assertMutable(invoiceId);
-  await updateDoc(doc(db, COLLECTION, invoiceId), { ...data, updatedAt: new Date().toISOString() });
+  await updateDoc(doc(db, COLLECTION, invoiceId), sanitizeForFirestore({ ...data, updatedAt: new Date().toISOString() }));
   invalidate(CACHE_KEYS.INVOICES);
 };
 

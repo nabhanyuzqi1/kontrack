@@ -8,6 +8,7 @@ import { db, storage } from './firebase';
 import { COMPANY_INFO, INVOICE_DEFAULTS } from '../utils/companyConfig';
 import { DEFAULT_THEME } from '../utils/themes';
 import { compressImage } from '../utils/imageCompress';
+import { sanitizeForFirestore } from '../utils/firestoreSanitize';
 
 const SETTINGS_REF = () => doc(db, 'settings', 'companyProfile');
 
@@ -22,7 +23,7 @@ export const getCompanySettings = async () => {
 };
 
 export const saveCompanySettings = async (data) => {
-  await setDoc(SETTINGS_REF(), { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+  await setDoc(SETTINGS_REF(), sanitizeForFirestore({ ...data, updatedAt: new Date().toISOString() }), { merge: true });
 };
 
 // Kecilkan gambar lalu ubah ke data URL (PNG) — dipakai langsung oleh jsPDF

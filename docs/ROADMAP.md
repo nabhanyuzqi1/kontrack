@@ -650,3 +650,48 @@ produksi.
 - Verifikasi lokal: `node --check` lulus untuk `index.js`/`tiff.js`; `require('./index.js')` mengekspor 11 function dalam sekitar 2,8 detik.
 - Deploy Functions sukses untuk 11 function, tanpa peringatan versi usang. Endpoint `getStorageAssetDataUrl` dan `analyzeTransactionImageWithAI` menjawab 400 untuk payload kosong tanpa auth, sesuai perilaku callable.
 - Lint ESLint masih gagal pada parser lama `ecmaVersion: 2018` (optional chaining) dan aturan CRLF; masalah ini sudah ada sebelum upgrade, bukan regresi dependensi.
+
+## 2026-11-16 — Error CRUD Firestore, carousel hasil AI, TIFF, prompt hemat token
+
+### Akar error `Unsupported field value: undefined (categoryFrom)`
+- `AITransactionModal` menulis `categoryCorrectedFrom: fixed ? r.category : undefined`.
+  Firestore MENOLAK seluruh dokumen bila satu field bernilai `undefined`, dan pesannya
+  menyebut nama lain (`categoryFrom`) sehingga sumbernya sulit dilacak.
+- Perbaikan di akar: `utils/firestoreSanitize.js` membuang `undefined` secara rekursif.
+  Dipasang di SEMUA jalur tulis: `transactions` (add/update), `projects` (add/update),
+  `clients` (add/update), `invoices` (add/update), `settings` (setDoc).
+- Aturan yang dipertahankan: `null` disimpan (penanda "belum diisi"), `undefined` di
+  dalam array menjadi `null` agar indeks tidak bergeser, dan nilai Firestore
+  (`Timestamp`, `FieldValue`, `DocumentReference`) dilewatkan apa adanya — penyalinan
+  naif akan mengubah `Timestamp` menjadi `{}` dan merusak semua tanggal.
+- Uji `scratch/sanitize-test.mjs`: 10/10 lulus terhadap tiruan SDK yang menolak
+  `undefined`, termasuk kasus bersarang, array, Timestamp, null, Date, dan masukan kosong.
+
+### Hasil verifikasi AI: geser, bukan gulir
+- Kartu hasil yang menumpuk vertikal memaksa menggulir jauh untuk mencapai tombol
+  Simpan. Sekarang trek `snap-x` dengan tombol Sebelumnya/Berikutnya dan titik
+  indikator; indikator ikut bergerak saat digeser jari.
+- Diukur di harness: 3 kartu, geser 0 → 716px di desktop, 0 → 368px di 390px,
+  satu kartu per layar di ponsel, `overflowHalaman` 0 pada kedua lebar.
+
+### Pratinjau berkas
+- Tombol "Buka di tab baru" DIHAPUS: URL Storage mentah selalu ditolak (401 tanpa
+  CORS), dan unduhan sudah tersedia di header. Tombol itu tidak pernah berguna.
+- PDF kini memakai seluruh layar (tanpa padding), sesuai permintaan.
+- TIFF: BigTIFF (`II+\0` / `MM\0+`) kini dikenali terpisah dan diberi pesan yang
+  benar ("simpan ulang sebagai TIFF biasa, JPG, atau PDF"), bukan "bukan TIFF".
+  TIFF yang gagal dikonversi menampilkan penjelasan + tombol unduh, bukan gambar rusak.
+
+### Prompt AI lebih hemat token
+- `description` dibatasi SATU frasa, maks 6 kata, dan dilarang menjelaskan konteks
+  atau rincian perhitungan (mis. "biaya admin bulanan untuk operasional proyek" →
+  "Biaya admin"). Kata kunci upah/material tetap wajib dipertahankan karena itu
+  yang menentukan kategori.
+- Akurasi tidak dikorbankan: daftar jenis dokumen, aturan angka, kategori, dan
+  tanggal tidak diubah.
+
+### Deploy
+- Hosting + Functions di-deploy terpisah, keduanya "Deploy complete".
+  Live `index-DTsQgLVR.js`, identik dengan build lokal.
+- Belum terverifikasi: simpan transaksi ke Firestore SUNGGUHAN (butuh login pemilik),
+  dan pratinjau TIFF dari berkas asli pengguna.

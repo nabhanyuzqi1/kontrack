@@ -313,4 +313,15 @@ const isTiff = (buf) => {
   return s === "II*\0" || s === "MM\0*";
 };
 
-module.exports = {tiffToPng, isTiff, encodePng};
+/**
+ * BigTIFF (penanda `II+\0` / `MM\0+`) dipakai pemindai untuk berkas >4 GB dan
+ * struktur IFD-nya 64-bit — tidak kompatibel dengan pembaca di atas. Dikenali
+ * terpisah supaya pengguna mendapat pesan yang benar, bukan "bukan TIFF".
+ */
+const isBigTiff = (buf) => {
+  if (!buf || buf.length < 4) return false;
+  const s = buf.slice(0, 4).toString("latin1");
+  return s === "II+\0" || s === "MM\0+";
+};
+
+module.exports = {tiffToPng, isTiff, isBigTiff, encodePng};

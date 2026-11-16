@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { withTimeout } from '../utils/async';
+import { sanitizeForFirestore } from '../utils/firestoreSanitize';
 import { cached, invalidate, CACHE_KEYS } from './cache';
 
 // Collection reference
@@ -61,7 +62,7 @@ export const addProject = async (projectData, userId = null, userEmail = null) =
     };
     
     // Add to Firestore
-    const docRef = await addDoc(collection(db, PROJECTS_COLLECTION), dataToSave);
+    const docRef = await addDoc(collection(db, PROJECTS_COLLECTION), sanitizeForFirestore(dataToSave));
     invalidate(CACHE_KEYS.PROJECTS);
     return docRef.id;
   } catch (error) {
@@ -110,7 +111,7 @@ export const updateProject = async (projectId, updates, userId = null, userEmail
       }
     });
     
-    await updateDoc(projectRef, dataToUpdate);
+    await updateDoc(projectRef, sanitizeForFirestore(dataToUpdate));
     invalidate(CACHE_KEYS.PROJECTS);
   } catch (error) {
     console.error('Error updating project:', error);

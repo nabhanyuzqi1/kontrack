@@ -4,6 +4,7 @@
 import { collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { cached, invalidate, CACHE_KEYS } from './cache';
+import { sanitizeForFirestore } from '../utils/firestoreSanitize';
 
 const COLLECTION = 'clients';
 
@@ -35,18 +36,18 @@ export const clientDisplayName = (client) =>
 
 export const addClient = async (data) => {
   const now = new Date().toISOString();
-  const ref = await addDoc(collection(db, COLLECTION), {
+  const ref = await addDoc(collection(db, COLLECTION), sanitizeForFirestore({
     ...data,
     search_name: (data.client_name || '').toLowerCase(),
     createdAt: now,
     updatedAt: now
-  });
+  }));
   invalidate(CACHE_KEYS.CLIENTS);
   return ref.id;
 };
 
 export const updateClient = async (id, data) => {
-  await updateDoc(doc(db, COLLECTION, id), { ...data, updatedAt: new Date().toISOString() });
+  await updateDoc(doc(db, COLLECTION, id), sanitizeForFirestore({ ...data, updatedAt: new Date().toISOString() }));
   invalidate(CACHE_KEYS.CLIENTS);
 };
 
