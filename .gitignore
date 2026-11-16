@@ -56,3 +56,7 @@ dev/
 
 # build sementara dari esbuild (jangan di-commit)
 tmp/
+
+# Berkas uji sekali pakai (bundle esbuild, probe jsx, salinan sementara).
+# Tidak boleh ikut commit: isinya artefak lokal, bukan kode aplikasi.
+/scratch/
