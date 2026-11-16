@@ -237,6 +237,134 @@ var ownerSummary = ({ projects = [], invoices = [], transactions = [], today = /
     margins
   };
 };
+var UNIT_DONE_STATUS = "selesai";
+var unitValue = (unit, totalValue, unitCount) => {
+  const v = num(unit?.value);
+  if (v > 0) return v;
+  if (totalValue > 0 && unitCount > 0) return totalValue / unitCount;
+  return 0;
+};
+var unitRetention = (unit = {}, project = {}, today = /* @__PURE__ */ new Date()) => {
+  const pct = num(project.retentionPct ?? project.retentionPercent);
+  const months = project.retentionMonths != null ? num(project.retentionMonths) : 3;
+  const units = Array.isArray(project.units) ? project.units : [];
+  const value = unitValue(unit, num(project.value), units.length || 1);
+  const amount = num(unit.retainedAmount) > 0 ? num(unit.retainedAmount) : value * pct / 100;
+  const done = unit.status === UNIT_DONE_STATUS || num(unit.progress) >= 100;
+  const baseDate = toDate(unit.bahkDate || unit.finishedDate);
+  if (!done) {
+    return {
+      id: unit.id,
+      name: unit.name || "Unit",
+      value,
+      amount,
+      pct,
+      done: false,
+      dueDate: null,
+      daysLeft: null,
+      status: "belum"
+      // retensi belum lahir: BAHK belum ada
+    };
+  }
+  if (!baseDate) {
+    return {
+      id: unit.id,
+      name: unit.name || "Unit",
+      value,
+      amount,
+      pct,
+      done: true,
+      dueDate: null,
+      daysLeft: null,
+      status: "tanpa-bahk"
+    };
+  }
+  const due = new Date(baseDate.getTime());
+  due.setMonth(due.getMonth() + months);
+  const daysLeft = daysBetween(today, due);
+  const released = toDate(unit.retentionReleasedDate);
+  return {
+    id: unit.id,
+    name: unit.name || "Unit",
+    value,
+    amount,
+    pct,
+    done: true,
+    bahkNumber: unit.bahkNumber || "",
+    bahkDate: baseDate.toISOString().slice(0, 10),
+    dueDate: due.toISOString().slice(0, 10),
+    daysLeft,
+    releasedDate: released ? released.toISOString().slice(0, 10) : null,
+    status: released ? "cair" : daysLeft > 0 ? "belum" : daysLeft === 0 ? "jatuh-tempo" : "lewat"
+  };
+};
+var unitRetentionSummary = (project = {}, today = /* @__PURE__ */ new Date()) => {
+  const units = Array.isArray(project.units) ? project.units : [];
+  if (!units.length) {
+    const single = retentionStatus(project, today);
+    return { ...single, perUnit: [], hasUnits: false, unitCount: 0, doneCount: 0 };
+  }
+  const perUnit = units.map((u) => unitRetention(u, project, today));
+  const total = perUnit.reduce((a, u) => a + u.amount, 0);
+  const doneCount = perUnit.filter((u) => u.done).length;
+  const next = perUnit.filter((u) => u.dueDate && !u.releasedDate).sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+  return {
+    amount: total,
+    pct: num(project.retentionPct ?? project.retentionPercent),
+    hasUnits: true,
+    unitCount: perUnit.length,
+    doneCount,
+    // Retensi baru bisa dicairkan penuh setelah SEMUA unit selesai dan BAHK
+    // terakhir keluar; ini yang dipakai formulir tagihan.
+    allDone: doneCount === perUnit.length,
+    nextDue: next || null,
+    dueDate: next ? next.dueDate : null,
+    daysLeft: next ? next.daysLeft : null,
+    status: next ? next.status : doneCount === perUnit.length ? "cair" : "belum",
+    perUnit
+  };
+};
+var unitProgress = (project = {}) => {
+  const units = Array.isArray(project.units) ? project.units : [];
+  const totalValue = num(project.value);
+  const rows = units.map((u) => {
+    const value = unitValue(u, totalValue, units.length || 1);
+    const progress = Math.max(0, Math.min(100, num(u.progress)));
+    const done = u.status === UNIT_DONE_STATUS || progress >= 100;
+    return {
+      id: u.id,
+      name: u.name || "Unit",
+      location: u.location || "",
+      pkNumber: u.pkNumber || project.pkNumber || "",
+      spkNumber: u.spkNumber || project.spkNumber || "",
+      value,
+      progress: done ? 100 : progress,
+      done,
+      hasBahk: Boolean(u.bahkDate || u.bahkNumber),
+      bahkDate: u.bahkDate || null,
+      // Nilai yang bisa ditagih: unit yang sudah ber-BAHK, bukan yang sekadar
+      // progresnya tinggi.
+      billable: Boolean(u.bahkDate || u.bahkNumber)
+    };
+  });
+  const billableValue = rows.filter((r) => r.billable).reduce((a, r) => a + r.value, 0);
+  const doneValue = rows.filter((r) => r.done).reduce((a, r) => a + r.value, 0);
+  const sumValue = rows.reduce((a, r) => a + r.value, 0);
+  const weighted = sumValue > 0 ? rows.reduce((a, r) => a + r.value * r.progress / 100, 0) / sumValue * 100 : 0;
+  return {
+    rows,
+    unitCount: rows.length,
+    doneCount: rows.filter((r) => r.done).length,
+    bahkCount: rows.filter((r) => r.hasBahk).length,
+    totalValue: rows.reduce((a, r) => a + r.value, 0),
+    doneValue,
+    billableValue,
+    unbilledValue: rows.reduce((a, r) => a + r.value, 0) - billableValue,
+    // Progres berbobot nilai, bukan rata-rata jumlah unit: unit mahal
+    // menentukan besar kecilnya serapan, sama seperti laporan ke mitra.
+    weightedProgress: Math.round(weighted * 10) / 10
+  };
+};
 export {
   budgetVsActual,
   cashForecast,
@@ -245,5 +373,8 @@ export {
   projectMargin,
   receivableAging,
   retentionStatus,
-  terminCurve
+  terminCurve,
+  unitProgress,
+  unitRetention,
+  unitRetentionSummary
 };

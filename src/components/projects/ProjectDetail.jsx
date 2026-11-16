@@ -41,6 +41,7 @@ import FileViewer from '../ui/FileViewer';
 import TransactionFilterBar from './TransactionFilterBar';
 import ShareProjectModal from './ShareProjectModal';
 import ProjectPlanningPanel from './ProjectPlanningPanel';
+import ProjectUnitsPanel from './ProjectUnitsPanel';
 
 // Masa retensi standar sejak BA terakhir, sebelum penagihan garansi retensi (bulan).
 const RETENTION_MONTHS = 3;
@@ -500,6 +501,7 @@ const ProjectDetail = ({ currentUser }) => {
 
       {/* Perencanaan: anggaran, termin, retensi, margin */}
       <div className="mb-5">
+        <ProjectUnitsPanel project={project} />
         <ProjectPlanningPanel project={project} transactions={transactions} invoices={invoices} />
       </div>
 

@@ -329,3 +329,42 @@ export const sendInvoiceWhatsApp = async () => ({ ok: true });
 export const fetchAssetDataUrl = async () => {
   throw new Error('Harness: pengambilan aset Storage dilewati.');
 };
+
+
+// --- Ringkasan pilihan (invoice/proyek) ---
+// `utils/sharing` dialiaskan ke modul ini di harness, jadi setiap ekspor baru
+// di berkas asli harus dicerminkan di sini; kalau tidak, seluruh halaman
+// gagal dimuat dengan "does not provide an export named ...".
+export const buildInvoicesSummaryMessage = (invoices = [], opts = {}) => {
+  const rows = [];
+  const name = opts.company?.name || opts.company?.companyName;
+  if (name) rows.push(`*${name}*`);
+  rows.push('*RINGKASAN INVOICE*', '', `Jumlah invoice: *${invoices.length}*`);
+  invoices.forEach((inv) => {
+    rows.push(`- ${inv.invoiceNumber || 'Tanpa nomor'}: Rp${Number(inv.grandTotal || inv.total || 0).toLocaleString('id-ID')}`);
+  });
+  return rows.join(String.fromCharCode(10));
+};
+
+export const buildProjectsSummaryMessage = (list = [], opts = {}) => {
+  const rows = [];
+  const name = opts.company?.name || opts.company?.companyName;
+  if (name) rows.push(`*${name}*`);
+  rows.push('*RINGKASAN PROYEK*', '', `Jumlah proyek: *${list.length}*`);
+  list.forEach((p) => rows.push(`- ${p.name}: Rp${Number(p.value || 0).toLocaleString('id-ID')}`));
+  return rows.join(String.fromCharCode(10));
+};
+
+export const shareTextWhatsApp = (message) => {
+  // Di harness jangan benar-benar membuka jendela baru.
+  if (typeof console !== 'undefined') console.info('[shim] WhatsApp:', message.slice(0, 40));
+};
+
+export const copyText = async (message) => {
+  try {
+    await navigator.clipboard.writeText(message);
+    return true;
+  } catch {
+    return false;
+  }
+};

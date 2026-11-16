@@ -37,7 +37,11 @@ export const AUTO_CATEGORY = {
   // Uang masuk dari klien: netto yang benar-benar diterima.
   payment: 'Pembayaran Invoice',
   // PPN yang dipungut lalu disetor: beban pajak, bukan "pengeluaran lain".
-  tax: 'Pajak'
+  tax: 'Pajak',
+  // Dua kategori pengeluaran yang paling sering salah dibaca AI dari bukti
+  // transfer (bon/gendro upah dan pembelian material di toko).
+  wage: 'Upah Karyawan/Tukang',
+  material: 'Material'
 };
 
 /**
@@ -119,3 +123,59 @@ export const canonicalCategory = (tx = {}) => {
 /** Daftar kategori untuk dropdown, sudah bebas duplikat. */
 export const categoriesFor = (type) =>
   type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+
+// ---------------------------------------------------------------------------
+// Koreksi kategori dari kata kunci (jaring pengaman, bukan pengganti AI)
+// ---------------------------------------------------------------------------
+//
+// Vertex kadang menjawab "Pengeluaran Lain" untuk bukti transfer yang catatannya
+// berbunyi "bon gendro": gambar berupa transfer bank, jadi tidak ada nota upah
+// yang terlihat dan model memilih kategori netral. Prompt sudah diperbaiki
+// (kata kunci menang atas kesan umum gambar), tetapi model bahasa tetap bisa
+// meleset. Di sini keputusan akhir dipaksa oleh BUKTI TEKS pada deskripsi.
+//
+// Hanya menurunkan kategori ke yang lebih pasti; tidak pernah mengubah
+// income <-> expense, dan tidak menyentuh kategori yang sudah benar.
+
+const WAGE_KEYWORDS = [
+  'bon', 'gendro', 'kendro', 'upah', 'honor', 'ongkos', 'opah',
+  'tukang', 'mandor', 'kuli', 'pekerja', 'borongan', 'harian',
+  'lembur', 'gaji', 'thr', 'kerja bakti'
+];
+
+const MATERIAL_KEYWORDS = [
+  'semen', 'pasir', 'split', 'batu', 'besi', 'beton', 'baja', 'kayu',
+  'papan', 'triplek', 'cat', 'pipa', 'keramik', 'genteng', 'paku',
+  'kawat', 'material', 'toko bangunan'
+];
+
+const hasKeyword = (text, list) => {
+  const t = String(text || '').toLowerCase();
+  return list.some((k) => new RegExp(`(^|[^a-z])${k}([^a-z]|$)`).test(t));
+};
+
+/**
+ * Perbaiki kategori hasil AI bila bukti teks jelas bertentangan.
+ *
+ * @param {{type?:string, category?:string, description?:string, vendor?:string}} tx
+ * @returns {string|null} kategori koreksi, atau null bila tidak perlu diubah
+ *
+ * Aturan:
+ * - Hanya berlaku untuk pengeluaran.
+ * - Hanya mengoreksi kategori yang ada di daftar EXPENSE_CATEGORIES.
+ * - Kata kunci upah lebih diutamakan daripada material: "bon upah tukang beli
+ *   semen" tetap upah, karena bon/gendro adalah nama dokumen pembayarannya.
+ */
+export const correctCategoryFromText = (tx = {}) => {
+  if (!tx || tx.type !== 'expense') return null;
+  if (!EXPENSE_CATEGORIES.includes(tx.category)) return null;
+
+  const text = `${tx.description || ''} ${tx.vendor || ''}`;
+  if (hasKeyword(text, WAGE_KEYWORDS)) {
+    return tx.category === AUTO_CATEGORY.wage ? null : AUTO_CATEGORY.wage;
+  }
+  if (hasKeyword(text, MATERIAL_KEYWORDS)) {
+    return tx.category === AUTO_CATEGORY.material ? null : AUTO_CATEGORY.material;
+  }
+  return null;
+};

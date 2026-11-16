@@ -15,7 +15,7 @@ import { StatusBadge } from '../ui/Badge';
 const shortDate = (d) =>
   new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' });
 
-const ProjectTable = ({ project, onEdit, onDelete, currentUser }) => {
+const ProjectTable = ({ project, onEdit, onDelete, currentUser, selectMode, selected, onToggleSelect }) => {
   const navigate = useNavigate();
   const progress = calculateProjectProgress(project);
   const daysLeft = calculateDaysLeft(project.endDate);
@@ -42,6 +42,18 @@ const ProjectTable = ({ project, onEdit, onDelete, currentUser }) => {
       onClick={() => navigate(`/app/projects/${project.id}`)}
       className="group cursor-pointer border-b border-slate-200/60 transition-colors last:border-0 hover:bg-slate-100/50 dark:border-white/5 dark:hover:bg-white/[0.04]"
     >
+      {selectMode && (
+        <td className="w-10 px-2 py-2.5" onClick={(e) => { stop(e); onToggleSelect?.(project.id); }}>
+          <input
+            type="checkbox"
+            checked={Boolean(selected)}
+            onChange={() => onToggleSelect?.(project.id)}
+            onClick={stop}
+            aria-label={`Pilih ${project.name}`}
+            className="h-4 w-4 accent-brand-600"
+          />
+        </td>
+      )}
       {/* Proyek + mitra */}
       <td className="max-w-[260px] px-3 py-2.5 sm:px-4">
         <Link to={`/app/projects/${project.id}`} className="block">
@@ -138,11 +150,12 @@ const ProjectTable = ({ project, onEdit, onDelete, currentUser }) => {
   );
 };
 
-const ProjectTableList = ({ projects, onEdit, onDelete, currentUser }) => (
+const ProjectTableList = ({ projects, onEdit, onDelete, currentUser, selectMode, selectedIds = [], onToggleSelect }) => (
   <div className="overflow-hidden rounded-[10px] ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
     <table className="w-full">
       <thead>
         <tr className="border-b border-slate-200/70 bg-slate-100/60 text-left text-[11px] uppercase tracking-wide text-slate-400 dark:border-white/10 dark:bg-white/[0.03]">
+          {selectMode && <th className="w-10 px-2 py-2" />}
           <th className="px-3 py-2 font-medium sm:px-4">Proyek</th>
           <th className="hidden px-3 py-2 font-medium lg:table-cell">No. SPK</th>
           <th className="px-3 py-2 text-right font-medium">Nilai</th>
@@ -160,6 +173,9 @@ const ProjectTableList = ({ projects, onEdit, onDelete, currentUser }) => (
             onEdit={onEdit}
             onDelete={onDelete}
             currentUser={currentUser}
+            selectMode={selectMode}
+            selected={selectedIds.includes(p.id)}
+            onToggleSelect={onToggleSelect}
           />
         ))}
       </tbody>

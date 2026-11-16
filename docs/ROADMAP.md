@@ -538,3 +538,59 @@ produksi.
   "bon" ke `Upah Karyawan/Tukang`.
 - `FileViewer` untuk PDF dari Storage produksi (butuh login).
 - Pengiriman WhatsApp/email nyata — secret masih placeholder `BELUM-DISET`.
+
+## 2026-11-16 — Analisis AI diserahkan penuh ke LLM, retensi per unit, ringkasan pilihan
+
+### Analisis dokumen (prompt + server)
+- Prompt ditulis ulang: model mengenali JENIS dokumen dulu (nota, bukti transfer,
+  struk EDC/QRIS, faktur, surat jalan, invoice), baru menyimpulkan. Menutup kasus
+  "bon gendro terbaca Pengeluaran Lain".
+- Penalaran AKTIF (`thinkingBudget: 512`, dulu 0) + `temperature` 0.1. Field
+  `reasoning` diminta lebih dulu lewat `propertyOrdering`, jadi model menimbang
+  bukti sebelum memutuskan.
+- `maxOutputTokens` 512 → 1024 per gambar: cukup untuk penalaran tanpa memotong JSON.
+- `callGemini` menggabungkan SEMUA part teks (dulu hanya `parts[0]`, bisa memotong
+  JSON di tengah) dan meneruskan `finishReason` ke log.
+- Pengaman server baru: `extractJson` (memulihkan JSON dari pagar markdown atau
+  kalimat pengantar), `toAmount` (nominal "Rp1.350.000", "1,5 jt", "450rb"),
+  `sanitizeTx` (kategori di luar enum → Pengeluaran Lain, tanggal/jam tidak sah
+  dikosongkan, bukan dikarang). JSON yang tak dapat dipulihkan → error jelas,
+  bukan hasil palsu.
+
+### Tanggal & jam
+- `txDateTime.js` diurutkan ulang: pola Indonesia diurai SEBELUM `new Date()`.
+  Dua bug nyata ditutup: "12-11-2026" dulu terbaca 11 Desember; nama bulan
+  ("1 Mei 2026") menghasilkan jam 00:00 palsu yang menimpa jam dari AI.
+- Dukungan baru: "12 NOV 2026", "KASONGAN 12 NOV 2026", "NOV 12, 2026",
+  "1530" (jam tanpa titik dua), tahun 2 angka, validasi tanggal mustahil.
+
+### Retensi per unit (BAHK per unit)
+- `unitRetention`, `unitRetentionSummary`, `unitProgress` di `projectPlanning.js`.
+  Retensi = persen × nilai UNIT, jatuh tempo +3 bulan setelah BAHK unit itu.
+  Unit selesai tanpa BAHK berstatus `tanpa-bahk` (retensi sudah ditahan, tanggal
+  belum pasti), bukan dianggap cair.
+- `ProjectUnitsPanel` (tabel + kartu) di detail proyek, `UnitsEditor` di form
+  proyek dengan "Tambah Unit" dan "Salin 4 baris" untuk 17 unit IPAL.
+- Dua bug diperbaiki lewat uji: `nextDue` menyaring unit yang belum jatuh tempo;
+  pembagi progres berbobot salah (~1/17 dari nilai sebenarnya).
+
+### Ringkasan pilihan
+- `buildInvoicesSummaryMessage` / `buildProjectsSummaryMessage` (kelompok per
+  status, total/terbayar/sisa, tanpa emoji, tanpa data internal).
+- Mode pilih di halaman Proyek (tabel DAN grid) dan Invoice; modal pratinjau
+  dengan teks yang bisa disunting sebelum dikirim ke WhatsApp.
+
+### Full layar & dark mode
+- `Modal` varian `size="screen"`: form proyek, invoice, transaksi AI, dan detail
+  klien kini memakai seluruh layar.
+- `applyTheme(name, resolveMode())`: ganti tema tidak lagi menghapus mode gelap.
+- Override `dark:text-slate-100..300` dihapus (token itu PERMUKAAN di dark).
+  Kontras terukur turun dari 10 kegagalan WCAG menjadi 0.
+
+### Deploy
+- Hosting + functions di-deploy. Live `index-FvybG11y.js`, identik dengan build lokal.
+
+### Belum diverifikasi (butuh pemilik)
+- Hasil Gemini SUNGGUHAN untuk nota/bukti transfer baru (butuh login).
+- Akurasi tanggal pada foto nota buram.
+- Kirim WhatsApp/email nyata: secret masih `BELUM-DISET`.

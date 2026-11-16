@@ -26,8 +26,10 @@
     --brand-300: 161 180 254;
     --brand-400: 123 141 251;
     --brand-500: 59 108 245;
-    --brand-600: 29 78 216;
-    --brand-700: 30 64 175;
+    /* brand-600/700 dipakai sebagai teks aksen di atas latar gelap; nilai
+       terang diperlukan agar lolos WCAG AA (>=4.5:1 pada #181A1F). */
+    --brand-600: 129 160 255;
+    --brand-700: 147 178 255;
     --brand-800: 30 58 138;
     --brand-900: 23 37 84;
     --accent-300: 165 180 252;

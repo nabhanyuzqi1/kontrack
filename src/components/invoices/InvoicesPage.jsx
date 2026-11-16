@@ -1,6 +1,6 @@
 // src/components/invoices/InvoicesPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { ReceiptText, Search, FileText, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
+import { ReceiptText, Search, FileText, Send, CheckCircle2, Trash2, Loader2, Landmark, FileCode2, ChevronRight, ArrowDownWideNarrow, ArrowUpNarrowWide, CheckSquare } from 'lucide-react';
 import TaxDocsModal from './TaxDocsModal';
 import CoretaxExportModal from './CoretaxExportModal';
 import InvoiceDetailModal from './InvoiceDetailModal';
@@ -14,6 +14,8 @@ import { Badge } from '../ui/Badge';
 import { SkeletonListPage } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
+import ShareSelectionModal, { SelectionActionBar, SelectBox } from '../ui/ShareSelectionModal';
+import { buildInvoicesSummaryMessage } from '../../utils/sharing';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { subscribe, CACHE_KEYS } from '../../services/cache';
 import {
@@ -56,6 +58,11 @@ const InvoicesPage = () => {
   const [pdfPreview, setPdfPreview] = useState(null);
   const [editInvoice, setEditInvoice] = useState(null);
   const [reviseMode, setReviseMode] = useState(false);
+  // Mode pilih untuk mengirim ringkasan beberapa invoice sekaligus.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
 
   useEffect(() => {
     getCompanySettings()
@@ -253,6 +260,18 @@ const InvoicesPage = () => {
             {sortDir === 'desc' ? <ArrowDownWideNarrow className="h-4 w-4" /> : <ArrowUpNarrowWide className="h-4 w-4" />}
             <span className="hidden sm:inline">{sortDir === 'desc' ? 'Turun' : 'Naik'}</span>
           </Button>
+          <Button
+            variant={selectMode ? 'primary' : 'secondary'}
+            onClick={() => {
+              setSelectMode((v) => !v);
+              setSelectedIds([]);
+            }}
+            title="Pilih beberapa invoice lalu kirim ringkasannya"
+            className="shrink-0"
+          >
+            <CheckSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">{selectMode ? 'Selesai' : 'Pilih'}</span>
+          </Button>
         </div>
       </div>
 
@@ -276,9 +295,28 @@ const InvoicesPage = () => {
               <Card
                 key={inv.id}
                 className="group cursor-pointer p-4 transition-colors hover:border-brand-300 sm:p-5"
-                onClick={() => setDetailInvoice(withDisplayNames(inv))}
+                onClick={() => {
+                  if (selectMode) {
+                    setSelectedIds((ids) =>
+                      ids.includes(inv.id) ? ids.filter((x) => x !== inv.id) : [...ids, inv.id]
+                    );
+                    return;
+                  }
+                  setDetailInvoice(withDisplayNames(inv));
+                }}
               >
                 <div className="flex items-start justify-between gap-4">
+                  {selectMode && (
+                    <div className="pt-0.5">
+                      <SelectBox
+                        checked={selectedIds.includes(inv.id)}
+                        onChange={(v) =>
+                          setSelectedIds((ids) => (v ? [...ids, inv.id] : ids.filter((x) => x !== inv.id)))
+                        }
+                        label={`Pilih ${inv.invoiceNumber}`}
+                      />
+                    </div>
+                  )}
                   {/* Kolom identitas */}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -399,6 +437,34 @@ const InvoicesPage = () => {
           title="Pratinjau Invoice"
         />
       )}
+
+      {selectMode && (
+        <SelectionActionBar
+          count={selectedIds.length}
+          total={filtered.length}
+          label="invoice"
+          onSelectAll={() => setSelectedIds(filtered.map((i) => i.id))}
+          onClear={() => {
+            setSelectedIds([]);
+            setSelectMode(false);
+          }}
+          onShare={() => {
+            const chosen = invoices.filter((i) => selectedIds.includes(i.id)).map(withDisplayNames);
+            setShareMessage(buildInvoicesSummaryMessage(chosen, { company }));
+            setShareOpen(true);
+          }}
+        />
+      )}
+
+      <ShareSelectionModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title="Ringkasan Invoice"
+        subtitle={`${selectedIds.length} invoice dipilih`}
+        message={shareMessage}
+        onMessageChange={setShareMessage}
+        count={selectedIds.length}
+      />
 
       {detailInvoice && (
         <InvoiceDetailModal

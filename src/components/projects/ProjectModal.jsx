@@ -1,5 +1,6 @@
 // src/components/projects/ProjectModal.jsx
 import React, { useState, useEffect } from 'react';
+import UnitsEditor from './UnitsEditor';
 import { Link } from 'react-router-dom';
 import { addProject, updateProject } from '../../services/projects';
 import { uploadInvoiceDocument } from '../../services/invoices';
@@ -94,6 +95,13 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
   // mengubah skema dokumen.
   const [rabRows, setRabRows] = useState(() =>
     Array.isArray(project?.rab) ? project.rab.map((r) => ({ ...r })) : []
+  );
+
+  // Unit pekerjaan disimpan sebagai array, bukan subkoleksi: satu SPK bisa
+  // memuat belasan unit (mis. 17 unit IPAL) dan semuanya dibaca bersama
+  // proyeknya, sehingga array di dokumen proyek menghindari N+1 query.
+  const [unitRows, setUnitRows] = useState(() =>
+    Array.isArray(project?.units) ? project.units.map((u) => ({ ...u })) : []
   );
 
   const [loading, setLoading] = useState(false);
@@ -212,6 +220,23 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
         rab: rabRows
           .filter((r) => r.category && String(r.category).trim())
           .map((r) => ({ category: String(r.category).trim(), budget: Number(r.budget) || 0 })),
+        // Unit hanya disimpan bila diisi; proyek tanpa unit tetap dokumen valid.
+        units: unitRows
+          .filter((u) => u.name && String(u.name).trim())
+          .map((u) => ({
+            id: u.id || `u-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: String(u.name).trim(),
+            location: String(u.location || '').trim(),
+            value: Number(u.value) || 0,
+            pkNumber: String(u.pkNumber || '').trim(),
+            spkNumber: String(u.spkNumber || '').trim(),
+            progress: Math.max(0, Math.min(100, Number(u.progress) || 0)),
+            status: u.status || 'belum',
+            bahkNumber: String(u.bahkNumber || '').trim(),
+            bahkDate: u.bahkDate || '',
+            retainedAmount: Number(u.retainedAmount) || 0,
+            retentionReleasedDate: u.retentionReleasedDate || ''
+          })),
         description: formData.description.trim()
       };
 
@@ -271,7 +296,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
       onClose={loading ? undefined : onClose}
       title={isEdit ? 'Edit Proyek' : 'Tambah Proyek'}
       subtitle={isEdit ? project?.name : 'Lengkapi detail proyek atau kontrak baru'}
-      size="lg"
+      size="screen"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={loading}>
@@ -284,17 +309,26 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
       }
     >
       <form id="project-form" onSubmit={handleSubmit}>
-        <div className="space-y-4">
-          {/* Ringkasan nilai: mengikuti edit secara real time */}
-          <div className="panel-solid rounded-xl p-4">
+        {/* Panel penuh layar: dua kolom di layar lebar supaya form panjang tidak
+            jadi satu lajur yang harus digulir jauh. Bagian yang butuh perhatian
+            penuh (Berkas, Catatan) memakai lebar penuh di bawah. */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {/* Ringkasan nilai: mengikuti edit secara real time. Membentang penuh
+              karena meringkas seluruh form, bukan bagian satu kolom. */}
+          <div className="panel-solid rounded-xl p-4 xl:col-span-2">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Ringkasan Nilai
             </h3>
-            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {summaryRows.map((row) => (
-                <div key={row.label} className="flex items-baseline justify-between gap-2">
-                  <dt className="text-xs text-slate-500">{row.label}</dt>
-                  <dd className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+              {summaryRows.map((row, i) => (
+                <div
+                  key={row.label}
+                  className={`flex min-w-0 flex-col gap-0.5 lg:border-l lg:border-slate-200/70 lg:pl-3 lg:dark:border-white/10 ${
+                    i === 0 ? 'lg:border-l-0 lg:pl-0' : ''
+                  }`}
+                >
+                  <dt className="truncate text-[11px] uppercase tracking-wide text-slate-500">{row.label}</dt>
+                  <dd className="tnum truncate text-sm font-semibold text-slate-800">
                     {row.value}
                   </dd>
                 </div>
@@ -554,6 +588,11 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
                 </Field>
               </div>
             </div>
+          </FormSection>
+
+          <FormSection title="Unit Pekerjaan">
+            <UnitsEditor rows={unitRows} setRows={setUnitRows} retentionPct={formData.retentionPct} />
+          </FormSection>
 
           <FormSection title="Anggaran Biaya (RAB)">
             <p className="mb-3 text-xs text-slate-500">
@@ -632,8 +671,8 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
               </p>
             )}
           </FormSection>
-          </FormSection>
 
+          <div className="xl:col-span-2">
           <FormSection title="Berkas">
             {/* Arsip digital: SPK & PK diunggah per proyek; tiap BAHK/WPHO
                 per invoice otomatis menempel di arsip invoice masing-masing. */}
@@ -687,6 +726,8 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
             )}
           </FormSection>
 
+          </div>
+          <div className="xl:col-span-2">
           <FormSection title="Catatan">
             <Field label="Deskripsi">
               <Textarea
@@ -699,6 +740,7 @@ const ProjectModal = ({ isOpen, onClose, onSuccess, project, currentUser }) => {
               />
             </Field>
           </FormSection>
+          </div>
         </div>
       </form>
     </Modal>

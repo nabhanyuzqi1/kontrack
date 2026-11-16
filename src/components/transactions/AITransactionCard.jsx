@@ -147,6 +147,11 @@ const AITransactionCard = ({ result: r, index, onUpdate, onRemove, disabled }) =
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </Select>
+                {r.categoryCorrectedFrom && (
+                  <SourceNote>
+                    AI membaca &ldquo;{r.categoryCorrectedFrom}&rdquo;. Diperbaiki otomatis ke {r.category} karena catatan memuat kata kunci upah/material.
+                  </SourceNote>
+                )}
                 {!categoryInList && (
                   <SourceNote tone="warn">
                     AI menebak &ldquo;{r.category}&rdquo; yang bukan kategori {isIncome ? 'pemasukan' : 'pengeluaran'}. Diganti ke pilihan pertama.

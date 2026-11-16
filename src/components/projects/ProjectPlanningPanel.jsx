@@ -29,7 +29,7 @@ const Row = ({ label, value, tone = 'default' }) => (
     <span className="text-[12px] text-slate-500">{label}</span>
     <span
       className={`tnum text-[13px] font-semibold ${
-        tone === 'bad' ? 'text-red-700 dark:text-red-400' : tone === 'good' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800'
+        tone === 'bad' ? 'text-red-700' : tone === 'good' ? 'text-emerald-700' : 'text-slate-800'
       }`}
     >
       {value}
@@ -85,7 +85,7 @@ const ProjectPlanningPanel = ({ project, transactions = [], invoices = [] }) => 
                     <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-slate-700">
                       <span className="truncate">{r.category}</span>
                       {r.unbudgeted && (
-                        <span className="shrink-0 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-300">
+                        <span className="shrink-0 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-semibold text-amber-800">
                           tanpa anggaran
                         </span>
                       )}
@@ -93,7 +93,7 @@ const ProjectPlanningPanel = ({ project, transactions = [], invoices = [] }) => 
                     <span className="tnum shrink-0 text-[11px] text-slate-500">
                       {formatCurrency(r.actual)} / {r.budget > 0 ? formatCurrency(r.budget) : '—'}
                       {r.pct != null && (
-                        <span className={`ml-1 font-semibold ${r.over ? 'text-red-700 dark:text-red-400' : 'text-slate-600'}`}>
+                        <span className={`ml-1 font-semibold ${r.over ? 'text-red-700' : 'text-slate-600'}`}>
                           ({r.pct.toFixed(0)}%)
                         </span>
                       )}
@@ -112,7 +112,7 @@ const ProjectPlanningPanel = ({ project, transactions = [], invoices = [] }) => 
                 tone={rab.totals.remaining < 0 ? 'bad' : 'good'}
               />
               {rab.totals.overCount > 0 && (
-                <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+                <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-amber-800">
                   <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                   {rab.totals.overCount} kategori melampaui anggaran.
                 </p>
@@ -157,11 +157,11 @@ const ProjectPlanningPanel = ({ project, transactions = [], invoices = [] }) => 
                       {formatCurrency(r.actual)} <span className="text-slate-400">dari</span> {formatCurrency(r.planned)}
                     </span>
                     {r.status === 'telat' ? (
-                      <span className="shrink-0 text-[11px] font-semibold text-red-700 dark:text-red-400">
+                      <span className="shrink-0 text-[11px] font-semibold text-red-700">
                         telat {r.overdueDays} hari
                       </span>
                     ) : r.status === 'cair' ? (
-                      <span className="shrink-0 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">cair</span>
+                      <span className="shrink-0 text-[11px] font-semibold text-emerald-700">cair</span>
                     ) : (
                       <span className="shrink-0 text-[11px] font-medium text-slate-500">
                         {r.daysLeft != null ? `${r.daysLeft} hari lagi` : 'belum jatuh tempo'}
@@ -212,7 +212,7 @@ const ProjectPlanningPanel = ({ project, transactions = [], invoices = [] }) => 
               tone={retention.status === 'lewat' ? 'bad' : 'default'}
             />
             {retention.status === 'lewat' && (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+              <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-amber-800">
                 <ArrowRight className="mt-0.5 h-3 w-3 shrink-0" />
                 Masa pemeliharaan sudah berakhir. Terbitkan invoice retensi.
               </p>
@@ -239,7 +239,7 @@ const ProjectPlanningPanel = ({ project, transactions = [], invoices = [] }) => 
           <Row label="Persentase" value={pctLabel(margin.pct)} />
         </div>
         {(margin.atRisk || margin.overBudget) && (
-          <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+          <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-800">
             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
             {margin.overBudget
               ? 'Biaya sudah melampaui anggaran proyek.'

@@ -65,7 +65,7 @@ const ClientModal = ({ isOpen, onClose, onSuccess, client }) => {
       onClose={saving ? undefined : onClose}
       title={isEdit ? 'Edit Klien' : 'Tambah Klien'}
       subtitle="Data klien dipakai otomatis saat membuat invoice"
-      size="lg"
+      size="screen"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>

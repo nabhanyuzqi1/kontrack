@@ -6,6 +6,10 @@ import { getAllProjects, deleteProject } from '../../services/projects';
 import { subscribe, CACHE_KEYS } from '../../services/cache';
 import ProjectModal from './ProjectModal';
 import ProjectCard from './ProjectCard';
+import ShareSelectionModal, { SelectionActionBar, SelectBox } from '../ui/ShareSelectionModal';
+import { buildProjectsSummaryMessage } from '../../utils/sharing';
+import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
+import { CheckSquare } from 'lucide-react';
 import ProjectTableList from './ProjectTable';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
@@ -24,6 +28,14 @@ const ProjectList = ({ currentUser }) => {
   const [filter, setFilter] = useState('all');
   // Tampilan daftar: tabel rapat (default, ala ERP) atau grid kartu.
   const [view, setView] = useState(() => localStorage.getItem('kontrack-project-view') || 'table');
+  // Mode pilih: untuk mengirim ringkasan beberapa proyek sekaligus ke mitra.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
+  // Kop perusahaan untuk ringkasan; dimuat malas saat pertama dipakai supaya
+  // halaman daftar tidak menunggu pembacaan settings.
+  const [company, setCompany] = useState(null);
   const setViewAndSave = (v) => {
     setView(v);
     localStorage.setItem('kontrack-project-view', v);
@@ -181,6 +193,19 @@ const ProjectList = ({ currentUser }) => {
       {filteredProjects.length > 0 && (
         <div className="mb-3 flex justify-end gap-1">
           <button
+            onClick={() => {
+              setSelectMode((v) => !v);
+              setSelectedIds([]);
+            }}
+            title={selectMode ? 'Selesai memilih' : 'Pilih beberapa proyek untuk ringkasan'}
+            className={`mr-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${
+              selectMode ? 'bg-brand-600 text-white' : 'glass-3 text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CheckSquare className="h-4 w-4" />
+            {selectMode ? 'Selesai' : 'Pilih'}
+          </button>
+          <button
             onClick={() => setViewAndSave('table')}
             title="Tampilan tabel"
             className={`rounded-lg p-2 transition-colors ${view === 'table' ? 'bg-brand-600 text-white' : 'glass-3 text-slate-500 hover:text-slate-900'}`}
@@ -223,13 +248,25 @@ const ProjectList = ({ currentUser }) => {
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onEdit={isAdmin ? handleEditProject : null}
-                onDelete={isAdmin ? handleDeleteProject : null}
-                currentUser={currentUser}
-              />
+              <div key={project.id} className="relative">
+                {selectMode && (
+                  <div className="absolute right-2 top-2 z-10 rounded-md bg-glass-3 p-0.5">
+                    <SelectBox
+                      checked={selectedIds.includes(project.id)}
+                      onChange={(v) =>
+                        setSelectedIds((ids) => (v ? [...ids, project.id] : ids.filter((x) => x !== project.id)))
+                      }
+                      label={`Pilih ${project.name}`}
+                    />
+                  </div>
+                )}
+                <ProjectCard
+                  project={project}
+                  onEdit={isAdmin ? handleEditProject : null}
+                  onDelete={isAdmin ? handleDeleteProject : null}
+                  currentUser={currentUser}
+                />
+              </div>
             ))}
           </div>
         ) : (
@@ -238,8 +275,50 @@ const ProjectList = ({ currentUser }) => {
             onEdit={isAdmin ? handleEditProject : null}
             onDelete={isAdmin ? handleDeleteProject : null}
             currentUser={currentUser}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleSelect={(id) =>
+              setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
+            }
           />
       )}
+
+      {selectMode && (
+        <SelectionActionBar
+          count={selectedIds.length}
+          total={filteredProjects.length}
+          label="proyek"
+          onSelectAll={() => setSelectedIds(filteredProjects.map((p) => p.id))}
+          onClear={() => {
+            setSelectedIds([]);
+            setSelectMode(false);
+          }}
+          onShare={() => {
+            const chosen = projects.filter((p) => selectedIds.includes(p.id));
+            const build = (cmp) => setShareMessage(buildProjectsSummaryMessage(chosen, { company: cmp }));
+            if (company) build(company);
+            else
+              getCompanySettings()
+                .then((st) => {
+                  const cmp = mergeCompanyInfo(st);
+                  setCompany(cmp);
+                  build(cmp);
+                })
+                .catch(() => build(null));
+            setShareOpen(true);
+          }}
+        />
+      )}
+
+      <ShareSelectionModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title="Ringkasan Proyek"
+        subtitle={`${selectedIds.length} proyek dipilih`}
+        message={shareMessage}
+        onMessageChange={setShareMessage}
+        count={selectedIds.length}
+      />
 
       {showProjectModal && isAdmin && (
         <ProjectModal

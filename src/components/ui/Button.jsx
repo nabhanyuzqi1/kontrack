@@ -11,7 +11,7 @@ const variants = {
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-slate-400',
   danger: 'bg-red-600 dark:bg-[#dc2626] text-white hover:bg-red-700 dark:hover:bg-[#b91c1c] shadow-sm focus-visible:ring-red-500',
   'danger-ghost': 'text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:ring-red-500',
-  success: 'bg-emerald-600 dark:bg-[#059669] text-white hover:bg-emerald-700 dark:hover:bg-[#047857] shadow-sm focus-visible:ring-emerald-500'
+  success: 'bg-emerald-600 dark:bg-[#047857] text-white hover:bg-emerald-700 dark:hover:bg-[#036c50] shadow-sm focus-visible:ring-emerald-500'
 };
 
 const sizes = {

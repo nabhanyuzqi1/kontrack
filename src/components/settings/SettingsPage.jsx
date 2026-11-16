@@ -32,6 +32,7 @@ import {
   getThemeFromSettings
 } from '../../services/settings';
 import { THEME_PRESETS, applyTheme } from '../../utils/themes';
+import { resolveMode } from '../../utils/colorMode';
 
 /** Tab bar ditulis sebagai daftar tetap supaya label & ikon tidak menyimpang. */
 const Switch = ({ checked, onChange, label }) => (
@@ -272,7 +273,10 @@ const SettingsPage = ({ currentUser }) => {
 
   const handleThemeSelect = (presetName) => {
     setForm((prev) => ({ ...prev, themePreset: presetName }));
-    applyTheme(presetName); // langsung terlihat di UI
+    // Mode WAJIB ikut: tanpa argumen mode, applyTheme memakai 'light' dan
+    // menimpa varian gelap dengan nilai terang — brand jadi biru tua di atas
+    // latar gelap (terukur 2.5:1, gagal WCAG) sampai halaman dimuat ulang.
+    applyTheme(presetName, resolveMode()); // langsung terlihat di UI
     setSaved(false);
   };
 

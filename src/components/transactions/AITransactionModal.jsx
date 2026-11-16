@@ -4,6 +4,7 @@ import { Sparkles, UploadCloud, CheckCircle2, X } from 'lucide-react';
 import { addTransaction } from '../../services/transactions';
 import { analyzeTransactionImages, validateImageFile } from '../../services/ai';
 import { normalizeTxDateTime } from '../../utils/txDateTime';
+import { correctCategoryFromText } from '../../utils/transactionMeta';
 import AITransactionCard from './AITransactionCard';
 
 
@@ -71,11 +72,20 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
       // Tanggal dinormalkan SEKALI di sini: hasil AI bisa berbentuk
       // "2026-05-01" (tanpa jam) atau "1 Mei 2026". Tanpa normalisasi, jam
       // hilang dan input datetime-local tampil kosong.
-      setResults(raw.map((r) => ({
-        ...r,
-        projectId: selectedProjectId,
-        date: normalizeTxDateTime(r.date, r.time, { fallbackToNow: false }) || '',
-      })));
+      setResults(raw.map((r) => {
+        // Jaring pengaman: kata kunci pada catatan (mis. "bon gendro") memaksa
+        // kategori yang benar walau model memilih "Pengeluaran Lain".
+        const fixed = correctCategoryFromText(r);
+        return {
+          ...r,
+          projectId: selectedProjectId,
+          category: fixed || r.category,
+          // Dicatat supaya kartu bisa memberi tahu bahwa kategori diubah, bukan
+          // diam-diam berbeda dari hasil AI.
+          categoryCorrectedFrom: fixed ? r.category : undefined,
+          date: normalizeTxDateTime(r.date, r.time, { fallbackToNow: false }) || '',
+        };
+      }));
     } catch (err) {
       console.error('Analysis error:', err);
       setError(err.message || 'Gagal menganalisis gambar. Pastikan gambar jelas.');
@@ -136,7 +146,7 @@ const AITransactionModal = ({ isOpen, onClose, onSuccess, projects, currentUser 
       onClose={busy ? undefined : handleClose}
       title="Input Transaksi dengan AI"
       subtitle="Upload satu atau beberapa bukti transfer / invoice — AI membaca semuanya sekaligus"
-      size="lg"
+      size="screen"
       footer={
         <>
           <Button variant="secondary" onClick={handleClose} disabled={busy}>

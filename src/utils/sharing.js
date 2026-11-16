@@ -186,3 +186,177 @@ function fallbackCopyTextToClipboard(text) {
     document.body.removeChild(textArea);
   }
 }
+// ---------------------------------------------------------------------------
+// Ringkasan pilihan: beberapa invoice atau beberapa proyek sekaligus
+// ---------------------------------------------------------------------------
+//
+// Kenapa "simpel": pemilik memilih beberapa invoice/proyek lalu mengirim satu
+// ringkasan ke mitra. Yang dibutuhkan hanya identitas, nilai, status, dan
+// jumlah; rincian per dokumen tetap bisa dilihat di aplikasi. Karena itu
+// ringkasan ini TIDAK memuat transaksi, kategori pengeluaran, atau arus kas
+// internal — isinya aman dikirim ke pihak luar tanpa membocorkan margin.
+
+const line = '━━━━━━━━━━━━━━━';
+
+const num = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+// Status invoice dibaca dari beberapa nama field karena dokumen lama sempat
+// memakai `status` huruf besar dan `paid` boolean.
+const invoiceState = (inv = {}) => {
+  const raw = String(inv.status || '').toUpperCase();
+  if (raw === 'PAID' || inv.paid === true) return { key: 'paid', label: 'Lunas' };
+  if (raw === 'PARTIAL' || num(inv.paidAmount) > 0) return { key: 'partial', label: 'Dibayar sebagian' };
+  if (raw === 'OVERDUE') return { key: 'overdue', label: 'Lewat jatuh tempo' };
+  if (raw === 'DRAFT') return { key: 'draft', label: 'Draf' };
+  return { key: 'sent', label: 'Terkirim' };
+};
+
+const invoiceTotal = (inv = {}) => num(inv.grandTotal ?? inv.total ?? num(inv.subtotal) + num(inv.taxAmount));
+const invoicePaid = (inv = {}) => num(inv.paidAmount ?? (invoiceState(inv).key === 'paid' ? invoiceTotal(inv) : 0));
+
+/**
+ * Ringkasan beberapa invoice untuk dikirim/di-copy.
+ * @param {Array} invoices daftar invoice terpilih
+ * @param {Object} opts { company, title }
+ */
+export const buildInvoicesSummaryMessage = (invoices = [], opts = {}) => {
+  const list = Array.isArray(invoices) ? invoices : [];
+  const companyName = opts.company?.name || opts.company?.companyName || '';
+  const title = opts.title || 'RINGKASAN INVOICE';
+  const rows = [];
+  if (companyName) rows.push(`*${companyName}*`);
+  rows.push(`*${title}*`, line, '');
+  rows.push(`Jumlah invoice: *${list.length}*`);
+
+  if (list.length === 0) {
+    rows.push('', 'Tidak ada invoice yang dipilih.');
+    return rows.join('\n').trim();
+  }
+
+  // Kelompokkan per status supaya mitra langsung tahu mana yang masih perlu
+  // dibayar tanpa membaca satu per satu.
+  const groups = { overdue: [], sent: [], partial: [], draft: [], paid: [] };
+  let total = 0;
+  let paid = 0;
+
+  list.forEach((inv, i) => {
+    const st = invoiceState(inv);
+    const t = invoiceTotal(inv);
+    const p = invoicePaid(inv);
+    total += t;
+    paid += p;
+    if (!groups[st.key]) groups[st.key] = [];
+    groups[st.key].push({ inv, st, t, p, no: i + 1 });
+  });
+
+  const order = [
+    ['overdue', 'LEWAT JATUH TEMPO'],
+    ['sent', 'BELUM DIBAYAR'],
+    ['partial', 'DIBAYAR SEBAGIAN'],
+    ['draft', 'DRAF'],
+    ['paid', 'LUNAS']
+  ];
+
+  order.forEach(([key, label]) => {
+    const items = groups[key] || [];
+    if (!items.length) return;
+    rows.push('', `*${label}* (${items.length})`);
+    items.forEach(({ inv, t, p }) => {
+      const due = inv.dueDate ? ` | tempo ${formatDate(inv.dueDate)}` : '';
+      rows.push(`- ${inv.invoiceNumber || inv.number || 'Tanpa nomor'}: ${formatCurrency(t)}${due}`);
+      if (key === 'partial') rows.push(`  terbayar ${formatCurrency(p)}, sisa ${formatCurrency(t - p)}`);
+      if (inv.clientName || inv.partner) rows.push(`  ${inv.clientName || inv.partner}`);
+    });
+  });
+
+  rows.push('', line);
+  rows.push(`*Total:* ${formatCurrency(total)}`);
+  rows.push(`*Terbayar:* ${formatCurrency(paid)}`);
+  rows.push(`*Sisa:* ${formatCurrency(Math.max(total - paid, 0))}`);
+
+  return rows.join('\n').trim();
+};
+
+/**
+ * Progres untuk laporan ke mitra.
+ *
+ * `calculateProjectProgress` mengukur dari PEMBAYARAN, yang tepat untuk kartu
+ * keuangan tetapi salah untuk laporan pekerjaan: proyek bisa selesai 100%
+ * sementara baru ditagih sebagian. Bila proyek dipecah per unit, progres
+ * berbobot nilai unit jauh lebih dekat ke kenyataan lapangan.
+ */
+const progressOf = (project = {}) => {
+  const units = Array.isArray(project.units) ? project.units : [];
+  if (units.length) {
+    const sumValue = units.reduce((a, u) => a + num(u.value), 0);
+    if (sumValue > 0) {
+      const done = units.reduce((a, u) => {
+        const p = Math.max(0, Math.min(100, num(u.progress)));
+        return a + (num(u.value) * (u.status === 'selesai' ? 100 : p)) / 100;
+      }, 0);
+      return Math.round((done / sumValue) * 1000) / 10;
+    }
+  }
+  if (project.progress != null) return num(project.progress);
+  return calculateProjectProgress(project);
+};
+
+/**
+ * Ringkasan beberapa proyek terpilih. Isinya sengaja hanya angka yang pantas
+ * dibaca mitra: nilai, terbayar, sisa, progres.
+ */
+export const buildProjectsSummaryMessage = (projects = [], opts = {}) => {
+  const list = Array.isArray(projects) ? projects : [];
+  const companyName = opts.company?.name || opts.company?.companyName || '';
+  const title = opts.title || 'RINGKASAN PROYEK';
+  const rows = [];
+  if (companyName) rows.push(`*${companyName}*`);
+  rows.push(`*${title}*`, line, '');
+  rows.push(`Jumlah proyek: *${list.length}*`);
+
+  if (list.length === 0) {
+    rows.push('', 'Tidak ada proyek yang dipilih.');
+    return rows.join('\n').trim();
+  }
+
+  let totalValue = 0;
+  let totalPaid = 0;
+
+  list.forEach((p) => {
+    const value = num(p.value);
+    const paid = num(p.paidAmount);
+    totalValue += value;
+    totalPaid += paid;
+    rows.push('');
+    rows.push(`*${p.name || 'Tanpa nama'}*`);
+    if (p.partner) rows.push(`Mitra: ${p.partner}`);
+    rows.push(`Status: ${getStatusLabel(p.status)} | Progres: ${progressOf(p)}%`);
+    rows.push(`Nilai: ${formatCurrency(value)}`);
+    rows.push(`Terbayar: ${formatCurrency(paid)} | Sisa: ${formatCurrency(Math.max(value - paid, 0))}`);
+  });
+
+  rows.push('', line);
+  rows.push(`*Total nilai:* ${formatCurrency(totalValue)}`);
+  rows.push(`*Total terbayar:* ${formatCurrency(totalPaid)}`);
+  rows.push(`*Total sisa:* ${formatCurrency(Math.max(totalValue - totalPaid, 0))}`);
+
+  return rows.join('\n').trim();
+};
+
+/** Buka WhatsApp dengan teks tertentu. Dipakai kedua ringkasan. */
+export const shareTextWhatsApp = (message) => {
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+};
+
+/** Salin teks ke papan klip; mengembalikan true bila berhasil. */
+export const copyText = async (message) => {
+  try {
+    await navigator.clipboard.writeText(message);
+    return true;
+  } catch {
+    return false;
+  }
+};

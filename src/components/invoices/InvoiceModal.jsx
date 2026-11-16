@@ -344,7 +344,7 @@ const [shippedVia, setShippedVia] = useState('Lion Parcel');
       onClose={onClose}
       title={editing ? (revise ? `Revisi Invoice (Rev.${(Number(invoice?.revision) || 0) + 1})` : 'Edit Invoice') : 'Buat Invoice'}
       subtitle={project?.name || invoice?.projectName}
-      size="xl"
+      size="screen"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

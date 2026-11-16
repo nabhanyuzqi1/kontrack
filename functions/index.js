@@ -87,14 +87,24 @@ const callGemini = async (body, apiKey, label) => {
 
     if (res.ok) {
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      // parts[0] saja tidak cukup: dengan penalaran aktif, Gemini bisa
+      // mengirim beberapa part teks. Mengambil hanya yang pertama berisiko
+      // memotong JSON di tengah sehingga JSON.parse gagal.
+      const cand = data.candidates?.[0];
+      const text = (cand?.content?.parts || [])
+        .map((p) => (typeof p.text === "string" ? p.text : ""))
+        .join("")
+        .trim();
       if (text) {
         // Dicatat supaya biaya bisa diaudit dari log, bukan ditebak.
         const u = data.usageMetadata || {};
-        logger.info(`${label}: token in=${u.promptTokenCount} out=${u.candidatesTokenCount} total=${u.totalTokenCount}`);
+        logger.info(
+            `${label}: token in=${u.promptTokenCount} out=${u.candidatesTokenCount} ` +
+            `think=${u.thoughtsTokenCount || 0} total=${u.totalTokenCount} finish=${cand?.finishReason || "-"}`,
+        );
         return text;
       }
-      logger.warn(`${label}: Vertex membalas tanpa teks, coba API key.`);
+      logger.warn(`${label}: Vertex membalas tanpa teks (finish=${cand?.finishReason || "-"}), coba API key.`);
     } else {
       const errBody = await res.text();
       // 401/403/404 = Vertex belum aktif / SA belum diberi izin → wajar, mundur
@@ -132,8 +142,21 @@ const callGemini = async (body, apiKey, label) => {
   }
 
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new HttpsError("internal", "AI tidak memberi respons.");
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || [])
+    .map((p) => (typeof p.text === "string" ? p.text : ""))
+    .join("")
+    .trim();
+  if (!text) {
+    // finishReason diteruskan ke log: MAX_TOKENS (jatah habis) dan SAFETY
+    // (ditolak filter) butuh tindakan berbeda, dan tanpa ini semuanya tampak
+    // sebagai "AI tidak memberi respons".
+    logger.error(`${label}: respons kosong.`, {finishReason: cand?.finishReason, usage: data.usageMetadata});
+    throw new HttpsError(
+        "internal",
+        `AI tidak memberi respons (${cand?.finishReason || "tanpa finishReason"}). Coba lagi.`,
+    );
+  }
   return text;
 };
 
@@ -379,9 +402,20 @@ const RESPONSE_SCHEMA = {
   items: {
     type: "OBJECT",
     properties: {
-      date: {type: "STRING", description: "Tanggal transaksi, format YYYY-MM-DD"},
-      time: {type: "STRING", description: "Jam transaksi HH:MM (24 jam) bila tertera, kosongkan bila tidak"},
-      amount: {type: "NUMBER"},
+      date: {
+        type: "STRING",
+        description:
+          "Tanggal transaksi pada dokumen, format YYYY-MM-DD. Kosongkan bila dokumen benar-benar tidak memuat tanggal.",
+      },
+      time: {
+        type: "STRING",
+        description:
+          "Jam transaksi HH:MM 24 jam bila tertera (termasuk jam cetak mesin EDC/ATM). Kosongkan bila hanya ada tanggal.",
+      },
+      amount: {
+        type: "NUMBER",
+        description: "Jumlah akhir yang dibayar/diterima, angka murni tanpa pemisah ribuan.",
+      },
       type: {type: "STRING", enum: ["income", "expense"]},
       category: {
         type: "STRING",
@@ -396,39 +430,237 @@ const RESPONSE_SCHEMA = {
           "Pengeluaran Lain",
         ],
       },
-      description: {type: "STRING"},
-      vendor: {type: "STRING", description: "Nama toko/penerima/pihak lawan bila tertera"},
+      description: {
+        type: "STRING",
+        description:
+          "Ringkasan isi dokumen + catatan/berita transfer apa adanya, termasuk rincian barang bila ada.",
+      },
+      vendor: {
+        type: "STRING",
+        description: "Nama toko/penerima/pihak lawan bila tertera.",
+      },
       paymentMethod: {
         type: "STRING",
         enum: ["tunai", "transfer", "qris", "lainnya"],
         description: "Cara bayar bila terbaca",
       },
+      confidence: {
+        type: "STRING",
+        enum: ["yakin", "ragu"],
+        description:
+          "yakin bila dokumen jelas terbaca; ragu bila ada bagian penting yang tidak terbaca.",
+      },
+      reasoning: {
+        type: "STRING",
+        description:
+          "Satu kalimat: kata kunci/bagian dokumen yang menjadi dasar kategori dan tanggal dipilih.",
+      },
     },
+    // `reasoning` diminta SEBELUM keputusan agar model berpikir dulu baru
+    // memutuskan, bukan membenarkan pilihan yang sudah diambil.
+    propertyOrdering: ["reasoning", "date", "time", "amount", "type", "category", "description", "vendor", "paymentMethod", "confidence"],
     required: ["amount", "type", "category", "description"],
   },
 };
 
-// Prompt ringkas — schema sudah mengatur format, jadi teks fokus ke ATURAN saja.
-const PROMPT = `Ekstrak data transaksi keuangan dari SETIAP gambar (nota/bon, bukti transfer, invoice, atau penawaran). Hasilkan satu objek per gambar, urut sesuai urutan gambar.
 
-ATURAN KATEGORI (paling penting — pilih dari daftar, jangan mengarang):
-- "Upah Karyawan/Tukang": bon/nota pembayaran upah, honor, ongkos kerja, borongan, harian tukang, kerja bakti, atau pembayaran ke orang perorangan untuk tenaga.
-- "Material": pembelian bahan bangunan atau barang habis pakai proyek (semen, pasir, besi, kayu, batu, cat, pipa).
-- "Operasional": perjalanan, BBM, transport, sewa alat, konsumsi rapat, ATK, listrik/air, telepon, jasa pihak ketiga non-tenaga.
-- "Pajak": setoran PPN/PPh ke kas negara, kode billing, NTPN, faktur pajak.
-- "Pengeluaran Lain": pengeluaran sah yang tidak masuk empat di atas.
-- income: "Pembayaran Invoice" bila pembayaran termin/invoice proyek; "Proyek" bila uang muka proyek; "Lainnya" bila bukan proyek.
+// ---------------------------------------------------------------------------
+// Pengaman hasil analisis gambar
+//
+// responseSchema membuat JSON hampir selalu valid, tetapi "hampir" tidak cukup
+// bila hasilnya langsung masuk ke dokumen transaksi. Tiga kegagalan nyata yang
+// ditutup di sini:
+// 1. Model membungkus JSON dengan pagar markdown atau kalimat pengantar →
+//    JSON.parse gagal dan seluruh analisis hilang.
+// 2. Satu gambar menghasilkan objek tunggal, bukan array.
+// 3. Nominal terbaca sebagai teks ("Rp1.350.000", "1,5 jt") atau negatif,
+//    sehingga jumlahnya masuk sebagai 0 dan transaksi tampak tanpa nilai.
+// ---------------------------------------------------------------------------
 
-ATURAN TANGGAL & JAM:
-- date: YYYY-MM-DD. Baca tanggal dari gambar (nota, struk, header transfer). Bulan ditulis angka (01-12).
-- time: HH:MM 24 jam bila jam tertera. Bila hanya tanggal, kosongkan time (jangan mengarang).
-- Bila gambar tidak memuat tanggal sama sekali, kosongkan date. JANGAN memakai tanggal hari ini.
+/** Buang pagar markdown dan ambil bagian array/objek JSON saja. */
+const extractJson = (raw) => {
+  let text = String(raw || "").trim();
+  if (!text) return null;
 
-LAIN-LAIN:
-- amount: jumlah AKHIR yang dibayar/diterima (setelah diskon), angka murni tanpa titik/koma pemisah ribuan.
-- type: "income" bila ada kata terima/masuk/CR/kredit; selain itu "expense".
-- description: ringkas isi nota (mis. "Bon upah 3 tukang", "Beli semen 20 sak").
-- vendor: nama toko/penerima pembayaran bila tertera.`;
+  // Pagar ```json ... ``` atau ``` ... ```
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Kalimat pengantar sebelum JSON: ambil dari '[' pertama sampai ']' terakhir.
+    const startArr = text.indexOf("[");
+    const endArr = text.lastIndexOf("]");
+    if (startArr !== -1 && endArr > startArr) {
+      try {
+        return JSON.parse(text.slice(startArr, endArr + 1));
+      } catch (e2) { /* lanjut ke objek */ }
+    }
+    const startObj = text.indexOf("{");
+    const endObj = text.lastIndexOf("}");
+    if (startObj !== -1 && endObj > startObj) {
+      try {
+        return JSON.parse(text.slice(startObj, endObj + 1));
+      } catch (e3) { /* menyerah */ }
+    }
+    return null;
+  }
+};
+
+/** Nominal dari teks bebas: "Rp1.350.000" → 1350000, "1,5 jt" → 1500000. */
+const toAmount = (value) => {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.abs(Math.round(value)) : 0;
+  let raw = String(value == null ? "" : value).toLowerCase().trim();
+  if (!raw) return 0;
+
+  // Satuan singkat yang lazim di nota: "1,5 jt", "450rb", "200k".
+  let mult = 1;
+  if (/juta|(^|[^a-z])jt([^a-z]|$)/.test(raw)) mult = 1000000;
+  else if (/ribu|(^|[^a-z])rb([^a-z]|$)/.test(raw)) mult = 1000;
+  else if (/(^|[^a-z])k([^a-z]|$)/.test(raw)) mult = 1000;
+
+  let num = raw.replace(/[^0-9.,]/g, "");
+  if (!num) return 0;
+
+  if (mult > 1) {
+    // Satuan: satu pemisah adalah desimal ("2.5 jt" -> 2.5), pemisah
+    // berulang adalah ribuan ("1.200 jt" -> 1200).
+    if ((num.match(/[.,]/g) || []).length > 1) num = num.replace(/[.,]/g, "");
+    else num = num.replace(/,/g, ".");
+  } else {
+    // Tanpa satuan: titik DAN koma adalah pemisah ribuan. Desimal pada nota
+    // ("1.200.000,00") dibuang, karena rupiah transaksi selalu utuh.
+    const koma = num.lastIndexOf(",");
+    const titik = num.lastIndexOf(".");
+    if (koma > titik && num.length - koma - 1 === 2) {
+      num = num.slice(0, koma).replace(/[.,]/g, "") + "." + num.slice(koma + 1);
+    } else {
+      num = num.replace(/[.,]/g, "");
+    }
+  }
+  const n = Number(num);
+  return Number.isFinite(n) ? Math.abs(Math.round(n * mult)) : 0;
+};
+
+
+const KATEGORI_SAH = [
+  "Proyek", "Pembayaran Invoice", "Lainnya", "Operasional",
+  "Material", "Upah Karyawan/Tukang", "Pajak", "Pengeluaran Lain",
+];
+
+/**
+ * Rapikan satu objek hasil model.
+ * Tidak mengarang nilai: tanggal/jam yang tidak terbaca dikosongkan, bukan
+ * diisi tanggal hari ini (pemilik yang memutuskan).
+ */
+const sanitizeTx = (item) => {
+  if (!item || typeof item !== "object") return null;
+
+  let category = String(item.category || "").trim();
+  if (!KATEGORI_SAH.includes(category)) category = "Pengeluaran Lain";
+
+  const dateRaw = String(item.date || "").trim();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : "";
+  let time = String(item.time || "").trim();
+  if (!/^\d{1,2}:\d{2}$/.test(time)) time = "";
+
+  const amount = toAmount(item.amount);
+  const type = item.type === "income" ? "income" : "expense";
+
+  const method = String(item.paymentMethod || "").toLowerCase();
+  const paymentMethod = ["tunai", "transfer", "qris", "lainnya"].includes(method) ? method : "lainnya";
+
+  // `reasoning` dan `confidence` dibuang sebelum dikirim ke klien: keduanya
+  // hanya untuk audit, dan klien tidak membutuhkannya di dokumen transaksi.
+  return {
+    date,
+    time,
+    amount,
+    type,
+    category,
+    description: String(item.description || "").trim().slice(0, 400),
+    vendor: String(item.vendor || "").trim().slice(0, 160),
+    paymentMethod,
+    confidence: item.confidence === "ragu" ? "ragu" : "yakin",
+    reasoning: String(item.reasoning || "").trim().slice(0, 300),
+  };
+};
+
+// Prompt: penalaran penuh. Presisi dokumen diserahkan ke model, dan UI hanya
+// memverifikasi hasilnya; karena itu token penalaran DIPAKAI (thinkingBudget > 0),
+// bukan dimatikan seperti pada mode ekstraksi kaku sebelumnya.
+//
+// Kenapa prompt ini panjang: setiap aturan di bawah menutup kesalahan nyata yang
+// terjadi di lapangan (bon gendro terbaca "Pengeluaran Lain", jam transfer hilang,
+// angka pada struk EDC diambil dari baris yang salah, tanggal nota dibaca sebagai
+// hari ini). Prompt panjang di sini LEBIH MURAH daripada salah kategori yang
+// harus dibetulkan manual oleh pemilik.
+const PROMPT = `Anda petugas akuntansi yang membaca dokumen keuangan proyek konstruksi Indonesia. Tugas: ubah SETIAP gambar menjadi data transaksi yang AKURAT. Satu objek per gambar, urut sesuai urutan gambar.
+
+Berpikir dulu, baru simpulkan. Isi "reasoning" dulu (satu kalimat: bagian dokumen mana yang Anda baca untuk menentukan jenis, kategori, dan tanggal), baru isi field lainnya.
+
+=== 1. KENALI JENIS DOKUMEN DULU ===
+Tentukan lebih dulu gambar ini termasuk:
+a) NOTA/BON/KWITANSI tulis tangan atau cetak (toko bangunan, bengkel, warung, kuitansi pembayaran upah).
+b) BUKTI TRANSFER bank/mobile banking (ada "Transaksi Berhasil", "Berhasil", "Transfer ke", "No. Referensi", "NTPN").
+c) STRUK EDC/QRIS (ada merchant, "QRIS", "Approval Code", "Card No").
+d) FAKTUR/NOTES penjualan (ada nomor faktur, daftar barang, total).
+e) TANDA TERIMA / SURAT JALAN (barang diserahkan, belum tentu ada harga).
+f) INVOICE TAGIHAN (dokumen yang KITA terbitkan ke klien: ada nomor invoice, "Tagihan", "Termin").
+
+Jenis dokumen menentukan cara membaca angka dan kategori. Jangan menyamakan bukti transfer dengan nota: bukti transfer biasanya HANYA memuat jumlah + catatan singkat, sedangkan nota memuat rincian barang.
+
+=== 2. ANGKA (amount) — paling sering salah ===
+- Ambil JUMLAH AKHIR yang benar-benar dibayar: "Total", "Grand Total", "Jumlah Transfer", "Nominal", "Total Bayar".
+- JANGAN ambil: subtotal, DPP, PPN/pajak terpisah, "sisa saldo", "saldo akhir", nomor referensi, nomor rekening, atau angka pada baris diskon.
+- Bila ada diskon, jumlah akhir = total dikurangi diskon. Bila ada PPN pada nota pembelian, jumlah yang dibayar SUDAH termasuk PPN (pakai baris total).
+- Bila "Total" dan "Jumlah Transfer" berbeda pada satu dokumen, yang dibayar adalah jumlah transfer.
+- Angka murni tanpa titik/koma pemisah ribuan. "Rp1.350.000" menjadi 1350000. "1,5 jt" menjadi 1500000. "450rb" menjadi 450000.
+- Bila jumlah ditulis dengan huruf ("empat juta lima ratus ribu rupiah"), baca huruf itu.
+
+=== 3. KATEGORI — putuskan dari MAKNA, bukan dari tampilan ===
+Aturan tafsir (bukan daftar hafalan, gunakan penalaran):
+- UPAH/TUKANG: uang keluar untuk TENAGA ORANG. Sinyal: bon/gendro/kendro, upah, honor, ongkos, opah, tukang, mandor, kuli, pekerja, borongan, harian/lepas, lembur, premi, uang makan tukang, kerja bakti, gaji, THR, atau TRANSFER KE NAMA ORANG PERORANGAN yang dibayar untuk pekerjaan. Kata "bon" dan "gendro" SENDIRIAN sudah cukup: "byr bon gendro", "BON GENDRO", "bon mandor", "upah hr" semuanya Upah Karyawan/Tukang.
+- MATERIAL: barang habis pakai untuk pekerjaan. Sinyal: semen, pasir, batu/split, besi, beton, baja, kayu, papan, triplek, cat, pipa, keramik, genteng, paku, kawat, kabel, alat, atau nama toko bangunan/material ("Toko Sumber Rejeki", "UD Bangunan").
+- OPERASIONAL: biaya menjalankan usaha, bukan bahan dan bukan tenaga. Sinyal: BBM/solar/bensin/pertalite/pertamax, tol, parkir, transport, sewa alat/mobil, konsumsi/makan rapat, ATK, listrik, air, telepon/pulsa, admin bank, materai, jasa non-tenaga (konsultan, notaris, survey, pengurusan izin).
+- PAJAK: setoran ke negara. Sinyal: PPN, PPh, setoran pajak, kode billing, NTPN, faktur pajak, DJP, kas negara, MPN G3.
+- PEMBAYARAN INVOICE (income): uang MASUK dari mitra atas termin/invoice proyek.
+- PROYEK (income): uang muka/DP/pencairan proyek di luar invoice.
+- LAINNYA (income): uang masuk yang bukan proyek.
+- PENGELUARAN LAIN: HANYA bila setelah menimbang seluruh isi dokumen, pengeluaran itu memang tidak termasuk kategori di atas.
+
+Kata kunci pada catatan/berita transfer MENANG atas kesan umum gambar. Bukti transfer bertuliskan "BON GENDRO" adalah upah, walaupun tampilannya dokumen bank.
+
+=== 4. TANGGAL & JAM — baca yang tertulis, jangan mengarang ===
+- Ambil tanggal TRANSAKSI: pada bukti transfer pakai tanggal/jam transaksi ("Tanggal", "Waktu", "Transaction Date"), BUKAN tanggal cetak/unduh.
+- Pada nota tulis tangan, tanggal biasanya di sudut atas; bisa "12/11/26", "12-11-26", "12 Nov 2026", "12/11/2026".
+- Nota Indonesia menulis HARI dulu: 12/11/2026 = 12 November 2026. Bila angka pertama > 12, itu jelas tanggal.
+- Tahun dua angka: 26 = 2026.
+- time: hanya bila jamnya tertulis (termasuk jam cetak EDC/ATM, "15:30:12 WIB"). Bila hanya tanggal, kosongkan time. JANGAN mengarang jam.
+- Bila dokumen sama sekali tanpa tanggal, kosongkan date. JANGAN memakai tanggal hari ini, dan jangan menebak dari nomor dokumen.
+- Bila ada dua tanggal (tanggal nota dan tanggal jatuh tempo), pakai tanggal nota.
+
+=== 5. ARAH DANA (type) ===
+"income" bila uang MASUK ke rekening kita: ada "CR", "Kredit", "Dana Masuk", "Terima dari", "Transfer Masuk", atau pembayaran dari mitra.
+"expense" bila uang KELUAR: "DB", "Debit", "Transfer ke", pembayaran ke toko/orang.
+Nota belanja dan kuitansi pembayaran selalu expense.
+
+=== 6. DESKRIPSI & VENDOR ===
+- description: ringkas dan informatif. Sebutkan APA yang dibeli/dibayar dan rinciannya bila ada ("Semen 20 sak @Rp65.000, pasir 1 rit"). PERTAHANKAN catatan/berita transfer apa adanya ("bon gendro"). Jangan menghapus kata kunci upah/material.
+- vendor: nama toko/penerima/pihak lawan. Pada bukti transfer, nama PENERIMA (bukan pengirim). Bila hanya ada nama bank, kosongkan.
+- paymentMethod: tunai, transfer, qris, atau lainnya — sesuai bukti pada dokumen.
+
+=== CONTOH PENALARAN (bukan untuk dihafal) ===
+1. Bukti transfer bank, catatan "BON GENDRO", nominal Rp5.000.000, tanggal 12/11/2026 15:30 → reasoning: "Bukti transfer dengan catatan bon gendro, yaitu pembayaran upah tukang." → expense, Upah Karyawan/Tukang, 5000000, 2026-11-12, 15:30.
+2. Nota tulis tangan "Bon upah 3 tukang 450rb" → expense, Upah Karyawan/Tukang, 450000.
+3. Nota toko "Semen 20 sak, Total Rp1.300.000" → expense, Material, 1300000.
+4. Bukti transfer ke "Toko Sumber Rejeki", catatan "semen 20 sak" → expense, Material.
+5. Struk EDC QRIS "Total Rp275.000" di SPBU → expense, Operasional (BBM).
+6. Transfer masuk dari "KUASA PENGGUNA ANGGARAN" catatan "TERMIN 2" → income, Pembayaran Invoice.
+7. Nota tanpa tanggal, hanya "Bon material 2 juta" → date kosong, jangan mengarang.
+
+Bila ada bagian penting yang tidak terbaca (nominal atau tanggal), isi confidence "ragu" dan sebutkan di description apa yang tidak terbaca.`;
 
 exports.analyzeTransactionImageWithAI = onCall(
     // timeout + memory: 8 gambar hingga ~24 MB harus diurai di memori sebelum
@@ -480,18 +712,23 @@ exports.analyzeTransactionImageWithAI = onCall(
       const requestBody = {
         contents: [{parts}],
         generationConfig: {
-          temperature: 0.2,
+          // 0.2 → 0.1: pembacaan dokumen menuntut konsistensi, bukan variasi.
+          temperature: 0.1,
           topK: 1,
-          topP: 1,
-          maxOutputTokens: 512 * images.length,
+          topP: 0.95,
+          // +1024 token per gambar di atas anggaran lama: memuat penalaran
+          // (`reasoning`) dan field tambahan (vendor/confidence) tanpa memotong
+          // jawaban. Batas tetap ada supaya satu panggilan tidak melar.
+          maxOutputTokens: 1024 * images.length,
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
-          // Gemini 2.5 adalah model "thinking": token berpikir DIHITUNG terhadap
-          // maxOutputTokens. Tanpa ini, jatah token bisa habis untuk berpikir
-          // sehingga jawaban kosong (finishReason MAX_TOKENS, parts kosong).
-          // Ekstraksi terstruktur berpandu responseSchema tidak butuh penalaran
-          // bertahap, jadi mematikannya sekaligus menekan biaya.
-          thinkingConfig: {thinkingBudget: 0},
+          // Penalaran AKTIF. Sebelumnya 0 karena ekstraksi dianggap kaku, dan
+          // akibatnya dokumen ambigu (nota tulis tangan, bukti transfer dengan
+          // catatan singkat) dipaksa ke kategori aman "Pengeluaran Lain".
+          // Anggaran dibatasi, bukan tak terbatas: cukup untuk menimbang bukti,
+          // tidak sampai menghabiskan maxOutputTokens (yang membuat jawaban
+          // kosong, finishReason MAX_TOKENS).
+          thinkingConfig: {thinkingBudget: 512},
         },
       };
 
@@ -500,9 +737,25 @@ exports.analyzeTransactionImageWithAI = onCall(
       try {
         const text = await callGemini(requestBody, apiKey, "analyzeTransactionImage");
 
-        // responseSchema menjamin JSON array valid.
-        const parsed = JSON.parse(text);
-        const transactions = Array.isArray(parsed) ? parsed : [parsed];
+        // `responseSchema` mengurangi kesalahan, tetapi tidak boleh dipercaya
+        // sebagai jaminan absolut: panggilan bisa dipindah ke model lain, dan
+        // model tetap dapat mengirim pagar markdown/pengantar.
+        const parsed = extractJson(text);
+        if (!parsed) {
+          logger.error("AI mengembalikan JSON yang tidak dapat dipulihkan.", {text: String(text).slice(0, 1000)});
+          throw new HttpsError(
+              "data-loss",
+              "AI membaca gambar tetapi format hasilnya tidak valid. Coba ulangi atau unggah gambar lebih jelas.",
+          );
+        }
+        const candidates = Array.isArray(parsed) ? parsed : [parsed];
+        const transactions = candidates.map(sanitizeTx).filter(Boolean);
+        if (transactions.length !== images.length) {
+          logger.warn(`Jumlah hasil (${transactions.length}) tidak sama dengan gambar (${images.length}).`);
+        }
+        if (!transactions.length) {
+          throw new HttpsError("data-loss", "AI tidak menghasilkan data transaksi yang valid. Coba ulangi.");
+        }
 
         // Kompatibel dua arah:
         // - Kontrack baru membaca `transactions` (mendukung banyak gambar).

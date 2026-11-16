@@ -84,9 +84,9 @@ const TransactionFilterBar = ({
       {/* Umpan balik: tanpa ini, pengguna tidak tahu apakah daftar kosong karena
           filternya atau karena memang tidak ada transaksi. */}
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200/50 pt-2 dark:border-white/5">
-        <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-          Menampilkan <span className="tnum font-bold text-slate-800 dark:text-slate-100">{shown}</span> dari{' '}
-          <span className="tnum font-bold text-slate-800 dark:text-slate-100">{total}</span> transaksi
+        <p className="text-[11px] font-medium text-slate-600">
+          Menampilkan <span className="tnum font-bold text-slate-800">{shown}</span> dari{' '}
+          <span className="tnum font-bold text-slate-800">{total}</span> transaksi
         </p>
         {filtered && (
           <button

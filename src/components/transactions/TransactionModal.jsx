@@ -169,7 +169,7 @@ const TransactionModal = ({
       onClose={loading ? undefined : onClose}
       title={isEdit ? 'Edit Transaksi' : 'Transaksi Manual'}
       subtitle="Catat pemasukan atau pengeluaran proyek"
-      size="md"
+      size="screen"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={loading}>
