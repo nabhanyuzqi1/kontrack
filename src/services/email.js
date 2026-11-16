@@ -15,7 +15,7 @@ export const buildGmailComposeUrl = ({ to = '', subject = '', body = '' }) => {
   return `https://mail.google.com/mail/?${params.toString()}`;
 };
 
-export const buildBillingEmailContent = (invoice, company, { up = '' } = {}) => {
+export const buildBillingEmailContent = (invoice, company, { up = '', attachments = [] } = {}) => {
   const lines = [];
   const companyName = company?.name || company?.companyName || 'Kami';
   lines.push(`Kepada Yth.${up ? `\nu.p. ${up}` : ''}`);
@@ -25,14 +25,24 @@ export const buildBillingEmailContent = (invoice, company, { up = '' } = {}) => 
     `Sehubungan dengan pekerjaan "${invoice.projectName || '-'}", dengan hormat kami lampirkan dokumen penagihan untuk invoice ${invoice.invoiceNumber || ''} dengan rincian sebagai berikut:`
   );
   lines.push('');
-  lines.push(`Invoice No: ${invoice.invoiceNumber || '-'}`);
-  lines.push(`Nilai: ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(invoice.grandTotal || 0)}`);
+  lines.push(`Invoice No  : ${invoice.invoiceNumber || '-'}`);
+  lines.push(`Nilai          : ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(invoice.grandTotal || 0)}`);
   lines.push('');
-  lines.push('Berkas yang dilampirkan tercantum pada daftar lampiran email ini.');
-  lines.push('');
+
+  if (attachments.length > 0) {
+    lines.push('Lampiran:');
+    attachments.forEach(({ name, label }) => {
+      lines.push(`  - ${label || name}`);
+    });
+    lines.push('');
+  } else {
+    lines.push('(Lampiran: PDF invoice + arsip berkas penagihan)');
+    lines.push('');
+  }
+
   lines.push('Demikian kami sampaikan. Atas perhatian dan kerja samanya kami ucapkan terima kasih.');
   lines.push('');
-  lines.push(`Hormat kami,`);
+  lines.push('Hormat kami,');
   lines.push(companyName);
   const subject = `Penagihan ${invoice.invoiceNumber || ''}${invoice.projectName ? ` - ${invoice.projectName}` : ''}`;
   return { subject, body: lines.join('\n') };

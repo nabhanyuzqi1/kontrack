@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { aiFunctions } from './functionsRegion';
 import { storage } from './firebase';
 import { compressImage } from '../utils/imageCompress';
+import { fetchAssetPayload } from './assets';
 
 // Fungsi helper untuk memvalidasi file gambar
 export const validateImageFile = (file) => {
@@ -140,4 +141,26 @@ export const scanWphoDocument = async (file, kind = 'wpho') => {
     kind,
   });
   return response.data?.document || null;
+};
+
+// ---------------------------------------------------------------------------
+// Analisis AI arsip invoice (WPHO/BAHK/faktur) di modal detail invoice.
+// Berkas dikirim sebagai inline data; TIFF dikonversi PNG di server
+// (getStorageAssetDataUrl) sehingga Gemini menerima gambar yang sah.
+// ---------------------------------------------------------------------------
+export const analyzeInvoiceDocs = async (docs, invoiceContext) => {
+  if (!Array.isArray(docs) || docs.length === 0) {
+    throw new Error('Pilih minimal satu dokumen untuk dianalisis.');
+  }
+  // fetchAssetPayload mengembalikan data URL yang sudah jadi PNG bila TIFF.
+  const images = [];
+  for (const d of docs) {
+    const payload = await fetchAssetPayload(d.url);
+    const [meta, b64] = payload.dataUrl.split(',');
+    if (!b64) throw new Error(`Berkas ${d.name || d.url} tidak dapat dibaca.`);
+    images.push({ base64String: b64, mimeType: payload.contentType || 'image/png', kind: d.kind, name: d.name });
+  }
+  const fn = httpsCallable(aiFunctions(), 'analyzeInvoiceDocuments');
+  const response = await fn({ documents: images, invoice: invoiceContext || {} });
+  return response.data || { documents: [], issues: [] };
 };

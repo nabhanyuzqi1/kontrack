@@ -381,7 +381,7 @@ const ClientsPage = () => {
             </section>
 
             {/* Kontak */}
-            {(detail.phone || detail.email || detail.contactPerson) && (
+            {(detail.phone || detail.email || detail.billingEmail || detail.contactPerson) && (
               <section>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Kontak
@@ -397,6 +397,12 @@ const ClientsPage = () => {
                     <div className="flex items-start gap-2">
                       <dt className="w-28 shrink-0 text-slate-500">Email</dt>
                       <dd className="break-all text-slate-900">{detail.email}</dd>
+                    </div>
+                  )}
+                  {detail.billingEmail && (
+                    <div className="flex items-start gap-2">
+                      <dt className="w-28 shrink-0 text-slate-500">Email Tagih</dt>
+                      <dd className="break-all text-slate-900">{detail.billingEmail}</dd>
                     </div>
                   )}
                   {detail.contactPerson && (

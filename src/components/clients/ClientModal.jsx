@@ -17,6 +17,7 @@ const emptyForm = {
   postalCode: '',
   phone: '',
   email: '',
+  billingEmail: '',
   contactPerson: '',
   contactPhone: '',
   contactPosition: '',
@@ -122,6 +123,9 @@ const ClientModal = ({ isOpen, onClose, onSuccess, client }) => {
           </Field>
           <Field label="Email">
             <Input type="email" value={form.email} onChange={set('email')} placeholder="billing@klien.com" />
+          </Field>
+          <Field label="Email Penagihan (opsional)">
+            <Input type="email" value={form.billingEmail} onChange={set('billingEmail')} placeholder="finance@klien.com" />
           </Field>
         </div>
 

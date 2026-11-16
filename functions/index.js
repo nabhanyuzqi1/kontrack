@@ -980,6 +980,49 @@ exports.scanWphoDocument = onCall(
     },
 );
 
+// Analisis gabungan arsip invoice: WPHO, BAHK, dan Faktur Pajak.
+const INVOICE_DOC_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    documents: {type: "ARRAY", items: {type: "OBJECT", properties: {
+      kind: {type: "STRING"}, number: {type: "STRING"}, amount: {type: "NUMBER"},
+      quantity: {type: "NUMBER"}, date: {type: "STRING"}, workName: {type: "STRING"}, confidence: {type: "STRING"},
+    }}},
+    issues: {type: "ARRAY", items: {type: "OBJECT", properties: {
+      severity: {type: "STRING", enum: ["error", "warning", "info"]}, message: {type: "STRING"}, field: {type: "STRING"},
+    }}},
+  },
+  required: ["documents", "issues"],
+};
+
+exports.analyzeInvoiceDocuments = onCall(
+    {region: TRANSACTION_AI_REGIONS, cors: true, maxInstances: 5, memory: "1GiB", timeoutSeconds: 180, secrets: [geminiApiKey]},
+    async (request) => {
+      if (!request.auth) throw new HttpsError("unauthenticated", "Anda harus login untuk memakai fitur AI.");
+      const apiKey = geminiApiKey.value();
+      const {documents = [], invoice = {}} = request.data || {};
+      if (!Array.isArray(documents) || documents.length === 0 || documents.length > 3) {
+        throw new HttpsError("invalid-argument", "Pilih satu sampai tiga dokumen invoice.");
+      }
+      const parts = [{text: `Analisis dokumen invoice kontraktor berikut. Ekstrak nomor dokumen, nilai, qty, tanggal, dan uraian. Jenis: WPHO, BAHK, atau Faktur Pajak. Bandingkan dengan invoice dan temukan ketidaksesuaian nilai, nomor kosong, tanggal tidak konsisten, atau qty berbeda. Jangan mengarang data yang tidak terbaca. Invoice: ${JSON.stringify({invoiceNumber: invoice.invoiceNumber, grandTotal: invoice.grandTotal, quantity: invoice.quantity, items: invoice.invoiceItems || []})}`}];
+      for (const doc of documents) {
+        if (!doc?.base64String || !doc?.mimeType) continue;
+        assertInlineImage({base64String: doc.base64String, mimeType: doc.mimeType}, `Dokumen ${doc.kind || "invoice"}`);
+        parts.push({text: `Dokumen jenis ${doc.kind || "unknown"}, nama ${doc.name || "berkas"}:`});
+        parts.push({inlineData: {mime_type: doc.mimeType, data: doc.base64String}});
+      }
+      await enforceDailyQuota(request.auth.uid, "image", documents.length);
+      try {
+        const text = await callGemini({contents: [{role: "user", parts}], generationConfig: {temperature: 0.1, maxOutputTokens: 1024, responseMimeType: "application/json", responseSchema: INVOICE_DOC_SCHEMA, thinkingConfig: {thinkingBudget: 0}}}, apiKey, "analyzeInvoiceDocuments");
+        return JSON.parse(text);
+      } catch (error) {
+        if (error instanceof HttpsError) throw error;
+        logger.error("Kesalahan analisis dokumen invoice:", error);
+        throw new HttpsError("unknown", "Dokumen tidak dapat dianalisis saat ini.");
+      }
+    },
+);
+
 // ---------------------------------------------------------------------------
 // Analisis keuangan berbasis AI (untuk Dashboard & Laporan)
 //

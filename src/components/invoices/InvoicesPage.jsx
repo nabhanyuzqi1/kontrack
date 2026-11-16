@@ -203,6 +203,13 @@ const InvoicesPage = () => {
 
   if (loading) return <SkeletonListPage variant="cards" stats={4} />;
 
+  // Detail modal mengikuti data TERBARU dari daftar (bukan salinan saat diklik),
+  // sehingga unggah berkas atau perubahan dokumen pajak langsung terlihat tanpa
+  // refresh manual halaman.
+  const detailLive = detailInvoice
+    ? withDisplayNames(invoices.find((i) => i.id === detailInvoice.id) || detailInvoice)
+    : null;
+
   return (
     <div className="animate-fade-in">
       <PageHeader
@@ -466,9 +473,9 @@ const InvoicesPage = () => {
         count={selectedIds.length}
       />
 
-      {detailInvoice && (
+      {detailLive && (
         <InvoiceDetailModal
-          invoice={detailInvoice}
+          invoice={detailLive}
           onClose={() => setDetailInvoice(null)}
           onEdit={(inv) => {
             setDetailInvoice(null);

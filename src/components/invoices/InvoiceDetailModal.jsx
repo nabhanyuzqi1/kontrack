@@ -17,6 +17,7 @@ import {
   Upload,
   Mail,
   Package,
+  Paperclip,
   History
 } from 'lucide-react';
 import Modal from '../ui/Modal';
@@ -39,7 +40,10 @@ import {
 } from '../../services/invoices';
 import { getCompanySettings, mergeCompanyInfo } from '../../services/settings';
 import { buildGmailComposeUrl, buildBillingEmailContent } from '../../services/email';
+import { analyzeInvoiceDocs } from '../../services/ai';
 import CoretaxExportModal from './CoretaxExportModal';
+import InvoiceAiReviewModal from './InvoiceAiReviewModal';
+import { Sparkles } from 'lucide-react';
 
 const statusTone = { draft: 'slate', sent: 'blue', paid: 'emerald', void: 'red' };
 
@@ -85,6 +89,18 @@ const InvoiceDetailModal = ({
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
 
+  // Berkas yang baru diunggah di sesi modal ini. Detail invoice menerima salinan
+  // `invoice` dari daftar, jadi tanpa state ini label berkas baru berubah setelah
+  // halaman dimuat ulang — terasa seperti unggahan hilang.
+  const [uploadedDocs, setUploadedDocs] = useState({});
+
+  // Analisis AI arsip invoice: hasil ditampilkan, pemilik konfirmasi dulu
+  // sebelum diterapkan — tidak ada bidang tertimpa tanpa persetujuan.
+  const [aiState, setAiState] = useState('idle'); // idle | busy | done | error
+  const [aiResult, setAiResult] = useState(null);
+  const [aiError, setAiError] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
+
   // Form label kirim
   const [labelOpen, setLabelOpen] = useState(false);
   const [labelUp, setLabelUp] = useState('');
@@ -98,7 +114,7 @@ const InvoiceDetailModal = ({
   const isSent = inv.status === INVOICE_STATUS.SENT;
   const progress = taxDocsProgress(inv);
   const doneCount = progress.filter((p) => p.done).length;
-  const docs = inv.documents || {};
+  const docs = { ...(inv.documents || {}), ...uploadedDocs };
   const attachments = useMemo(
     () =>
       DOC_KEYS.map((k) => (docs[k] ? { name: `${INVOICE_DOC_LABELS[k]} (${docs[k].name})`, url: docs[k].url } : null)).filter(Boolean),
@@ -128,36 +144,104 @@ const InvoiceDetailModal = ({
   const openEmail = async () => {
     const settings = await getCompanySettings().catch(() => null);
     const merged = mergeCompanyInfo(settings || {});
-    const c = buildBillingEmailContent(inv, merged, { up: emailUp });
-    setEmailTo(inv.client?.email || '');
+    const emailAttachments = attachments.map((a, i) => ({
+      name: a.name,
+      label: INVOICE_DOC_LABELS[DOC_KEYS[i]] || a.name,
+      url: a.url,
+    }));
+    const c = buildBillingEmailContent(inv, merged, {
+      up: emailUp,
+      attachments: emailAttachments,
+    });
+    setEmailTo(inv.client?.billingEmail || inv.client?.email || '');
     setEmailSubject(c.subject);
     setEmailBody(c.body);
     setEmailOpen(true);
   };
 
-  const handleSendEmail = () => {
+  // Unduh PDF invoice + semua berkas arsip, lalu buka draf Gmail.
+  // Tidak bisa melampirkan file langsung ke Gmail (keterbatasan browser),
+  // tetapi pemilik mendapat semua berkas sekaligus siap dilampirkan.
+  const handleSendEmail = async () => {
     if (!emailTo.trim()) {
       alert('Isi alamat email tujuan terlebih dahulu.');
       return;
     }
+
+    const downloadBusy = async (name) => {
+      try {
+        const res = await fetch(name.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+      } catch {
+        alert(`Gagal mengunduh: ${name.name}`);
+      }
+    };
+
+    // 1) Unduh PDF invoice
+    setDownloading(true);
+    let pdfBlob = null;
+    let pdfName = 'Invoice.pdf';
+    try {
+      const settings = await getCompanySettings().catch(() => null);
+      const { blob, fileName } = await generateInvoicePDF(inv, mergeCompanyInfo(settings || {}), {
+        download: false,
+        resolveAssetDataUrl: fetchAssetDataUrl,
+      });
+      pdfBlob = blob;
+      pdfName = fileName || 'Invoice.pdf';
+    } catch {
+      alert('Gagal membuat PDF invoice. Pesan email tetap terbuka.');
+    }
+    setDownloading(false);
+
+    // 2) Unduh PDF invoice
+    if (pdfBlob) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(pdfBlob);
+      a.download = pdfName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+
+    // 3) Unduh semua berkas arsip
+    for (const att of attachments) {
+      await downloadBusy(att);
+    }
+
+    // 4) Buka Gmail
     const url = buildGmailComposeUrl({
       to: emailTo.trim(),
       subject: emailSubject,
       body: emailBody,
     });
-    // Dipanggil langsung dari klik agar tab Gmail tidak diblokir sebagai popup.
     window.open(url, '_blank', 'noopener,noreferrer');
+    setEmailOpen(false);
   };
 
   const handleUpload = async (kind, file) => {
     if (!file) return;
     setUploading(kind);
     try {
-      await uploadInvoiceDocument(inv.id, kind, file);
-      alert('Berkas terunggah.');
+      const entry = await uploadInvoiceDocument(inv.id, kind, file);
+      setUploadedDocs((prev) => ({ ...prev, [kind]: entry }));
     } catch (err) {
       console.error('Gagal unggah berkas:', err);
-      alert('Gagal mengunggah berkas. Coba lagi.');
+      const code = err?.code || '';
+      let msg = 'Gagal mengunggah berkas. Coba lagi.';
+      if (code === 'storage/unauthorized') msg = 'Tidak berhak mengunggah ke arsip ini. Masuk ulang lalu coba lagi.';
+      else if (code === 'storage/retry-limit-exceeded') msg = 'Jaringan lambat: unggahan habis waktu. Coba lagi.';
+      else if (/exceeds the maximum/i.test(err?.message || '')) msg = 'Berkas melebihi batas ukuran. Perkecil atau simpan sebagai PDF.';
+      alert(msg);
     } finally {
       setUploading(null);
     }
@@ -178,6 +262,75 @@ const InvoiceDetailModal = ({
       documents: attachments.map((a) => a.name)
     });
     setLabelOpen(false);
+  };
+
+  const runAiAnalysis = async () => {
+    const present = DOC_KEYS.filter((k) => docs[k]);
+    if (present.length === 0) {
+      setAiError('Belum ada berkas di arsip. Unggah WPHO, BAHK, atau faktur lebih dulu.');
+      setAiState('error');
+      setAiOpen(true);
+      return;
+    }
+    setAiState('busy');
+    setAiOpen(true);
+    try {
+      const result = await analyzeInvoiceDocs(
+        present.map((k) => ({ kind: k, name: docs[k].name, url: docs[k].url })),
+        {
+          invoiceNumber: inv.invoiceNumber,
+          grandTotal: inv.grandTotal,
+          quantity: inv.quantity,
+          invoiceItems: items,
+        }
+      );
+      setAiResult(result);
+      setAiState('done');
+      setAiError('');
+    } catch (err) {
+      console.error('Gagal analisis AI:', err);
+      const code = err?.code || '';
+      setAiError(
+        code === 'functions/resource-exhausted' ? 'Kuota harian AI habis. Coba lagi besok.'
+        : code === 'functions/unauthenticated' ? 'Sesi login habis. Masuk ulang lalu coba lagi.'
+        : err?.message || 'Dokumen tidak dapat dianalisis. Pastikan berkas jelas dan coba lagi.'
+      );
+      setAiState('error');
+    }
+  };
+
+  // Terapkan bidang yang dikonfirmasi pemilik (per dokumen, satu tombol "ya").
+  const applyAiResults = async (selections) => {
+    try {
+      const fields = {};
+      const wpho = selections.wpho;
+      if (wpho?.applied) {
+        if (wpho.number !== undefined) fields.wphoNumber = wpho.number;
+        if (wpho.amount !== undefined) fields.wphoValue = wpho.amount;
+        if (wpho.date !== undefined) fields.cityDate = String(wpho.date).slice(0, 10);
+        if (wpho.workName !== undefined) fields.workName = wpho.workName;
+      }
+      const bahk = selections.bahk;
+      if (bahk?.applied) {
+        if (bahk.number !== undefined) fields.bahkNumber = bahk.number;
+        if (bahk.amount !== undefined) fields.bahkValue = bahk.amount;
+        if (bahk.date !== undefined) fields.lastBaDate = String(bahk.date).slice(0, 10);
+      }
+      const faktur = selections.faktur;
+      if (faktur?.applied) {
+        if (faktur.number !== undefined) fields.taxInvoiceNumber = faktur.number;
+        if (faktur.amount !== undefined) fields.subtotal = faktur.amount;
+      }
+      if (Object.keys(fields).length > 0) {
+        await updateInvoice(inv.id, fields);
+      }
+      setAiOpen(false);
+      setAiResult(null);
+      setAiState('idle');
+    } catch (err) {
+      console.error('Gagal menerapkan hasil AI:', err);
+      alert(err?.message || 'Gagal menerapkan hasil. Coba lagi.');
+    }
   };
 
   return (
@@ -453,6 +606,14 @@ const InvoiceDetailModal = ({
             <p className="mb-2 text-xs text-slate-400">
               Berkas penagihan terkait invoice ini membentuk arsip digital.
             </p>
+            <button
+              type="button"
+              onClick={runAiAnalysis}
+              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-[10px] border border-brand-300 px-3 py-2 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-300 dark:hover:bg-brand-500/10"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Analisis AI: cek nomor, nilai & kesalahan
+            </button>
             <div className="space-y-2">
               {DOC_KEYS.map((k) => (
                 <div key={k} className="flex items-center justify-between gap-2 rounded-[10px] px-3 py-2.5 ring-1 ring-inset ring-slate-200/70 dark:ring-white/10">
@@ -518,6 +679,20 @@ const InvoiceDetailModal = ({
         company={companyForCoretax}
       />
     )}
+
+    <InvoiceAiReviewModal
+      isOpen={aiOpen}
+      state={aiState}
+      error={aiError}
+      result={aiResult}
+      invoice={inv}
+      onClose={() => {
+        setAiOpen(false);
+        setAiState('idle');
+        setAiError('');
+      }}
+      onApply={applyAiResults}
+    />
     {labelOpen && (
       <Modal
         isOpen
@@ -551,14 +726,14 @@ const InvoiceDetailModal = ({
         isOpen
         onClose={() => setEmailOpen(false)}
         title="Kirim Email Penagihan"
-        subtitle="Periksa pesan, lalu lanjutkan pengiriman di Gmail"
+        subtitle="PDF + semua berkas diunduh otomatis, lalu buka Gmail untuk kirim"
         size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setEmailOpen(false)}>Batal</Button>
-            <Button onClick={handleSendEmail}>
+            <Button onClick={handleSendEmail} loading={downloading}>
               <Mail className="h-4 w-4" />
-              Buka Gmail
+              Unduh + Kirim via Gmail
             </Button>
           </>
         }
@@ -576,10 +751,27 @@ const InvoiceDetailModal = ({
           <Field label="Isi email">
             <Textarea rows={10} value={emailBody} onChange={(e) => setEmailBody(e.target.value)} />
           </Field>
+          {attachments.length > 0 && (
+            <div className="rounded-[10px] bg-slate-50 p-3 dark:bg-white/5">
+              <p className="mb-2 text-xs font-medium text-slate-500">Yang akan diunduh:</p>
+              <ul className="space-y-1">
+                <li className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-brand-700" />
+                  PDF Invoice <span className="text-slate-400">(otomatis)</span>
+                </li>
+                {attachments.map((a, i) => (
+                  <li key={i} className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    {a.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="text-xs text-slate-400">
-            Gmail terbuka dengan pesan di atas. Lampirkan berkas dari tab Arsip Berkas lebih dulu
-            (tombol Unduh): Gmail tidak dapat menerima lampiran lewat tautan draf.
-            {attachments.length > 0 ? ` Tersedia: ${attachments.map((a) => a.name).join(', ')}.` : ' Belum ada berkas di arsip.'}
+            {attachments.length > 0
+              ? 'Berkas diunduh lalu Gmail terbuka. Lampirkan berkas dari folder Unduhan.'
+              : 'Tambahkan berkas di arsip dulu agar bisa dilampirkan.'}
           </p>
         </div>
       </Modal>
